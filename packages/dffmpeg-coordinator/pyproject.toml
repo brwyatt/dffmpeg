@@ -1,0 +1,43 @@
+[project]
+name = "dffmpeg-coordinator"
+version = "0.1.0"
+authors = [
+    { name="Bryan Wyatt", email="brwyatt@gmail.com" },
+]
+description = "Coordinator application components for dffmpeg"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "dffmpeg-common",
+    "fastapi",
+    "uvicorn",
+    "sqlalchemy",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["dffmpeg.*"]
+namespaces = true
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "black",
+    "isort",
+]
+dev = [
+    "dffmpeg-coordinator[test]",
+    "httpx",
+    "ipython",
+]
+
+[tool.setuptools.package-data]
+"*" = ["*.sql"]
+
+[project.scripts]

@@ -1,0 +1,4 @@
+-e "./packages/dffmpeg-common[dev]"
+-e "./packages/dffmpeg-coordinator[dev]"
+-e "./packages/dffmpeg-worker[dev]"
+-e "./packages/dffmpeg-client[dev]"

@@ -1,0 +1,36 @@
+[project]
+name = "dffmpeg-worker"
+version = "0.1.0"
+authors = [
+    { name="Bryan Wyatt", email="brwyatt@gmail.com" },
+]
+description = "Worker application components for dffmpeg"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "dffmpeg-common",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["dffmpeg.*"]
+namespaces = true
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "black",
+    "isort",
+]
+dev = [
+    "dffmpeg-worker[test]",
+    "ipython",
+]
+
+[project.scripts]

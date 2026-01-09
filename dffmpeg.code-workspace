@@ -1,0 +1,19 @@
+{
+    "folders": [
+        { "path": "." },
+        { "path": "packages/dffmpeg-client" },
+        { "path": "packages/dffmpeg-common" },
+        { "path": "packages/dffmpeg-coordinator" },
+        { "path": "packages/dffmpeg-worker" },
+        { "path": "docs" }
+    ],
+    "settings": {
+        "python.defaultInterpreterPath": "${workspaceFolder}/../../.venv/bin/python",
+        "python.analysis.extraPaths": [
+            "./packages/dffmpeg-client/src",
+            "./packages/dffmpeg-common/src",
+            "./packages/dffmpeg-coordinator/src",
+            "./packages/dffmpeg-worker/src",
+        ]
+    }
+}
