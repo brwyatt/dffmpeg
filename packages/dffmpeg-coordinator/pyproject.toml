@@ -12,6 +12,7 @@ classifiers = [
 dependencies = [
     "dffmpeg-common",
     "fastapi",
+    "pydantic",
     "uvicorn",
     "sqlalchemy",
 ]
