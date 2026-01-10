@@ -1,20 +1,24 @@
 {
     "folders": [
-        { "path": "." },
-        { "path": "packages/dffmpeg-client" },
-        { "path": "packages/dffmpeg-common" },
-        { "path": "packages/dffmpeg-coordinator" },
-        { "path": "packages/dffmpeg-worker" },
-        { "path": "docs" }
+        { "name": "workspace", "path": "." },
+        { "name": "client", "path": "packages/dffmpeg-client" },
+        { "name": "common", "path": "packages/dffmpeg-common" },
+        { "name": "coordinator", "path": "packages/dffmpeg-coordinator" },
+        { "name": "worker", "path": "packages/dffmpeg-worker" },
+        { "name": "docs", "path": "docs" }
     ],
     "settings": {
-        "python.envFile": "./.venv",
-        "python.defaultInterpreterPath": "./.venv/bin/python",
+        "python.envFile": "${workspaceFolder:workspace}/.venv",
+        "python.defaultInterpreterPath": "${workspaceFolder:workspace}/.venv/bin/python",
         "python.analysis.extraPaths": [
-            "./packages/dffmpeg-client/src",
-            "./packages/dffmpeg-common/src",
-            "./packages/dffmpeg-coordinator/src",
-            "./packages/dffmpeg-worker/src",
-        ]
+            "${workspaceFolder:workspace}/packages/dffmpeg-client/src",
+            "${workspaceFolder:workspace}/packages/dffmpeg-common/src",
+            "${workspaceFolder:workspace}/packages/dffmpeg-coordinator/src",
+            "${workspaceFolder:workspace}/packages/dffmpeg-worker/src",
+        ],
+        "python.analysis.packageIndexDepths": [
+            { "name": "dffmpeg", "depth": 2, }
+        ],
+        "python.analysis.indexing": true,
     }
 }
