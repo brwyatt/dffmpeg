@@ -8,7 +8,6 @@
         { "name": "docs", "path": "docs" }
     ],
     "settings": {
-        "python.envFile": "${workspaceFolder:workspace}/.venv",
         "python.defaultInterpreterPath": "${workspaceFolder:workspace}/.venv/bin/python",
         "python.analysis.extraPaths": [
             "${workspaceFolder:workspace}/packages/dffmpeg-client/src",
@@ -17,8 +16,11 @@
             "${workspaceFolder:workspace}/packages/dffmpeg-worker/src",
         ],
         "python.analysis.packageIndexDepths": [
-            { "name": "dffmpeg", "depth": 2, }
+            { "name": "dffmpeg", "depth": 2, "includeAllSymbols": true}
         ],
         "python.analysis.indexing": true,
+        "python.terminal.activateEnvInCurrentTerminal": true,
+        "python.terminal.activateEnvironment": true,
+        "python.analysis.diagnosticMode": "workspace",
     }
 }
