@@ -42,3 +42,6 @@ dev = [
 "*" = ["*.sql"]
 
 [project.scripts]
+
+[project.entry-points."dffmpeg.db.auth"]
+sqlite = "dffmpeg.coordinator.db.auth.sqlite:SQLiteAuthRepository"

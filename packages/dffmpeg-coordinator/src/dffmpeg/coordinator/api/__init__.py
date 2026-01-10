@@ -2,7 +2,8 @@ from fastapi import FastAPI, Depends
 from logging import getLogger
 from pydantic import BaseModel
 
-from dffmpeg.coordinator.api.auth import HMACIdentity, optional_hmac_auth
+from dffmpeg.common.models import AuthenticatedIdentity
+from dffmpeg.coordinator.api.auth import optional_hmac_auth
 
 
 logger = getLogger(__name__)
@@ -20,7 +21,7 @@ async def health():
     return {"status": "online"}
 
 @app.post("/ping")
-async def ping(payload: PingRequest, identity: HMACIdentity = Depends(optional_hmac_auth)):
+async def ping(payload: PingRequest, identity: AuthenticatedIdentity = Depends(optional_hmac_auth)):
     """Authenticated test endpoint"""
     return {
         "status": "received",
