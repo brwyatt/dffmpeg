@@ -1,17 +1,11 @@
-from importlib.metadata import entry_points
+from dffmpeg.coordinator.db.db_loader import load
 
 from dffmpeg.common.models import AuthenticatedIdentity
 
 
 class AuthRepository():
     def __new__(self, *args, engine: str, **kwargs):
-        available_entrypoints = entry_points(group="dffmpeg.db.auth")
-        matching = [x for x in available_entrypoints if x.name == engine]
-        if len(matching) != 1:
-            available_names = ", ".join([x.name for x in available_entrypoints])
-            raise ValueError(f"Invalid database engine \"{engine}\" for AuthRepository! Expected one of: {available_names}")
-        loaded = matching[0].load()
-        return object.__new__(loaded)
+        return object.__new__(load("dffmpeg.db.auth", engine))
 
     def __init__(self, *args, **kwargs):
         raise NotImplementedError()

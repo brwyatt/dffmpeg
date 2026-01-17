@@ -4,14 +4,17 @@ from pydantic import BaseModel
 from dffmpeg.coordinator.db.auth import AuthRepository
 
 
+type ConfigOptions = Dict[str, Any]
 class DBConfig(BaseModel):
-    defaults: Dict[str, Any] = {}
-    auth: Dict[str, Any] = {}
+    defaults: ConfigOptions = {}
+    engine_defaults: Dict[str, ConfigOptions] = {}
+    auth: ConfigOptions = {}
 
 
 # should load this from somewhere, but for now...
 config = DBConfig(
     defaults = {},
+    engine_defaults = {},
     auth = {
         "engine": "sqlite",
         "path": "./authdb.sqlite"
@@ -23,9 +26,16 @@ class DB():
         self.config = config
         self._auth: Optional[AuthRepository] = None
 
+    def get_db_config(self, db_name: str):
+        engine = self.config[db_name].get("engine", self.config.defaults.get("engine", "sqlite"))
+        return {
+            **self.config.defaults,
+            **self.config.engine_defaults.get(engine, {}),
+            **self.config[db_name],
+        }
+
     @property
     def auth(self):
         if not self._auth:
-            auth_config = {**self.config.defaults, **self.config.auth}
-            self._auth = AuthRepository(**auth_config)
+            self._auth = AuthRepository(**self.get_db_config("auth"))
         return self._auth
