@@ -28,6 +28,9 @@ class DB():
             **getattr(self.config, db_name),
         }
 
+    async def setup_all(self):
+        await self.auth.setup()
+
     @property
     def auth(self):
         if not self._auth:

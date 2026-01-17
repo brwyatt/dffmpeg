@@ -26,6 +26,7 @@ config = DBConfig(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.db = DB(config)
+    app.state.db.setup_all()
     yield
 
 app = FastAPI(title="dffmpeg Coordinator", lifespan=lifespan)

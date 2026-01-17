@@ -1,16 +1,15 @@
-from types import CoroutineType
-from typing import Any, Iterable, Tuple
+from typing import Iterable, Tuple
 import aiosqlite
-import asyncio
+
+from dffmpeg.coordinator.db.engines import BaseDB
 
 
-class SQLiteDB():
+class SQLiteDB(BaseDB):
     def __init__(self, path: str, tablename: str):
         self.path = path
         self.tablename = tablename
-        asyncio.run(self._init_db())
 
-    async def _init_db(self):
+    async def setup(self):
         async with aiosqlite.connect(self.path) as db:
             await db.execute(self.table_create)
             await db.commit()
