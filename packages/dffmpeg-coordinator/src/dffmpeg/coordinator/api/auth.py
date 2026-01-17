@@ -6,23 +6,14 @@ from typing import Optional
 from dffmpeg.common.auth.request_signer import RequestSigner
 from dffmpeg.common.models import AuthenticatedIdentity
 
+from dffmpeg.coordinator.db.auth import AuthRepository
+
 
 logger = getLogger(__name__)
 
 
-# Temporary client key lookup
-# This would be bad for real, but we don't have a database yet...
-def get_client_key(client_id: str) -> Optional[AuthenticatedIdentity]:
-    result = {
-        "test-client": {
-            "role": "client",
-            "hmac_key": "vWkaG7UUQTXXUdQBMV+45OeOlNhV2mY9n+woIUCQqqs=",
-        }
-    }.get(client_id)
-
-    if result:
-        return AuthenticatedIdentity(client_id=client_id, **result)
-    return
+def get_auth_repo(request: Request) -> AuthRepository:
+    return request.app.state.db.auth
 
 
 async def _get_verified_identity_from_request(
@@ -30,6 +21,7 @@ async def _get_verified_identity_from_request(
     request_client_id: Optional[str],
     request_signature: Optional[str],
     request_timestamp: Optional[str],
+    auth_repo: AuthRepository,
 ) -> Optional[AuthenticatedIdentity]:
     if not request_client_id and not request_signature and not request_timestamp:
         # No auth headers provided
@@ -45,7 +37,7 @@ async def _get_verified_identity_from_request(
         ]))
         raise HTTPException(status_code=401, detail="Incomplete HMAC authentication provided")
     
-    client_identity = get_client_key(request_client_id)
+    client_identity = await auth_repo.get_identity(request_client_id, include_hmac_key=True)
     if not client_identity or not client_identity.hmac_key:
         logger.warning(f"Unable to find a key for client {request_client_id}")
         raise HTTPException(status_code=401, detail="Invalid user")
@@ -76,8 +68,9 @@ async def optional_hmac_auth(
     request_client_id: Optional[str] = Header(None, alias="x-dffmpeg-client-id"),
     request_timestamp: Optional[str] = Header(None, alias="x-dffmpeg-timestamp"),
     request_signature: Optional[str] = Header(None, alias="x-dffmpeg-signature"),
+    auth_repo: AuthRepository = Depends(get_auth_repo),
 ) -> Optional[AuthenticatedIdentity]:
-    return await _get_verified_identity_from_request(request, request_client_id, request_signature, request_timestamp)
+    return await _get_verified_identity_from_request(request, request_client_id, request_signature, request_timestamp, auth_repo=auth_repo)
 
 
 async def required_hmac_auth(

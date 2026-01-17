@@ -1,7 +1,11 @@
+from logging import getLogger
 from typing import Any, Dict, Optional
 
 from pydantic import BaseModel
 from dffmpeg.coordinator.db.auth import AuthRepository
+
+
+logger = getLogger(__name__)
 
 
 type ConfigOptions = Dict[str, Any]
@@ -10,28 +14,18 @@ class DBConfig(BaseModel):
     engine_defaults: Dict[str, ConfigOptions] = {}
     auth: ConfigOptions = {}
 
-
-# should load this from somewhere, but for now...
-config = DBConfig(
-    defaults = {},
-    engine_defaults = {},
-    auth = {
-        "engine": "sqlite",
-        "path": "./authdb.sqlite"
-    },
-)
-
 class DB():
     def __init__(self, config: DBConfig):
         self.config = config
         self._auth: Optional[AuthRepository] = None
 
     def get_db_config(self, db_name: str):
-        engine = self.config[db_name].get("engine", self.config.defaults.get("engine", "sqlite"))
+        logger.warning(f"Fetching DB config for {db_name}")
+        engine = getattr(self.config, db_name).get("engine", self.config.defaults.get("engine", "sqlite"))
         return {
             **self.config.defaults,
             **self.config.engine_defaults.get(engine, {}),
-            **self.config[db_name],
+            **getattr(self.config, db_name),
         }
 
     @property

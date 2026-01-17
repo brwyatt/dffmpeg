@@ -10,6 +10,7 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
+    "aiosqlite",
     "dffmpeg-common",
     "fastapi",
     "pydantic",
