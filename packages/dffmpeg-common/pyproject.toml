@@ -11,6 +11,7 @@ classifiers = [
 ]
 dependencies = [
     "pydantic>=2.0",
+    "python-ulid[pydantic]",
 ]
 
 [build-system]

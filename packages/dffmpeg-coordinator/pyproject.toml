@@ -14,6 +14,7 @@ dependencies = [
     "dffmpeg-common",
     "fastapi",
     "pydantic",
+    "python-ulid[pydantic]",
     "pyyaml",
     "uvicorn",
     "sqlalchemy",
@@ -47,3 +48,9 @@ dev = [
 
 [project.entry-points."dffmpeg.db.auth"]
 sqlite = "dffmpeg.coordinator.db.auth.sqlite:SQLiteAuthRepository"
+
+[project.entry-points."dffmpeg.db.jobs"]
+sqlite = "dffmpeg.coordinator.db.jobs.sqlite:SQLiteJobRepository"
+
+[project.entry-points."dffmpeg.db.messages"]
+sqlite = "dffmpeg.coordinator.db.messages.sqlite:SQLiteMessageRepository"

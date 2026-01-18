@@ -3,6 +3,8 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 from dffmpeg.coordinator.db.auth import AuthRepository
+from dffmpeg.coordinator.db.jobs import JobRepository
+from dffmpeg.coordinator.db.messages import MessageRepository
 
 
 logger = getLogger(__name__)
@@ -30,12 +32,28 @@ class DB():
     def __init__(self, config: DBConfig):
         self.config = config
         self._auth: Optional[AuthRepository] = None
+        self._jobs: Optional[JobRepository] = None
+        self._messages: Optional[MessageRepository] = None
 
     async def setup_all(self):
         await self.auth.setup()
+        await self.jobs.setup()
+        await self.messages.setup()
 
     @property
     def auth(self):
         if not self._auth:
             self._auth = AuthRepository(**self.config.get_repo_config("auth"))
         return self._auth
+
+    @property
+    def jobs(self):
+        if not self._jobs:
+            self._jobs = JobRepository(**self.config.get_repo_config("jobs"))
+        return self._jobs
+
+    @property
+    def messages(self):
+        if not self._messages:
+            self._messages = MessageRepository(**self.config.get_repo_config("messages"))
+        return self._messages
