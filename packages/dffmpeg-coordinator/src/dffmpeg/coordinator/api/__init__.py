@@ -6,27 +6,20 @@ from pydantic import BaseModel
 from dffmpeg.common.models import AuthenticatedIdentity
 
 from dffmpeg.coordinator.api.auth import optional_hmac_auth
+from dffmpeg.coordinator.config import load_config
 from dffmpeg.coordinator.db import DB, DBConfig
 
 
 logger = getLogger(__name__)
 
 
-# should load this from somewhere, but for now...
-config = DBConfig(
-    defaults = {},
-    engine_defaults = {},
-    auth = {
-        "engine": "sqlite",
-        "path": "./authdb.sqlite"
-    },
-)
+config = load_config()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.db = DB(config)
-    app.state.db.setup_all()
+    app.state.db = DB(config.database)
+    await app.state.db.setup_all()
     yield
 
 app = FastAPI(title="dffmpeg Coordinator", lifespan=lifespan)
