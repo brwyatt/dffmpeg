@@ -66,7 +66,7 @@ def get_negotiated_transport(client_transports: List[str], server_transports: Li
     raise ValueError("Cannot find supported transport!")
 
 
-@app.post("/worker/checkin")
+@app.post("/worker/register")
 async def worker_register(
     request: Request,
     payload: WorkerRegistration,
