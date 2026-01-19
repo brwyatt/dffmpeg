@@ -2,7 +2,7 @@ import time
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
-from typing import Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 from ulid import ULID
 
 
@@ -15,6 +15,11 @@ class AuthenticatedIdentity(BaseModel):
     role: str = Literal["client", "worker", "admin"]
     timestamp: float = Field(default_factory=time.time)
     hmac_key: Optional[str] = Field(min_length=44, max_length=44)
+
+
+class TransportRecord(BaseModel):
+    transport: str = Field(min_length=1)
+    transport_metadata: Dict[str, Any] = Field(default_factory=dict)
 
 
 class Job(BaseModel):
@@ -36,3 +41,17 @@ class Message(BaseModel):
     message_type: str = Literal["status_update", "assignment", "error"]
     payload: Dict | List | str
     sent_at: datetime | None = None
+
+
+class WorkerBase(BaseModel):
+    worker_id: str = ClientId
+    capabilities: List[str] = Field(default_factory=list)
+    binaries: List[str] = Field(default_factory=list)
+    paths: List[str] = Field(default_factory=list)
+
+class Worker(WorkerBase):
+    status: str = Literal["online", "offline", "error"]
+    last_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class WorkerRegistration(WorkerBase):
+    supported_transports: List[str] = Field(min_length=1)

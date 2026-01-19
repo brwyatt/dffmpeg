@@ -18,6 +18,8 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             worker_id TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            callback_transport TEXT NOT NULL,
+            callback_metadata TEXT NOT NULL,
             FOREIGN KEY(requester_id) REFERENCES auth(client_id),
             FOREIGN KEY(worker_id) REFERENCES auth(client_id)
         );

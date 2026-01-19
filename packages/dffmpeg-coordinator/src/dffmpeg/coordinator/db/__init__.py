@@ -7,6 +7,7 @@ from dffmpeg.common.models.config import ConfigOptions, DefaultConfig
 from dffmpeg.coordinator.db.auth import AuthRepository
 from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
+from dffmpeg.coordinator.db.workers import WorkerRepository
 
 
 logger = getLogger(__name__)
@@ -39,6 +40,7 @@ class DB():
         await self.auth.setup()
         await self.jobs.setup()
         await self.messages.setup()
+        await self.workers.setup()
 
     @property
     def auth(self):
@@ -57,3 +59,9 @@ class DB():
         if not self._messages:
             self._messages = MessageRepository(**self.config.get_repo_config("messages"))
         return self._messages
+
+    @property
+    def workers(self):
+        if not self._workers:
+            self._workers = WorkerRepository(**self.config.get_repo_config("workers"))
+        return self._workers

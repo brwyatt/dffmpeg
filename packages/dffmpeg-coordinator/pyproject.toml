@@ -54,3 +54,9 @@ sqlite = "dffmpeg.coordinator.db.jobs.sqlite:SQLiteJobRepository"
 
 [project.entry-points."dffmpeg.db.messages"]
 sqlite = "dffmpeg.coordinator.db.messages.sqlite:SQLiteMessageRepository"
+
+[project.entry-points."dffmpeg.db.workers"]
+sqlite = "dffmpeg.coordinator.db.workers.sqlite:SQLiteWorkerRepository"
+
+[project.entry-points."dffmpeg.transports.server"]
+http_polling = "dffmpeg.coordinator.transports.http_polling:HTTPPollingTransport"

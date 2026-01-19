@@ -35,6 +35,16 @@ class Transports():
         for key in self.loaded_transports.keys():
             self[key].setup(app=self.app)
 
+    async def send_message(self, message) -> bool:
+        # TODO: lookup the recipient and figure out where it needs to go
+        # If to a worker, lookup in the Workers table, if has a job ID, lookup in the Jobs table
+        # Then call that transport's send_message()
+        pass
+
+    @property
+    def transport_names(self) -> List[str]:
+        return list(self.loaded_transports.keys())
+
     def load_transports(self) -> Dict[str, Any]:
         available_entrypoints = entry_points(group="dffmpeg.transports.server")
         enabled_transports = self.config.enabled_transports

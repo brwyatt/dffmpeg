@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from fastapi import FastAPI
 
@@ -10,4 +10,7 @@ class BaseServerTransport():
         raise NotImplemented()
 
     async def send_message(self, message: Message) -> bool:
+        raise NotImplemented()
+
+    def get_metadata(self, client_id: str, job_id: Optional[str] = None) -> Dict[str, Any]:
         raise NotImplemented()
