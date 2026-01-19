@@ -7,7 +7,8 @@ from dffmpeg.common.models import AuthenticatedIdentity
 
 from dffmpeg.coordinator.api.auth import optional_hmac_auth
 from dffmpeg.coordinator.config import load_config
-from dffmpeg.coordinator.db import DB, DBConfig
+from dffmpeg.coordinator.db import DB
+from dffmpeg.coordinator.transports import Transports
 
 
 logger = getLogger(__name__)
@@ -18,8 +19,12 @@ config = load_config()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.db = DB(config.database)
+    app.state.db = DB(config=config.database)
     await app.state.db.setup_all()
+
+    app.state.transports = Transports(config=config.transports, app=app)
+    await app.state.transports.setup_all()
+
     yield
 
 app = FastAPI(title="dffmpeg Coordinator", lifespan=lifespan)

@@ -12,7 +12,7 @@ ClientId: str = Field(min_length=1)
 class AuthenticatedIdentity(BaseModel):
     authenticated: bool = False
     client_id: str = ClientId
-    role: str = Literal["client", "worker"]
+    role: str = Literal["client", "worker", "admin"]
     timestamp: float = Field(default_factory=time.time)
     hmac_key: Optional[str] = Field(min_length=44, max_length=44)
 
@@ -23,7 +23,7 @@ class Job(BaseModel):
     binary_name: str = Literal["ffmpeg"]
     arguments: List[str] = Field(default_factory=list)
     status: str = Literal["pending", "assigned", "running", "completed", "failed"]
-    worker_id: str = ClientId
+    worker_id: str | None = ClientId
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_update: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 

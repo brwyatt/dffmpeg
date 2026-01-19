@@ -1,7 +1,8 @@
 from importlib.metadata import entry_points
+from typing import Any, Dict
 
 
-def load(group: str, engine):
+def load(group: str, engine) -> Dict[str, Any]:
     available_entrypoints = entry_points(group=group)
     matching = [x for x in available_entrypoints if x.name == engine]
     if len(matching) != 1:

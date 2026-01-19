@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from logging import getLogger
 
 from dffmpeg.coordinator.db import DBConfig
+from dffmpeg.coordinator.transports import TransportConfig
 
 
 logger = getLogger(__name__)
@@ -11,6 +12,7 @@ logger = getLogger(__name__)
 
 class CoordinatorConfig(BaseModel):
     database: DBConfig = Field(default_factory=DBConfig)
+    transports: TransportConfig = Field(default_factory=TransportConfig)
 
 
 def load_config(path: str = "./config.yml") -> CoordinatorConfig:

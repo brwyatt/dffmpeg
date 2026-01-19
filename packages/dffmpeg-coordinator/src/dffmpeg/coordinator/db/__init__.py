@@ -1,7 +1,9 @@
 from logging import getLogger
-from typing import Any, Dict, Optional
+from typing import Dict, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from dffmpeg.common.models.config import ConfigOptions, DefaultConfig
 from dffmpeg.coordinator.db.auth import AuthRepository
 from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
@@ -10,9 +12,7 @@ from dffmpeg.coordinator.db.messages import MessageRepository
 logger = getLogger(__name__)
 
 
-type ConfigOptions = Dict[str, Any]
-class DBConfig(BaseModel):
-    defaults: ConfigOptions = Field(default_factory=dict)
+class DBConfig(DefaultConfig):
     engine_defaults: Dict[str, ConfigOptions] = Field(default_factory=dict)
     repositories: Dict[str, ConfigOptions] = Field(default_factory=dict)
 
