@@ -15,4 +15,4 @@ class WorkerRepository(BaseDB):
         raise NotImplementedError()
 
     async def add_or_update(self, worker_record: WorkerRecord):
-        pass
+        raise NotImplementedError()
