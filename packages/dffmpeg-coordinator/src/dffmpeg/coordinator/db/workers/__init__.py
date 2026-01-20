@@ -1,3 +1,5 @@
+from typing import Optional
+
 from dffmpeg.common.models import TransportRecord, Worker
 from dffmpeg.coordinator.db.db_loader import load
 from dffmpeg.coordinator.db.engines import BaseDB
@@ -15,4 +17,7 @@ class WorkerRepository(BaseDB):
         raise NotImplementedError()
 
     async def add_or_update(self, worker_record: WorkerRecord):
+        raise NotImplementedError()
+
+    async def get_transport(self, worker_id: str) -> Optional[TransportRecord]:
         raise NotImplementedError()

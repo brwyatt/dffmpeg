@@ -35,7 +35,7 @@ class Job(BaseModel):
 
 class Message(BaseModel):
     message_id: ULID = Field(default_factory=ULID)
-    requester_id: str = ClientId
+    recipient_id: str = ClientId
     job_id: ULID | None = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     message_type: Literal["status_update", "assignment", "error"]

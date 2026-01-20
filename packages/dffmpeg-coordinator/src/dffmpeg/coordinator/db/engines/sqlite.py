@@ -5,7 +5,7 @@ import aiosqlite
 from dffmpeg.coordinator.db.engines import BaseDB
 
 
-sql_types = str | int | datetime
+sql_types = str | int | datetime | None
 
 
 class SQLiteDB(BaseDB):

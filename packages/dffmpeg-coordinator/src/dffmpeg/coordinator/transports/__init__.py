@@ -5,8 +5,11 @@ from typing import Any, Dict, List, Optional
 from fastapi import FastAPI
 from pydantic import Field
 
-from dffmpeg.common.models.config import ConfigOptions, DefaultConfig
+from dffmpeg.coordinator.db import DB
+from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.transports.base import BaseServerTransport
+from dffmpeg.common.models import Message
+from dffmpeg.common.models.config import ConfigOptions, DefaultConfig
 
 
 logger = getLogger(__name__)
@@ -36,11 +39,20 @@ class Transports():
         for key in self.loaded_transports.keys():
             await self[key].setup(app=self.app)
 
-    async def send_message(self, message) -> bool:
-        # TODO: lookup the recipient and figure out where it needs to go
-        # If to a worker, lookup in the Workers table, if has a job ID, lookup in the Jobs table
-        # Then call that transport's send_message()
-        return True
+    async def send_message(self, message: Message) -> bool:
+        db: DB = self.app.state.db
+
+        await db.messages.add_message(message)
+
+        if message.job_id:
+            transport = await db.jobs.get_transport(message.job_id)
+        else:
+            transport = await db.workers.get_transport(message.recipient_id)
+
+        if transport is None:
+            return False
+
+        return await self[transport.transport].send_message(message)
 
     @property
     def transport_names(self) -> List[str]:
