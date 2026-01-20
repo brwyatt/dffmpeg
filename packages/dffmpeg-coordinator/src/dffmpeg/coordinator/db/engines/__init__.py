@@ -3,5 +3,5 @@ class BaseDB():
         pass
 
     @property
-    async def table_create(self) -> str:
-        pass
+    def table_create(self) -> str | None:
+        return

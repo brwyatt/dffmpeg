@@ -8,8 +8,8 @@ class WorkerRecord(Worker, TransportRecord):
 
 
 class WorkerRepository(BaseDB):
-    def __new__(self, *args, engine: str, **kwargs):
-        return object.__new__(load("dffmpeg.db.workers", engine))
+    def __new__(cls, *args, engine: str, **kwargs):
+        return object.__new__(load("dffmpeg.db.workers", engine, cls))
 
     def __init__(self, *args, **kwargs):
         raise NotImplementedError()

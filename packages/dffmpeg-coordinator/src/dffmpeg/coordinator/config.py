@@ -15,7 +15,7 @@ class CoordinatorConfig(BaseModel):
     transports: TransportConfig = Field(default_factory=TransportConfig)
 
 
-def load_config(path: str = "./config.yml") -> CoordinatorConfig:
+def load_config(path: Path | str = "./config.yml") -> CoordinatorConfig:
     path = Path(path)
     if not path.exists():
         logger.warning(f"Could not find config file at {str(path)}")

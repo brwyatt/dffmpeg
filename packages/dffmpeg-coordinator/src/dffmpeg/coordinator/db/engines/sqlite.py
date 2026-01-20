@@ -28,4 +28,4 @@ class SQLiteDB(BaseDB):
 
     @property
     def table_create(self) -> str:
-        raise NotImplemented()
+        raise NotImplementedError()

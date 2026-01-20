@@ -35,6 +35,7 @@ class DB():
         self._auth: Optional[AuthRepository] = None
         self._jobs: Optional[JobRepository] = None
         self._messages: Optional[MessageRepository] = None
+        self._workers: Optional[WorkerRepository] = None
 
     async def setup_all(self):
         await self.auth.setup()
@@ -43,25 +44,25 @@ class DB():
         await self.workers.setup()
 
     @property
-    def auth(self):
+    def auth(self) -> AuthRepository:
         if not self._auth:
             self._auth = AuthRepository(**self.config.get_repo_config("auth"))
         return self._auth
 
     @property
-    def jobs(self):
+    def jobs(self) -> JobRepository:
         if not self._jobs:
             self._jobs = JobRepository(**self.config.get_repo_config("jobs"))
         return self._jobs
 
     @property
-    def messages(self):
+    def messages(self) -> MessageRepository:
         if not self._messages:
             self._messages = MessageRepository(**self.config.get_repo_config("messages"))
         return self._messages
 
     @property
-    def workers(self):
+    def workers(self) -> WorkerRepository:
         if not self._workers:
             self._workers = WorkerRepository(**self.config.get_repo_config("workers"))
         return self._workers

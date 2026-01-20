@@ -86,7 +86,7 @@ async def worker_register(
         )
 
     await worker_repo.add_or_update(WorkerRecord(
-        **payload.model_dump(mode="python", exclude=["supported_transports"]),
+        **payload.model_dump(mode="python", exclude={"supported_transports"}),
         status="online",
         transport=negotiated_transport,
         transport_metadata=transports[negotiated_transport].get_metadata(payload.worker_id),

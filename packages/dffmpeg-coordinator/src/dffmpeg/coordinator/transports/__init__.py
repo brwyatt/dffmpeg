@@ -26,20 +26,21 @@ class TransportConfig(DefaultConfig):
 
 
 class Transports():
-    def __init__(self, config: TransportConfig, app: Optional[FastAPI] = None):
+    def __init__(self, config: TransportConfig, app: FastAPI):
         self.config = config
         self.loaded_transports = self.load_transports()
         self._transports: Dict[str, BaseServerTransport] = {}
+        self.app = app
 
     async def setup_all(self):
         for key in self.loaded_transports.keys():
-            self[key].setup(app=self.app)
+            await self[key].setup(app=self.app)
 
     async def send_message(self, message) -> bool:
         # TODO: lookup the recipient and figure out where it needs to go
         # If to a worker, lookup in the Workers table, if has a job ID, lookup in the Jobs table
         # Then call that transport's send_message()
-        pass
+        return True
 
     @property
     def transport_names(self) -> List[str]:
@@ -75,5 +76,5 @@ class Transports():
         if key not in self.loaded_transports:
             raise KeyError(f"`{key}` is not a valid loaded transport!")
         if not self._transports.get(key):
-            self._transports[key] = self.load_transports[key](**self.config.get_transport_config(key))
+            self._transports[key] = self.loaded_transports[key](**self.config.get_transport_config(key))
         return self[key]
