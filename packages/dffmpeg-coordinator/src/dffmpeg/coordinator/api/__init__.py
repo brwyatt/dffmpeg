@@ -4,7 +4,7 @@ from fastapi import FastAPI, Depends, HTTPException, Request
 from logging import getLogger
 from pydantic import BaseModel
 
-from dffmpeg.common.models import AuthenticatedIdentity, WorkerRegistration
+from dffmpeg.common.models import AuthenticatedIdentity, TransportRecord, WorkerRegistration
 
 from dffmpeg.coordinator.api.auth import optional_hmac_auth, required_hmac_auth
 from dffmpeg.coordinator.config import load_config
@@ -68,14 +68,13 @@ def get_negotiated_transport(client_transports: List[str], server_transports: Li
 
 @app.post("/worker/register")
 async def worker_register(
-    request: Request,
     payload: WorkerRegistration,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     transports: Transports = Depends(get_transports),
     worker_repo: WorkerRepository = Depends(get_worker_repo),
 ):
     if identity.client_id != payload.worker_id:
-        raise HTTPException(status_code=401, detail="WorkerID does not match authenticated ClientID")
+        raise HTTPException(status_code=403, detail="WorkerID does not match authenticated ClientID")
 
     try:
         negotiated_transport = get_negotiated_transport(payload.supported_transports, transports.transport_names)
@@ -85,9 +84,13 @@ async def worker_register(
             detail=f"No supported transports in: {', '.join(payload.supported_transports)}",
         )
 
-    await worker_repo.add_or_update(WorkerRecord(
+    record = WorkerRecord(
         **payload.model_dump(mode="python", exclude={"supported_transports"}),
         status="online",
         transport=negotiated_transport,
         transport_metadata=transports[negotiated_transport].get_metadata(payload.worker_id),
-    ))
+    )
+
+    await worker_repo.add_or_update(record)
+
+    return TransportRecord(transport=WorkerRecord.transport, transport_metadata=WorkerRecord.transport_metadata)

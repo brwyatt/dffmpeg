@@ -1,7 +1,11 @@
+from datetime import datetime
 from typing import Iterable, Tuple
 import aiosqlite
 
 from dffmpeg.coordinator.db.engines import BaseDB
+
+
+sql_types = str | int | datetime
 
 
 class SQLiteDB(BaseDB):
@@ -14,17 +18,21 @@ class SQLiteDB(BaseDB):
             await db.execute(self.table_create)
             await db.commit()
 
-    async def get_rows(self, query: str, params: Tuple[str]) -> Iterable[aiosqlite.Row]:
+    async def get_rows(self, query: str, params: Iterable[sql_types]) -> Iterable[aiosqlite.Row]:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, params) as cursor:
                 return await cursor.fetchall()
 
-    async def get_row(self, query: str, params: Tuple[str]) -> aiosqlite.Row | None:
+    async def get_row(self, query: str, params: Iterable[sql_types]) -> aiosqlite.Row | None:
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, params) as cursor:
                 return await cursor.fetchone()
+
+    async def execute(self, query: str, params: Iterable[sql_types]) -> None:
+        async with aiosqlite.connect(self.path) as db:
+            await db.execute(query, params)
 
     @property
     def table_create(self) -> str:
