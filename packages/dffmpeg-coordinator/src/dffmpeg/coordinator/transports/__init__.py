@@ -1,6 +1,6 @@
 from importlib.metadata import entry_points
 from logging import getLogger
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Type
 
 from fastapi import FastAPI
 from pydantic import Field
@@ -37,7 +37,7 @@ class Transports():
 
     async def setup_all(self):
         for key in self.loaded_transports.keys():
-            await self[key].setup(app=self.app)
+            await self[key].setup()
 
     async def send_message(self, message: Message) -> bool:
         db: DB = self.app.state.db
@@ -58,7 +58,7 @@ class Transports():
     def transport_names(self) -> List[str]:
         return list(self.loaded_transports.keys())
 
-    def load_transports(self) -> Dict[str, Any]:
+    def load_transports(self) -> Dict[str, Type[BaseServerTransport]]:
         available_entrypoints = entry_points(group="dffmpeg.transports.server")
         enabled_transports = self.config.enabled_transports
         available_names = [x.name for x in available_entrypoints]
@@ -78,15 +78,21 @@ class Transports():
         if len(not_found) >= 1:
             logger.warning(f"Could not find some requested transports, they will not be enabled: {', '.join(not_found)}")
 
-        loaded = {
-            x.name: x.load()
-            for x in matching
-        }
+        loaded = {}
+
+        for x in matching:
+            cls = x.load()
+            if not isinstance(cls, type) or not issubclass(cls, BaseServerTransport):
+                raise TypeError(
+                    f"Loaded entrypoint {x.name} for dffmpeg.transports.server is not a valid BaseServerTransport!"
+                )
+            loaded[x.name] = cls
+
         return loaded
 
     def __getitem__(self, key) -> BaseServerTransport:
         if key not in self.loaded_transports:
             raise KeyError(f"`{key}` is not a valid loaded transport!")
         if not self._transports.get(key):
-            self._transports[key] = self.loaded_transports[key](**self.config.get_transport_config(key))
+            self._transports[key] = self.loaded_transports[key](app=self.app, **self.config.get_transport_config(key))
         return self[key]

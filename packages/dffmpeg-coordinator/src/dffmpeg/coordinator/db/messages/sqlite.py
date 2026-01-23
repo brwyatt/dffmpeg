@@ -1,4 +1,8 @@
 import json
+from datetime import datetime, timezone
+from typing import List, Optional
+
+from ulid import ULID
 
 from dffmpeg.common.models import Message
 
@@ -33,6 +37,59 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
                 message.sent_at,
             ),
         )
+
+    async def retireve_messages(
+        self,
+        recipient_id: str,
+        last_message_id: Optional[ULID] = None,
+        job_id: Optional[ULID] = None
+    ) -> List[Message]:
+        messages = await self.get_messages(recipient_id=recipient_id, last_message_id=last_message_id, job_id=job_id)
+
+        ids = ", ".join([x.message_id for x in messages])
+        await self.execute(
+            f"""
+            UPDATE {self.tablename} SET sent_at = ? WHERE message_id IN ({ids})
+            """,
+            (
+                datetime.now(timezone.utc),
+            )
+        )
+
+        return messages
+
+    async def get_messages(
+        self,
+        recipient_id: str,
+        last_message_id: Optional[ULID] = None,
+        job_id: Optional[ULID] = None
+    ) -> List[Message]:
+        results = await self.get_rows(
+            f"""
+            SELECT * from {self.tablename} WHERE recipient_id = ? AND job_id = ? AND last_message_id > ?
+            """,
+            (
+                recipient_id,
+                int(last_message_id) if last_message_id is not None else 0,
+                int(job_id) if job_id is not None else None
+            )
+        )
+
+        if results is None:
+            return []
+
+        return [
+            Message(
+                message_id=x["message_id"],
+                recipient_id=x["recipient_id"],
+                job_id=x["job_id"],
+                timestamp=x["timestamp"],
+                message_type=x["message_type"],
+                payload=x["payload"],
+                sent_at=x["sent_at"],
+            )
+            for x in results
+        ]
 
     @property
     def table_create(self) -> str:

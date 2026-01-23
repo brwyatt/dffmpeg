@@ -6,7 +6,10 @@ from dffmpeg.common.models import Message, TransportMetadata
 
 
 class BaseServerTransport():
-    async def setup(self, app: FastAPI):
+    def __init__(self, *args, app: FastAPI, **kwargs):
+        self.app = app
+
+    async def setup(self):
         raise NotImplementedError()
 
     async def send_message(self, message: Message, transport_metadata: Optional[TransportMetadata] = None) -> bool:
