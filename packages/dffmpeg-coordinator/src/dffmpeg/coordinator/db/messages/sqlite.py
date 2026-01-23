@@ -28,9 +28,9 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                int(message.message_id),
+                str(message.message_id),
                 message.recipient_id,
-                int(message.job_id) if message.job_id is not None else None,
+                str(message.job_id) if message.job_id is not None else None,
                 message.timestamp,
                 message.message_type,
                 json.dumps(message.payload),
@@ -38,7 +38,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
             ),
         )
 
-    async def retireve_messages(
+    async def retrieve_messages(
         self,
         recipient_id: str,
         last_message_id: Optional[ULID] = None,
@@ -46,7 +46,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
     ) -> List[Message]:
         messages = await self.get_messages(recipient_id=recipient_id, last_message_id=last_message_id, job_id=job_id)
 
-        ids = ", ".join([x.message_id for x in messages])
+        ids = '"' + "\", \"".join([str(x.message_id) for x in messages]) + '"'
         await self.execute(
             f"""
             UPDATE {self.tablename} SET sent_at = ? WHERE message_id IN ({ids})
@@ -64,16 +64,19 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
         last_message_id: Optional[ULID] = None,
         job_id: Optional[ULID] = None
     ) -> List[Message]:
+        job_compare = "is" if job_id is None else "="
         results = await self.get_rows(
             f"""
-            SELECT * from {self.tablename} WHERE recipient_id = ? AND job_id = ? AND last_message_id > ?
+            SELECT * from {self.tablename} WHERE recipient_id = ? AND job_id {job_compare} ? AND message_id > ?
             """,
             (
                 recipient_id,
-                int(last_message_id) if last_message_id is not None else 0,
-                int(job_id) if job_id is not None else None
+                str(job_id) if job_id is not None else None,
+                str(last_message_id) if last_message_id is not None else 0,
             )
         )
+
+        print(results)
 
         if results is None:
             return []
@@ -95,9 +98,9 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
     def table_create(self) -> str:
         return f"""
         CREATE TABLE IF NOT EXISTS {self.tablename} (
-            message_id INT PRIMARY KEY,
+            message_id TEXT PRIMARY KEY,
             recipient_id TEXT NOT NULL,
-            job_id INT,
+            job_id TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             message_type TEXT NOT NULL,
             payload TEXT NOT NULL,

@@ -21,7 +21,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             FROM {self.tablename}
             WHERE job_id = ?
             """,
-            (int(job_id),)
+            (str(job_id),)
         )
 
         if not result:
@@ -36,7 +36,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
     def table_create(self) -> str:
         return f"""
         CREATE TABLE IF NOT EXISTS {self.tablename} (
-            job_id INT PRIMARY KEY,
+            job_id TEXT PRIMARY KEY,
             requester_id TEXT NOT NULL,
             binary_name TEXT NOT NULL DEFAULT 'ffmpeg',
             arguments TEXT NOT NULL,

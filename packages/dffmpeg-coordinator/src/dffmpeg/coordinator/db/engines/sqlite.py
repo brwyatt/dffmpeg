@@ -33,6 +33,7 @@ class SQLiteDB(BaseDB):
     async def execute(self, query: str, params: Iterable[sql_types]) -> None:
         async with aiosqlite.connect(self.path) as db:
             await db.execute(query, params)
+            await db.commit()
 
     @property
     def table_create(self) -> str:

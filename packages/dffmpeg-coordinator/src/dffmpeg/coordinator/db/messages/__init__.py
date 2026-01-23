@@ -25,7 +25,7 @@ class MessageRepository(BaseDB):
     ):
         raise NotImplementedError()
 
-    async def retireve_messages(
+    async def retrieve_messages(
         self,
         recipient_id: str,
         last_message_id: Optional[ULID] = None,

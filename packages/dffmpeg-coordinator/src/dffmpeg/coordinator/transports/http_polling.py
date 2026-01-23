@@ -27,10 +27,10 @@ class HTTPPollingTransport(BaseServerTransport):
         self.app.add_api_route(self.job_path, self.handle_job_poll, methods=["GET"])
         self.app.add_api_route(self.worker_path, self.handle_worker_poll, methods=["GET"])
 
-    async def _poll_loop(self, identity: AuthenticatedIdentity, last_message_id: Optional[ULID] = None, wait_seconds: int = 20, job_id: Optional[ULID] = None):
+    async def _poll_loop(self, identity: AuthenticatedIdentity, last_message_id: Optional[ULID] = None, wait: int = 20, job_id: Optional[ULID] = None):
         """The abstracted core logic used by both endpoints."""
         repo: MessageRepository = self.app.state.db.messages
-        end_time = asyncio.get_event_loop().time() + wait_seconds
+        end_time = asyncio.get_event_loop().time() + wait
 
         try:
             while True:
