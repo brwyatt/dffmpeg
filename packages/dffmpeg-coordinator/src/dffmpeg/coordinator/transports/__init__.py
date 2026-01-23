@@ -52,7 +52,7 @@ class Transports():
         if transport is None:
             return False
 
-        return await self[transport.transport].send_message(message)
+        return await self[transport.transport].send_message(message, transport_metadata=transport.transport_metadata)
 
     @property
     def transport_names(self) -> List[str]:

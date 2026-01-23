@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from fastapi import FastAPI
 
 from dffmpeg.coordinator.transports.base import BaseServerTransport
-from dffmpeg.common.models import Message
+from dffmpeg.common.models import Message, TransportMetadata
 
 
 class HTTPPollingTransport(BaseServerTransport):
@@ -23,7 +23,7 @@ class HTTPPollingTransport(BaseServerTransport):
         # * any returned messages are updated as sent
         pass
 
-    async def send_message(self, message: Message) -> bool:
+    async def send_message(self, message: Message, transport_metadata: Optional[TransportMetadata] = None) -> bool:
         # HTTP polling doesn't actually "send"
         return True
 

@@ -17,9 +17,12 @@ class AuthenticatedIdentity(BaseModel):
     hmac_key: Optional[str] = Field(min_length=44, max_length=44)
 
 
+TransportMetadata = Dict[str, Any]
+
+
 class TransportRecord(BaseModel):
     transport: str = Field(min_length=1)
-    transport_metadata: Dict[str, Any] = Field(default_factory=dict)
+    transport_metadata: TransportMetadata = Field(default_factory=dict)
 
 
 class Job(BaseModel):
