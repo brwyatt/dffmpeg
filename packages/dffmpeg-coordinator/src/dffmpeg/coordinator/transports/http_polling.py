@@ -19,7 +19,7 @@ class HTTPPollingTransport(BaseServerTransport):
     def __init__(self, *args, app: FastAPI, base_path: str = "/poll", **kwargs):
         self.app = app
         self.base_path = base_path
-        self.job_path = f"{base_path}/jobs"
+        self.job_path = f"{base_path}/jobs/{{job_id}}"
         self.worker_path = f"{base_path}/worker"
         self._message_condition = asyncio.Condition()
 

@@ -109,6 +109,6 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             paths TEXT,
             transport TEXT NOT NULL,
             transport_metadata TEXT NOT NULL,
-            FOREIGN KEY(worker_id) REFERENCES auth(client_id),
+            FOREIGN KEY(worker_id) REFERENCES auth(client_id)
         );
         """

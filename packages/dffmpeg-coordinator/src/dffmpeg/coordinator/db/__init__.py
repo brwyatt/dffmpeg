@@ -46,23 +46,27 @@ class DB():
     @property
     def auth(self) -> AuthRepository:
         if not self._auth:
+            logger.info("Setting up Auth Repository")
             self._auth = AuthRepository(**self.config.get_repo_config("auth"))
         return self._auth
 
     @property
     def jobs(self) -> JobRepository:
         if not self._jobs:
+            logger.info("Setting up Job Repository")
             self._jobs = JobRepository(**self.config.get_repo_config("jobs"))
         return self._jobs
 
     @property
     def messages(self) -> MessageRepository:
         if not self._messages:
+            logger.info("Setting up Message Repository")
             self._messages = MessageRepository(**self.config.get_repo_config("messages"))
         return self._messages
 
     @property
     def workers(self) -> WorkerRepository:
         if not self._workers:
+            logger.info("Setting up Worker Repository")
             self._workers = WorkerRepository(**self.config.get_repo_config("workers"))
         return self._workers

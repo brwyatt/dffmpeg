@@ -95,4 +95,4 @@ class Transports():
             raise KeyError(f"`{key}` is not a valid loaded transport!")
         if not self._transports.get(key):
             self._transports[key] = self.loaded_transports[key](app=self.app, **self.config.get_transport_config(key))
-        return self[key]
+        return self._transports[key]
