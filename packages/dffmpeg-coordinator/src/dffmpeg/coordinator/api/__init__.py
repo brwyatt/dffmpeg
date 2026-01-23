@@ -93,7 +93,7 @@ async def worker_register(
 
     await worker_repo.add_or_update(record)
 
-    return TransportRecord(transport=WorkerRecord.transport, transport_metadata=WorkerRecord.transport_metadata)
+    return TransportRecord(transport=record.transport, transport_metadata=record.transport_metadata)
 
 
 @app.post("/test/emit-message/{recipient_id}")
