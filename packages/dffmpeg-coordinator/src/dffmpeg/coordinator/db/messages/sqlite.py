@@ -24,7 +24,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
                 timestamp,
                 message_type,
                 payload,
-                sent_at,
+                sent_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (

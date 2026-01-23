@@ -17,7 +17,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             f"""
             SELECT
                 callback_transport,
-                callback_transport_metadata,
+                callback_transport_metadata
             FROM {self.tablename}
             WHERE job_id = ?
             """,

@@ -21,7 +21,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
                 binaries,
                 paths,
                 transport,
-                transport_metadata,
+                transport_metadata
             FROM {self.tablename}
             WHERE worker_id = ?
             """,
@@ -47,7 +47,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             f"""
             SELECT
                 transport,
-                transport_metadata,
+                transport_metadata
             FROM {self.tablename}
             WHERE worker_id = ?
             """,
@@ -73,7 +73,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
                 binaries,
                 paths,
                 transport,
-                transport_metadata,
+                transport_metadata
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(worker_id) DO UPDATE SET
                 status=excluded.status,
@@ -82,7 +82,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
                 binaries=excluded.binaries,
                 paths=excluded.paths,
                 transport=excluded.transport,
-                transport_metadata=excluded.transport_metadata,
+                transport_metadata=excluded.transport_metadata
             """,
             (
                 worker_record.worker_id,
