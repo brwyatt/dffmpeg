@@ -1,11 +1,11 @@
-import yaml
-from pathlib import Path
-from pydantic import BaseModel, Field
 from logging import getLogger
+from pathlib import Path
+
+import yaml
+from pydantic import BaseModel, Field
 
 from dffmpeg.coordinator.db import DBConfig
 from dffmpeg.coordinator.transports import TransportConfig
-
 
 logger = getLogger(__name__)
 

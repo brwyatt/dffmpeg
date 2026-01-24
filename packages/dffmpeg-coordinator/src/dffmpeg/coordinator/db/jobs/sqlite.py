@@ -21,7 +21,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             FROM {self.tablename}
             WHERE job_id = ?
             """,
-            (str(job_id),)
+            (str(job_id),),
         )
 
         if not result:

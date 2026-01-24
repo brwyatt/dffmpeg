@@ -5,16 +5,26 @@ from typing import List, Optional
 from ulid import ULID
 
 from dffmpeg.common.models import Message
-
 from dffmpeg.coordinator.db.engines.sqlite import SQLiteDB
 from dffmpeg.coordinator.db.messages import MessageRepository
 
 
 class SQLiteMessageRepository(MessageRepository, SQLiteDB):
+    """
+    SQLite implementation of the MessageRepository.
+    Manages message storage and retrieval.
+    """
+
     def __init__(self, *args, path: str, tablename: str = "messages", **kwargs):
         SQLiteDB.__init__(self, path=path, tablename=tablename)
 
     async def add_message(self, message: Message):
+        """
+        Persists a new message to the database.
+
+        Args:
+            message (Message): The message to save.
+        """
         await self.execute(
             f"""
             INSERT INTO {self.tablename} (
@@ -39,31 +49,46 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
         )
 
     async def retrieve_messages(
-        self,
-        recipient_id: str,
-        last_message_id: Optional[ULID] = None,
-        job_id: Optional[ULID] = None
+        self, recipient_id: str, last_message_id: Optional[ULID] = None, job_id: Optional[ULID] = None
     ) -> List[Message]:
+        """
+        Retrieves pending messages for a recipient and marks them as sent.
+
+        Args:
+            recipient_id (str): The ID of the message recipient.
+            last_message_id (Optional[ULID]): Only retrieve messages newer than this ID.
+            job_id (Optional[ULID]): Filter messages for a specific job.
+
+        Returns:
+            List[Message]: A list of retrieved messages.
+        """
         messages = await self.get_messages(recipient_id=recipient_id, last_message_id=last_message_id, job_id=job_id)
 
-        ids = '"' + "\", \"".join([str(x.message_id) for x in messages]) + '"'
-        await self.execute(
-            f"""
-            UPDATE {self.tablename} SET sent_at = ? WHERE message_id IN ({ids})
-            """,
-            (
-                datetime.now(timezone.utc),
+        if messages:
+            ids = '"' + '", "'.join([str(x.message_id) for x in messages]) + '"'
+            await self.execute(
+                f"""
+                UPDATE {self.tablename} SET sent_at = ? WHERE message_id IN ({ids})
+                """,
+                (datetime.now(timezone.utc),),
             )
-        )
 
         return messages
 
     async def get_messages(
-        self,
-        recipient_id: str,
-        last_message_id: Optional[ULID] = None,
-        job_id: Optional[ULID] = None
+        self, recipient_id: str, last_message_id: Optional[ULID] = None, job_id: Optional[ULID] = None
     ) -> List[Message]:
+        """
+        Queries messages from the database without updating their status.
+
+        Args:
+            recipient_id (str): The ID of the message recipient.
+            last_message_id (Optional[ULID]): Only retrieve messages newer than this ID.
+            job_id (Optional[ULID]): Filter messages for a specific job.
+
+        Returns:
+            List[Message]: A list of matching messages.
+        """
         job_compare = "is" if job_id is None else "="
         results = await self.get_rows(
             f"""
@@ -73,10 +98,8 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
                 recipient_id,
                 str(job_id) if job_id is not None else None,
                 str(last_message_id) if last_message_id is not None else 0,
-            )
+            ),
         )
-
-        print(results)
 
         if results is None:
             return []
@@ -96,6 +119,9 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
 
     @property
     def table_create(self) -> str:
+        """
+        Returns the SQL statement to create the messages table.
+        """
         return f"""
         CREATE TABLE IF NOT EXISTS {self.tablename} (
             message_id TEXT PRIMARY KEY,

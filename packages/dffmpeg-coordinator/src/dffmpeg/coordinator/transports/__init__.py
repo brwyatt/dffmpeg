@@ -1,16 +1,14 @@
 from importlib.metadata import entry_points
 from logging import getLogger
-from typing import Any, Dict, List, Optional, Type
+from typing import Dict, List, Type
 
 from fastapi import FastAPI
 from pydantic import Field
 
-from dffmpeg.coordinator.db import DB
-from dffmpeg.coordinator.db.messages import MessageRepository
-from dffmpeg.coordinator.transports.base import BaseServerTransport
 from dffmpeg.common.models import Message
 from dffmpeg.common.models.config import ConfigOptions, DefaultConfig
-
+from dffmpeg.coordinator.db import DB
+from dffmpeg.coordinator.transports.base import BaseServerTransport
 
 logger = getLogger(__name__)
 
@@ -28,7 +26,7 @@ class TransportConfig(DefaultConfig):
         return config
 
 
-class Transports():
+class Transports:
     def __init__(self, config: TransportConfig, app: FastAPI):
         self.config = config
         self.loaded_transports = self.load_transports()
@@ -65,18 +63,16 @@ class Transports():
         logger.info(f"Requested transports: {', '.join(enabled_transports)}")
         logger.info(f"Available transports: {', '.join(available_names)}")
 
-        matching = [
-            x for x
-            in available_entrypoints
-            if len(enabled_transports) == 0 or x.name in enabled_transports
-        ]
+        matching = [x for x in available_entrypoints if len(enabled_transports) == 0 or x.name in enabled_transports]
 
         if len(matching) < 1:
             ValueError(f"No transports matched requested transports: {', '.join(enabled_transports)}")
 
         not_found = list(set(enabled_transports) - set(available_names))
         if len(not_found) >= 1:
-            logger.warning(f"Could not find some requested transports, they will not be enabled: {', '.join(not_found)}")
+            logger.warning(
+                f"Could not find some requested transports, they will not be enabled: {', '.join(not_found)}"
+            )
 
         loaded = {}
 

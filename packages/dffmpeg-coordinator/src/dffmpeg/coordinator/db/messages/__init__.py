@@ -1,8 +1,8 @@
 from typing import Optional
 
 from ulid import ULID
-from dffmpeg.common.models import Message
 
+from dffmpeg.common.models import Message
 from dffmpeg.coordinator.db.db_loader import load
 from dffmpeg.coordinator.db.engines import BaseDB
 
@@ -18,17 +18,11 @@ class MessageRepository(BaseDB):
         raise NotImplementedError()
 
     async def get_messages(
-        self,
-        recipient_id: str,
-        last_message_id: Optional[ULID] = None,
-        job_id: Optional[ULID] = None
+        self, recipient_id: str, last_message_id: Optional[ULID] = None, job_id: Optional[ULID] = None
     ):
         raise NotImplementedError()
 
     async def retrieve_messages(
-        self,
-        recipient_id: str,
-        last_message_id: Optional[ULID] = None,
-        job_id: Optional[ULID] = None
+        self, recipient_id: str, last_message_id: Optional[ULID] = None, job_id: Optional[ULID] = None
     ):
         raise NotImplementedError()

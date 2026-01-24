@@ -1,13 +1,11 @@
-from fastapi import Depends, Request, Header, HTTPException
 from logging import getLogger
-from pydantic import BaseModel
 from typing import Optional
+
+from fastapi import Depends, Header, HTTPException, Request
 
 from dffmpeg.common.auth.request_signer import RequestSigner
 from dffmpeg.common.models import AuthenticatedIdentity
-
 from dffmpeg.coordinator.db.auth import AuthRepository
-
 
 logger = getLogger(__name__)
 
@@ -29,14 +27,18 @@ async def _get_verified_identity_from_request(
         return None
 
     if not request_client_id or not request_signature or not request_timestamp:
-        logger.warning("\n".join([
-            "Request contained partial auth headers.",
-            f"  client-id: {request_client_id}",
-            f"  signature: {request_signature}",
-            f"  timestamp: {request_timestamp}",
-        ]))
+        logger.warning(
+            "\n".join(
+                [
+                    "Request contained partial auth headers.",
+                    f"  client-id: {request_client_id}",
+                    f"  signature: {request_signature}",
+                    f"  timestamp: {request_timestamp}",
+                ]
+            )
+        )
         raise HTTPException(status_code=401, detail="Incomplete HMAC authentication provided")
-    
+
     client_identity = await auth_repo.get_identity(request_client_id, include_hmac_key=True)
     if not client_identity or not client_identity.hmac_key:
         logger.warning(f"Unable to find a key for client {request_client_id}")
@@ -50,16 +52,23 @@ async def _get_verified_identity_from_request(
         path=request.url.path,
         timestamp=request_timestamp,
         signature=request_signature,
-        payload=body
+        payload=body,
     ):
-        logger.info(f"Request signature verified for client {request_client_id} to {request.url.path} via {request.method}")
-        return client_identity.model_copy(update={
-            "hmac_key": None,
-            "timestamp": request_timestamp,
-            "authenticated": True,
-        })
+        logger.info(
+            f"Request signature verified for client {request_client_id} to {request.url.path} via {request.method}"
+        )
+        return client_identity.model_copy(
+            update={
+                "hmac_key": None,
+                "timestamp": request_timestamp,
+                "authenticated": True,
+            }
+        )
 
-    logger.warning(f"Request signature verification failed for client {request_client_id} to {request.url.path} via {request.method}")
+    logger.warning(
+        f"Request signature verification failed for client {request_client_id} "
+        f"to {request.url.path} via {request.method}"
+    )
     raise HTTPException(status_code=401, detail="Invalid HMAC signature")
 
 
@@ -70,7 +79,9 @@ async def optional_hmac_auth(
     request_signature: Optional[str] = Header(None, alias="x-dffmpeg-signature"),
     auth_repo: AuthRepository = Depends(get_auth_repo),
 ) -> Optional[AuthenticatedIdentity]:
-    return await _get_verified_identity_from_request(request, request_client_id, request_signature, request_timestamp, auth_repo=auth_repo)
+    return await _get_verified_identity_from_request(
+        request, request_client_id, request_signature, request_timestamp, auth_repo=auth_repo
+    )
 
 
 async def required_hmac_auth(

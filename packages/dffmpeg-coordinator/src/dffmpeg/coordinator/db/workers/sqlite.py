@@ -7,10 +7,24 @@ from dffmpeg.coordinator.db.workers import WorkerRecord, WorkerRepository
 
 
 class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
+    """
+    SQLite implementation of the WorkerRepository.
+    Manages worker records in the database.
+    """
+
     def __init__(self, *args, path: str, tablename: str = "workers", **kwargs):
         SQLiteDB.__init__(self, path=path, tablename=tablename)
 
     async def get_worker(self, worker_id: str) -> Optional[WorkerRecord]:
+        """
+        Retrieves a worker record by its ID.
+
+        Args:
+            worker_id (str): The unique identifier of the worker.
+
+        Returns:
+            Optional[WorkerRecord]: The worker record if found, else None.
+        """
         result = await self.get_row(
             f"""
             SELECT
@@ -25,7 +39,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             FROM {self.tablename}
             WHERE worker_id = ?
             """,
-            (worker_id,)
+            (worker_id,),
         )
 
         if not result:
@@ -43,6 +57,15 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
         )
 
     async def get_transport(self, worker_id: str) -> Optional[TransportRecord]:
+        """
+        Retrieves transport information for a specific worker.
+
+        Args:
+            worker_id (str): The unique identifier of the worker.
+
+        Returns:
+            Optional[TransportRecord]: Transport details if the worker exists, else None.
+        """
         result = await self.get_row(
             f"""
             SELECT
@@ -51,7 +74,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             FROM {self.tablename}
             WHERE worker_id = ?
             """,
-            (worker_id,)
+            (worker_id,),
         )
 
         if not result:
@@ -63,6 +86,12 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
         )
 
     async def add_or_update(self, worker_record: WorkerRecord):
+        """
+        Adds a new worker or updates an existing one using UPSERT logic.
+
+        Args:
+            worker_record (WorkerRecord): The worker data to save.
+        """
         await self.execute(
             f"""
             INSERT INTO {self.tablename} (
@@ -96,9 +125,11 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             ),
         )
 
-
     @property
     def table_create(self) -> str:
+        """
+        Returns the SQL statement to create the workers table.
+        """
         return f"""
         CREATE TABLE IF NOT EXISTS {self.tablename} (
             worker_id TEXT PRIMARY KEY,

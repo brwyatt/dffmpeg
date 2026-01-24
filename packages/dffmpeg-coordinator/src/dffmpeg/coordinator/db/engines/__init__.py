@@ -1,4 +1,4 @@
-class BaseDB():
+class BaseDB:
     async def setup(self) -> None:
         pass
 

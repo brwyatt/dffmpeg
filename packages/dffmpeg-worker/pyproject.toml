@@ -27,6 +27,7 @@ test = [
     "pytest",
     "black",
     "isort",
+    "flake8",
 ]
 dev = [
     "dffmpeg-worker[test]",

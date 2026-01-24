@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from dffmpeg.common.models import Message, TransportMetadata
 
 
-class BaseServerTransport():
+class BaseServerTransport:
     def __init__(self, *args, app: FastAPI, **kwargs):
         self.app = app
 

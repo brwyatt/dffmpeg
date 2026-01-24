@@ -1,12 +1,10 @@
 import hashlib
 import hmac
 import time
-
 from base64 import b64decode, b64encode
 from logging import getLogger
 from os import urandom
 from typing import Tuple, Union
-
 
 logger = getLogger(__name__)
 
@@ -15,21 +13,17 @@ class RequestSigner:
     drift = 300
 
     def __init__(self, secret_key: str):
-        self.secret = b64decode(secret_key.encode('ascii'))
+        self.secret = b64decode(secret_key.encode("ascii"))
 
     def generate_signature(self, method: str, path: str, timestamp: str, payload: Union[bytes, str]) -> str:
         """Generate HMAC signature from specific request attributes"""
         if type(payload) is str:
             payload = payload.encode()
-        payload_hash = hashlib.sha256(payload).hexdigest() # type: ignore
+        payload_hash = hashlib.sha256(payload).hexdigest()  # type: ignore
         canonical = f"{method.upper()}|{path}|{timestamp}|{payload_hash}"
         logger.info(f"Signing canonical string: {canonical}")
-        
-        hash = b64encode(hmac.new(
-            self.secret, 
-            canonical.encode(), 
-            hashlib.sha256
-        ).digest()).decode('ascii')
+
+        hash = b64encode(hmac.new(self.secret, canonical.encode(), hashlib.sha256).digest()).decode("ascii")
 
         logger.info(f"HMAC Signature: {hash}")
 
@@ -50,11 +44,11 @@ class RequestSigner:
         if abs(int(time.time()) - int(timestamp)) > self.drift:
             logger.warning(f"Request timestamp has drift > {self.drift}!")
             return False
-            
+
         # Re-calculate expected signature
         expected = self.generate_signature(method, path, timestamp, payload)
         logger.debug(f"Calculated signature for request: {expected}")
-        
+
         # Compare
         result = hmac.compare_digest(expected, signature)
         if result:
@@ -66,4 +60,4 @@ class RequestSigner:
 
     @classmethod
     def generate_key(cls) -> str:
-        return b64encode(urandom(32)).decode('ascii')
+        return b64encode(urandom(32)).decode("ascii")
