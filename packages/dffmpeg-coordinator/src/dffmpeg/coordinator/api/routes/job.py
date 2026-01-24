@@ -57,11 +57,11 @@ async def process_job_assignment(
 
         # Sort candidates
         # 1. Load (asc)
-        # 2. Last seen (desc)
+        # 2. Last seen (desc, rounded to minute)
         # 3. Random (shuffle first)
 
         random.shuffle(candidates)
-        candidates.sort(key=lambda w: w.last_seen, reverse=True)
+        candidates.sort(key=lambda w: w.last_seen.replace(second=0, microsecond=0), reverse=True)
         candidates.sort(key=lambda w: worker_load.get(w.worker_id, 0))
 
         selected_worker = candidates[0]
