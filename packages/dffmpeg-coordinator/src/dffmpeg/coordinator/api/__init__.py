@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from dffmpeg.coordinator.api.routes import health, test, worker
 from dffmpeg.coordinator.config import load_config
 from dffmpeg.coordinator.db import DB
-from dffmpeg.coordinator.transports import Transports
+from dffmpeg.coordinator.transports import TransportManager
 
 logger = getLogger(__name__)
 
@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
     app.state.db = DB(config=config.database)
     await app.state.db.setup_all()
 
-    app.state.transports = Transports(config=config.transports, app=app)
+    app.state.transports = TransportManager(config=config.transports, app=app)
     await app.state.transports.setup_all()
 
     yield

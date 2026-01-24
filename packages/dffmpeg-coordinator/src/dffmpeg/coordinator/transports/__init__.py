@@ -26,7 +26,7 @@ class TransportConfig(DefaultConfig):
         return config
 
 
-class Transports:
+class TransportManager:
     def __init__(self, config: TransportConfig, app: FastAPI):
         self.config = config
         self.loaded_transports = self.load_transports()

@@ -11,7 +11,7 @@ from dffmpeg.common.models import (
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import get_transports, get_worker_repo
 from dffmpeg.coordinator.db.workers import WorkerRecord, WorkerRepository
-from dffmpeg.coordinator.transports import Transports
+from dffmpeg.coordinator.transports import TransportManager
 
 router = APIRouter()
 
@@ -42,7 +42,7 @@ def get_negotiated_transport(client_transports: List[str], server_transports: Li
 async def worker_register(
     payload: WorkerRegistration,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
-    transports: Transports = Depends(get_transports),
+    transports: TransportManager = Depends(get_transports),
     worker_repo: WorkerRepository = Depends(get_worker_repo),
 ):
     """

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from dffmpeg.common.models import Message
 from dffmpeg.coordinator.api.dependencies import get_transports
-from dffmpeg.coordinator.transports import Transports
+from dffmpeg.coordinator.transports import TransportManager
 
 router = APIRouter()
 
@@ -13,7 +13,7 @@ router = APIRouter()
 async def emit_test_message(
     recipient_id: str,
     payload: Optional[Dict[str, Any]] = None,
-    transports: Transports = Depends(get_transports),
+    transports: TransportManager = Depends(get_transports),
 ):
     """
     Test endpoint to simulate emitting a message to a recipient.
