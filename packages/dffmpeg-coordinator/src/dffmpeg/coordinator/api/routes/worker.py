@@ -1,5 +1,4 @@
 from logging import getLogger
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -10,32 +9,13 @@ from dffmpeg.common.models import (
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import get_transports, get_worker_repo
+from dffmpeg.coordinator.api.utils import get_negotiated_transport
 from dffmpeg.coordinator.db.workers import WorkerRecord, WorkerRepository
 from dffmpeg.coordinator.transports import TransportManager
 
 router = APIRouter()
 
 logger = getLogger(__name__)
-
-
-def get_negotiated_transport(client_transports: List[str], server_transports: List[str]):
-    """
-    Finds the first transport method supported by both client and server.
-
-    Args:
-        client_transports: List of transports supported by the client.
-        server_transports: List of transports supported by the server.
-
-    Returns:
-        str: The name of the negotiated transport.
-
-    Raises:
-        ValueError: If no common transport is found.
-    """
-    for client_transport in client_transports:
-        if client_transport in server_transports:
-            return client_transport
-    raise ValueError("Cannot find supported transport!")
 
 
 @router.post("/worker/register")

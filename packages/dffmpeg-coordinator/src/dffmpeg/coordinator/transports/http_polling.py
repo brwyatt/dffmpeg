@@ -128,5 +128,5 @@ class HTTPPollingTransport(BaseServerTransport):
             Dict[str, Any]: Metadata containing the path.
         """
         return {
-            "path": self.job_path if job_id else self.worker_path,
+            "path": self.job_path.format(job_id=job_id) if job_id else self.worker_path,
         }

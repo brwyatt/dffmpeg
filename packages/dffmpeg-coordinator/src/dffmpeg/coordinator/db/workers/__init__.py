@@ -21,3 +21,6 @@ class WorkerRepository(BaseDB):
 
     async def get_transport(self, worker_id: str) -> Optional[TransportRecord]:
         raise NotImplementedError()
+
+    async def get_online_workers(self) -> list[WorkerRecord]:
+        raise NotImplementedError()

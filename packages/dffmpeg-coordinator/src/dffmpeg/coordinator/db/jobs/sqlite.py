@@ -1,16 +1,106 @@
 import json
+from datetime import datetime, timezone
 from typing import Optional
 
 from ulid import ULID
 
-from dffmpeg.common.models import TransportRecord
+from dffmpeg.common.models import JobStatus, TransportRecord
 from dffmpeg.coordinator.db.engines.sqlite import SQLiteDB
-from dffmpeg.coordinator.db.jobs import JobRepository
+from dffmpeg.coordinator.db.jobs import JobRecord, JobRepository
 
 
 class SQLiteJobRepository(JobRepository, SQLiteDB):
     def __init__(self, *args, path: str, tablename: str = "jobs", **kwargs):
         SQLiteDB.__init__(self, path=path, tablename=tablename)
+
+    async def create_job(self, job: JobRecord):
+        await self.execute(
+            f"""
+            INSERT INTO {self.tablename} (
+                job_id,
+                requester_id,
+                binary_name,
+                arguments,
+                paths,
+                status,
+                worker_id,
+                created_at,
+                last_update,
+                callback_transport,
+                callback_transport_metadata
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(job.job_id),
+                job.requester_id,
+                job.binary_name,
+                json.dumps(job.arguments),
+                json.dumps(job.paths),
+                job.status,
+                job.worker_id,
+                job.created_at,
+                job.last_update,
+                job.transport,
+                json.dumps(job.transport_metadata),
+            ),
+        )
+
+    async def get_job(self, job_id: ULID) -> Optional[JobRecord]:
+        result = await self.get_row(
+            f"""
+            SELECT *
+            FROM {self.tablename}
+            WHERE job_id = ?
+            """,
+            (str(job_id),),
+        )
+
+        if not result:
+            return None
+
+        return JobRecord(
+            job_id=ULID.from_str(result["job_id"]),
+            requester_id=result["requester_id"],
+            binary_name=result["binary_name"],
+            arguments=json.loads(result["arguments"]),
+            paths=json.loads(result["paths"]),
+            status=result["status"],
+            worker_id=result["worker_id"],
+            created_at=result["created_at"],
+            last_update=result["last_update"],
+            transport=result["callback_transport"],
+            transport_metadata=json.loads(result["callback_transport_metadata"]),
+        )
+
+    async def update_status(self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None):
+        if worker_id:
+            await self.execute(
+                f"""
+                UPDATE {self.tablename}
+                SET status = ?, worker_id = ?, last_update = ?
+                WHERE job_id = ?
+                """,
+                (status, worker_id, datetime.now(timezone.utc), str(job_id)),
+            )
+        else:
+            await self.execute(
+                f"""
+                UPDATE {self.tablename}
+                SET status = ?, last_update = ?
+                WHERE job_id = ?
+                """,
+                (status, datetime.now(timezone.utc), str(job_id)),
+            )
+
+    async def update_heartbeat(self, job_id: ULID):
+        await self.execute(
+            f"""
+            UPDATE {self.tablename}
+            SET last_update = ?
+            WHERE job_id = ?
+            """,
+            (datetime.now(timezone.utc), str(job_id)),
+        )
 
     async def get_transport(self, job_id: ULID) -> Optional[TransportRecord]:
         result = await self.get_row(
@@ -32,6 +122,19 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             transport_metadata=json.loads(result["callback_transport_metadata"]),
         )
 
+    async def get_worker_load(self) -> dict[str, int]:
+        results = await self.get_rows(
+            f"""
+            SELECT worker_id, COUNT(*) as count
+            FROM {self.tablename}
+            WHERE status IN ('assigned', 'running') AND worker_id IS NOT NULL
+            GROUP BY worker_id
+            """
+        )
+        if not results:
+            return {}
+        return {row["worker_id"]: row["count"] for row in results}
+
     @property
     def table_create(self) -> str:
         return f"""
@@ -40,6 +143,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             requester_id TEXT NOT NULL,
             binary_name TEXT NOT NULL DEFAULT 'ffmpeg',
             arguments TEXT NOT NULL,
+            paths TEXT NOT NULL,
             status TEXT DEFAULT 'pending',
             worker_id TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

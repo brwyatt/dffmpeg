@@ -85,6 +85,46 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             transport_metadata=json.loads(result["transport_metadata"]),
         )
 
+    async def get_online_workers(self) -> list[WorkerRecord]:
+        """
+        Retrieves all workers with status 'online'.
+
+        Returns:
+            list[WorkerRecord]: List of online workers.
+        """
+        results = await self.get_rows(
+            f"""
+            SELECT
+                worker_id,
+                status,
+                last_seen,
+                capabilities,
+                binaries,
+                paths,
+                transport,
+                transport_metadata
+            FROM {self.tablename}
+            WHERE status = 'online'
+            """
+        )
+
+        if not results:
+            return []
+
+        return [
+            WorkerRecord(
+                worker_id=result["worker_id"],
+                status=result["status"],
+                last_seen=result["last_seen"],
+                capabilities=json.loads(result["capabilities"]),
+                binaries=json.loads(result["binaries"]),
+                paths=json.loads(result["paths"]),
+                transport=result["transport"],
+                transport_metadata=json.loads(result["transport_metadata"]),
+            )
+            for result in results
+        ]
+
     async def add_or_update(self, worker_record: WorkerRecord):
         """
         Adds a new worker or updates an existing one using UPSERT logic.

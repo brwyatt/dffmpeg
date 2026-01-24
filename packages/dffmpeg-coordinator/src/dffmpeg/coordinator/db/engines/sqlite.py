@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Iterable
+from typing import Iterable, Optional
 
 import aiosqlite
 
@@ -30,46 +30,55 @@ class SQLiteDB(BaseDB):
             await db.execute(self.table_create)
             await db.commit()
 
-    async def get_rows(self, query: str, params: Iterable[sql_types]) -> Iterable[aiosqlite.Row]:
+    async def get_rows(self, query: str, params: Optional[Iterable[sql_types]] = None) -> Iterable[aiosqlite.Row]:
         """
         Executes a SELECT query and returns all matching rows.
 
         Args:
             query (str): The SQL query string.
-            params (Iterable[sql_types]): Parameters to substitute into the query.
+            params (Optional[Iterable[sql_types]]): Parameters to substitute into the query.
 
         Returns:
             Iterable[aiosqlite.Row]: The resulting rows.
         """
+        if params is None:
+            params = tuple()
+
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, params) as cursor:
                 return await cursor.fetchall()
 
-    async def get_row(self, query: str, params: Iterable[sql_types]) -> aiosqlite.Row | None:
+    async def get_row(self, query: str, params: Optional[Iterable[sql_types]] = None) -> aiosqlite.Row | None:
         """
         Executes a SELECT query and returns the first matching row.
 
         Args:
             query (str): The SQL query string.
-            params (Iterable[sql_types]): Parameters to substitute into the query.
+            params (Optional[Iterable[sql_types]]): Parameters to substitute into the query.
 
         Returns:
             Optional[aiosqlite.Row]: The resulting row, or None if no match found.
         """
+        if params is None:
+            params = tuple()
+
         async with aiosqlite.connect(self.path) as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, params) as cursor:
                 return await cursor.fetchone()
 
-    async def execute(self, query: str, params: Iterable[sql_types]) -> None:
+    async def execute(self, query: str, params: Optional[Iterable[sql_types]] = None) -> None:
         """
         Executes a write operation (INSERT, UPDATE, DELETE).
 
         Args:
             query (str): The SQL query string.
-            params (Iterable[sql_types]): Parameters to substitute into the query.
+            params (Optional[Iterable[sql_types]]): Parameters to substitute into the query.
         """
+        if params is None:
+            params = tuple()
+
         async with aiosqlite.connect(self.path) as db:
             await db.execute(query, params)
             await db.commit()

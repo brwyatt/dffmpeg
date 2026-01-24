@@ -56,7 +56,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
 
         Args:
             recipient_id (str): The ID of the message recipient.
-            last_message_id (Optional[ULID]): Only retrieve messages newer than this ID.
+            last_message_id (Optional[ULID]): Only retrieve messages newer than this ID or all unsent messages.
             job_id (Optional[ULID]): Filter messages for a specific job.
 
         Returns:
@@ -83,23 +83,26 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
 
         Args:
             recipient_id (str): The ID of the message recipient.
-            last_message_id (Optional[ULID]): Only retrieve messages newer than this ID.
-            job_id (Optional[ULID]): Filter messages for a specific job.
+            last_message_id (Optional[ULID]): Only retrieve messages newer than this ID or all unsent messages.
+            job_id (Optional[ULID]): Filter messages for a specific job. If None, returns messages for any job.
 
         Returns:
             List[Message]: A list of matching messages.
         """
-        job_compare = "is" if job_id is None else "="
-        results = await self.get_rows(
-            f"""
-            SELECT * from {self.tablename} WHERE recipient_id = ? AND job_id {job_compare} ? AND message_id > ?
-            """,
-            (
-                recipient_id,
-                str(job_id) if job_id is not None else None,
-                str(last_message_id) if last_message_id is not None else 0,
-            ),
-        )
+        args = [recipient_id]
+        query = f"SELECT * from {self.tablename} WHERE recipient_id = ?"
+
+        if last_message_id is None:
+            query += " AND sent_at is null"
+        else:
+            query += " AND message_id > ?"
+            args.append(str(last_message_id))
+
+        if job_id is not None:
+            query += " AND job_id = ?"
+            args.append(str(job_id))
+
+        results = await self.get_rows(query, tuple(args))
 
         if results is None:
             return []
@@ -111,7 +114,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
                 job_id=x["job_id"],
                 timestamp=x["timestamp"],
                 message_type=x["message_type"],
-                payload=x["payload"],
+                payload=json.loads(x["payload"]),
                 sent_at=x["sent_at"],
             )
             for x in results
