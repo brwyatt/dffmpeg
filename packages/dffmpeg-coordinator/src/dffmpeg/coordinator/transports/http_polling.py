@@ -116,7 +116,7 @@ class HTTPPollingTransport(BaseServerTransport):
             self._message_condition.notify_all()
         return True
 
-    def get_metadata(self, client_id: str, job_id: Optional[str] = None) -> Dict[str, Any]:
+    def get_metadata(self, client_id: str, job_id: Optional[ULID] = None) -> Dict[str, Any]:
         """
         Returns metadata needed for a client to connect/poll (e.g. the path).
 

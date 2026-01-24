@@ -35,7 +35,7 @@ async def emit_test_message(
     # This simulates an internal event (like a worker finishing a job)
     msg = Message(
         recipient_id=recipient_id,
-        message_type="status_update",
+        message_type="job_status",
         payload=payload,
     )
     # This calls your new Transport Dispatcher logic
