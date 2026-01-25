@@ -30,6 +30,15 @@ logger = getLogger(__name__)
 async def process_job_assignment(
     job_id: ULID, job_repo: JobRepository, worker_repo: WorkerRepository, transports: TransportManager
 ):
+    """
+    Background task to find a suitable worker for a pending job and assign it.
+
+    Args:
+        job_id (ULID): The ID of the pending job.
+        job_repo (JobRepository): Repository for accessing job data.
+        worker_repo (WorkerRepository): Repository for accessing worker data.
+        transports (TransportManager): Transport manager for sending notifications.
+    """
     try:
         job = await job_repo.get_job(job_id)
         if not job or job.status != "pending":
@@ -104,6 +113,23 @@ async def job_submit(
     job_repo: JobRepository = Depends(get_job_repo),
     worker_repo: WorkerRepository = Depends(get_worker_repo),
 ):
+    """
+    Submits a new job to the system.
+
+    Args:
+        payload (JobRequest): The job details (binary, arguments, paths).
+        background_tasks (BackgroundTasks): FastAPI background tasks handler.
+        identity (AuthenticatedIdentity): The authenticated client identity.
+        transports (TransportManager): Transport manager.
+        job_repo (JobRepository): Job repository.
+        worker_repo (WorkerRepository): Worker repository.
+
+    Returns:
+        JobRecord: The created job record.
+
+    Raises:
+        HTTPException: If no supported transports are available.
+    """
     try:
         negotiated_transport = get_negotiated_transport(payload.supported_transports, transports.transport_names)
     except ValueError:
@@ -136,6 +162,21 @@ async def job_accept(
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
 ):
+    """
+    Endpoint for a worker to accept an assigned job.
+
+    Args:
+        job_id (str): The ID of the job to accept.
+        identity (AuthenticatedIdentity): The authenticated worker identity.
+        transports (TransportManager): Transport manager.
+        job_repo (JobRepository): Job repository.
+
+    Returns:
+        dict: Status OK if successful.
+
+    Raises:
+        HTTPException: If job not found or not assigned to this worker.
+    """
     try:
         j_id = ULID.from_str(job_id)
     except ValueError:
@@ -164,6 +205,22 @@ async def job_cancel(
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
 ):
+    """
+    Cancels a job. Can be called by the requester or an admin.
+    If the job is assigned, it requests cancellation from the worker first.
+
+    Args:
+        job_id (str): The ID of the job to cancel.
+        identity (AuthenticatedIdentity): The authenticated user identity.
+        transports (TransportManager): Transport manager.
+        job_repo (JobRepository): Job repository.
+
+    Returns:
+        dict: Status OK if successful.
+
+    Raises:
+        HTTPException: If job not found or user lacks permission.
+    """
     try:
         j_id = ULID.from_str(job_id)
     except ValueError:
@@ -219,6 +276,20 @@ async def job_status(
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     job_repo: JobRepository = Depends(get_job_repo),
 ):
+    """
+    Retrieves the current status of a job.
+
+    Args:
+        job_id (str): The ID of the job.
+        identity (AuthenticatedIdentity): The authenticated user identity.
+        job_repo (JobRepository): Job repository.
+
+    Returns:
+        JobRecord: The job details.
+
+    Raises:
+        HTTPException: If job not found or user lacks permission.
+    """
     try:
         j_id = ULID.from_str(job_id)
     except ValueError:
@@ -242,6 +313,23 @@ async def job_status_update(
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
 ):
+    """
+    Updates the status of a job (e.g., to completed or failed).
+    Called by the assigned worker.
+
+    Args:
+        job_id (str): The ID of the job.
+        payload (JobStatusUpdate): The new status details.
+        identity (AuthenticatedIdentity): The authenticated worker identity.
+        transports (TransportManager): Transport manager.
+        job_repo (JobRepository): Job repository.
+
+    Returns:
+        dict: Status OK if successful.
+
+    Raises:
+        HTTPException: If job not found or not assigned to this worker.
+    """
     try:
         j_id = ULID.from_str(job_id)
     except ValueError:
@@ -274,6 +362,21 @@ async def job_heartbeat(
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
 ):
+    """
+    Updates the last_update timestamp for a job to indicate the worker is still active.
+
+    Args:
+        job_id (str): The ID of the job.
+        identity (AuthenticatedIdentity): The authenticated worker identity.
+        transports (TransportManager): Transport manager.
+        job_repo (JobRepository): Job repository.
+
+    Returns:
+        dict: Status OK if successful.
+
+    Raises:
+        HTTPException: If job not found or not assigned to this worker.
+    """
     try:
         j_id = ULID.from_str(job_id)
     except ValueError:

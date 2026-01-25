@@ -10,10 +10,20 @@ from dffmpeg.coordinator.db.jobs import JobRecord, JobRepository
 
 
 class SQLiteJobRepository(JobRepository, SQLiteDB):
+    """
+    SQLite implementation of the JobRepository.
+    """
+
     def __init__(self, *args, path: str, tablename: str = "jobs", **kwargs):
         SQLiteDB.__init__(self, path=path, tablename=tablename)
 
     async def create_job(self, job: JobRecord):
+        """
+        Creates a new job record in the database.
+
+        Args:
+            job (JobRecord): The job record to insert.
+        """
         await self.execute(
             f"""
             INSERT INTO {self.tablename} (
@@ -46,6 +56,15 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
         )
 
     async def get_job(self, job_id: ULID) -> Optional[JobRecord]:
+        """
+        Retrieves a job by its ID.
+
+        Args:
+            job_id (ULID): The ID of the job to retrieve.
+
+        Returns:
+            Optional[JobRecord]: The job record if found, None otherwise.
+        """
         result = await self.get_row(
             f"""
             SELECT *
@@ -73,6 +92,15 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
         )
 
     async def update_status(self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None):
+        """
+        Updates the status of a job.
+
+        Args:
+            job_id (ULID): The ID of the job to update.
+            status (JobStatus): The new status.
+            worker_id (Optional[str]): The worker ID to assign (if any). If provided,
+                it updates the worker assignment as well.
+        """
         if worker_id:
             await self.execute(
                 f"""
@@ -93,6 +121,13 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             )
 
     async def update_heartbeat(self, job_id: ULID):
+        """
+        Updates the last_update timestamp of a job to now.
+        Used to indicate the job/worker is still active.
+
+        Args:
+            job_id (ULID): The ID of the job.
+        """
         await self.execute(
             f"""
             UPDATE {self.tablename}
@@ -103,6 +138,15 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
         )
 
     async def get_transport(self, job_id: ULID) -> Optional[TransportRecord]:
+        """
+        Retrieves the transport configuration associated with a job.
+
+        Args:
+            job_id (ULID): The ID of the job.
+
+        Returns:
+            Optional[TransportRecord]: The transport record if found, None otherwise.
+        """
         result = await self.get_row(
             f"""
             SELECT
@@ -123,6 +167,12 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
         )
 
     async def get_worker_load(self) -> dict[str, int]:
+        """
+        Calculates the current load (number of active jobs) for each worker.
+
+        Returns:
+            dict[str, int]: A dictionary mapping worker_id to their count of active jobs.
+        """
         results = await self.get_rows(
             f"""
             SELECT worker_id, COUNT(*) as count
