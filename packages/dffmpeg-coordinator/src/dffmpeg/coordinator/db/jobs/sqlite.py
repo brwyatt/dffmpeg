@@ -127,7 +127,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             f"""
             SELECT worker_id, COUNT(*) as count
             FROM {self.tablename}
-            WHERE status IN ('assigned', 'running') AND worker_id IS NOT NULL
+            WHERE status IN ('assigned', 'running', 'canceling') AND worker_id IS NOT NULL
             GROUP BY worker_id
             """
         )

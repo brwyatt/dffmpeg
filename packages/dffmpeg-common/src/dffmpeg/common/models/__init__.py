@@ -44,7 +44,7 @@ class TransportRecord(BaseModel):
     transport_metadata: TransportMetadata = Field(default_factory=dict)
 
 
-JobStatus = Literal["pending", "assigned", "running", "completed", "failed"]
+JobStatus = Literal["pending", "assigned", "running", "completed", "failed", "canceled", "canceling"]
 
 
 class Job(BaseModel):
@@ -96,7 +96,7 @@ class JobStatusUpdate(BaseModel):
     Payload for updating job status (completion/failure).
     """
 
-    status: Literal["completed", "failed"]
+    status: Literal["completed", "failed", "canceled"]
 
 
 MessageType = Literal["job_status", "job_request"]

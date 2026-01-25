@@ -97,7 +97,7 @@ async def process_job_assignment(
         logger.error(f"Error processing assignment for job {job_id}: {e}")
 
 
-@router.post("/job/submit")
+@router.post("/jobs/submit")
 async def job_submit(
     payload: JobRequest,
     background_tasks: BackgroundTasks,
@@ -132,7 +132,7 @@ async def job_submit(
     return job_record
 
 
-@router.post("/job/{job_id}/accept")
+@router.post("/jobs/{job_id}/accept")
 async def job_accept(
     job_id: str,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
@@ -160,7 +160,84 @@ async def job_accept(
     return {"status": "ok"}
 
 
-@router.post("/job/{job_id}/status")
+@router.post("/jobs/{job_id}/cancel")
+async def job_cancel(
+    job_id: str,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    job_repo: JobRepository = Depends(get_job_repo),
+    message_repo: MessageRepository = Depends(get_message_repo),
+):
+    try:
+        j_id = ULID.from_str(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    job = await job_repo.get_job(j_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.requester_id != identity.client_id and identity.role != "admin":
+        raise HTTPException(status_code=403, detail="No permission to cancel job")
+
+    if job.status in ["completed", "failed", "canceled"]:
+        return {"status": "ok", "detail": "Job already finished"}
+
+    if job.worker_id is not None:
+        # Update status to canceling
+        await job_repo.update_status(j_id, "canceling", job.worker_id)
+
+        # Tell the client
+        await message_repo.add_message(
+            Message(
+                recipient_id=job.requester_id, job_id=j_id, message_type="job_status", payload={"status": "canceling"}
+            )
+        )
+
+        # And tell the assigned worker to cancel
+        await message_repo.add_message(
+            Message(
+                recipient_id=job.worker_id,
+                job_id=j_id,
+                message_type="job_status",
+                payload={"job_id": job_id, "status": "canceling"},
+            )
+        )
+    else:
+        # Update status to canceled
+        await job_repo.update_status(j_id, "canceled")
+
+        # Tell the client
+        await message_repo.add_message(
+            Message(
+                recipient_id=job.requester_id, job_id=j_id, message_type="job_status", payload={"status": "canceled"}
+            )
+        )
+
+    return {"status": "ok"}
+
+
+@router.get("/jobs/{job_id}/status")
+async def job_status(
+    job_id: str,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    job_repo: JobRepository = Depends(get_job_repo),
+):
+    try:
+        j_id = ULID.from_str(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    job = await job_repo.get_job(j_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if identity.client_id not in [job.worker_id, job.requester_id] and identity.role != "admin":
+        raise HTTPException(status_code=403, detail="No permission to job")
+
+    return job
+
+
+@router.post("/jobs/{job_id}/status")
 async def job_status_update(
     job_id: str,
     payload: JobStatusUpdate,
@@ -193,7 +270,7 @@ async def job_status_update(
     return {"status": "ok"}
 
 
-@router.post("/job/{job_id}/heartbeat")
+@router.post("/jobs/{job_id}/heartbeat")
 async def job_heartbeat(
     job_id: str,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
