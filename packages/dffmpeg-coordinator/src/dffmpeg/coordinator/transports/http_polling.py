@@ -1,6 +1,7 @@
 import asyncio
+from collections import defaultdict
 from logging import getLogger
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 from fastapi import Depends, FastAPI
 from ulid import ULID
@@ -24,7 +25,10 @@ class HTTPPollingTransport(BaseServerTransport):
         self.base_path = base_path
         self.job_path = f"{base_path}/jobs/{{job_id}}"
         self.worker_path = f"{base_path}/worker"
-        self._message_condition = asyncio.Condition()
+
+        # Registry for waiting poll connections
+        self._job_waiters: Dict[str, Set[asyncio.Event]] = defaultdict(set)
+        self._recipient_waiters: Dict[str, Set[asyncio.Event]] = defaultdict(set)
 
     async def setup(self):
         """
@@ -56,6 +60,15 @@ class HTTPPollingTransport(BaseServerTransport):
         repo: MessageRepository = self.app.state.db.messages
         end_time = asyncio.get_event_loop().time() + wait
 
+        # Create an event for this connection
+        event = asyncio.Event()
+
+        # Register the event
+        if job_id:
+            self._job_waiters[str(job_id)].add(event)
+        else:
+            self._recipient_waiters[identity.client_id].add(event)
+
         try:
             while True:
                 # Fetch logic: logic changes slightly if a job_id is provided
@@ -72,16 +85,30 @@ class HTTPPollingTransport(BaseServerTransport):
                     return {"messages": []}
 
                 # Wait for a "poke" from the send_message call or a system-wide Janitor event
-                async with self._message_condition:
-                    wait_timeout = min(5, max(0, end_time - asyncio.get_event_loop().time()))
-                    try:
-                        await asyncio.wait_for(self._message_condition.wait(), timeout=wait_timeout)
-                    except asyncio.TimeoutError:
-                        continue  # Regular interval check
+                wait_timeout = min(5, max(0, end_time - asyncio.get_event_loop().time()))
+                try:
+                    await asyncio.wait_for(event.wait(), timeout=wait_timeout)
+                    event.clear()  # Reset for next loop iteration
+                except asyncio.TimeoutError:
+                    continue  # Regular interval check
         except asyncio.CancelledError:
             # Handle sudden disconnects
             logger.info(f"Connection closed by {identity.client_id}")
             raise
+        finally:
+            # Unregister the event
+            if job_id:
+                jid = str(job_id)
+                if jid in self._job_waiters:
+                    self._job_waiters[jid].discard(event)
+                    if not self._job_waiters[jid]:
+                        del self._job_waiters[jid]
+            else:
+                cid = identity.client_id
+                if cid in self._recipient_waiters:
+                    self._recipient_waiters[cid].discard(event)
+                    if not self._recipient_waiters[cid]:
+                        del self._recipient_waiters[cid]
 
     async def handle_job_poll(
         self, job_id: ULID, last_message_id: Optional[ULID] = None, wait: int = 20, identity=Depends(required_hmac_auth)
@@ -112,8 +139,19 @@ class HTTPPollingTransport(BaseServerTransport):
             bool: Always True (notification sent).
         """
         # HTTP polling doesn't actually "send", but we can at least tell connected clients to check
-        async with self._message_condition:
-            self._message_condition.notify_all()
+
+        # Notify recipient-specific listeners (e.g. workers)
+        if message.recipient_id in self._recipient_waiters:
+            for event in self._recipient_waiters[message.recipient_id]:
+                event.set()
+
+        # Notify job-specific listeners (e.g. clients watching a job)
+        if message.job_id:
+            jid = str(message.job_id)
+            if jid in self._job_waiters:
+                for event in self._job_waiters[jid]:
+                    event.set()
+
         return True
 
     def get_metadata(self, client_id: str, job_id: Optional[ULID] = None) -> Dict[str, Any]:
