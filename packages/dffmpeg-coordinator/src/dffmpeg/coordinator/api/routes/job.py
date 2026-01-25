@@ -14,13 +14,11 @@ from dffmpeg.common.models import (
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import (
     get_job_repo,
-    get_message_repo,
     get_transports,
     get_worker_repo,
 )
 from dffmpeg.coordinator.api.utils import get_negotiated_transport
 from dffmpeg.coordinator.db.jobs import JobRecord, JobRepository
-from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
 from dffmpeg.coordinator.transports import TransportManager
 
@@ -30,7 +28,7 @@ logger = getLogger(__name__)
 
 
 async def process_job_assignment(
-    job_id: ULID, job_repo: JobRepository, worker_repo: WorkerRepository, message_repo: MessageRepository
+    job_id: ULID, job_repo: JobRepository, worker_repo: WorkerRepository, transports: TransportManager
 ):
     try:
         job = await job_repo.get_job(job_id)
@@ -70,7 +68,7 @@ async def process_job_assignment(
         await job_repo.update_status(job_id, "assigned", selected_worker.worker_id)
 
         # Notify Worker
-        await message_repo.add_message(
+        await transports.send_message(
             Message(
                 recipient_id=selected_worker.worker_id,
                 job_id=job_id,
@@ -85,7 +83,7 @@ async def process_job_assignment(
         )
 
         # Notify Client
-        await message_repo.add_message(
+        await transports.send_message(
             Message(
                 recipient_id=job.requester_id, job_id=job_id, message_type="job_status", payload={"status": "assigned"}
             )
@@ -105,7 +103,6 @@ async def job_submit(
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
     worker_repo: WorkerRepository = Depends(get_worker_repo),
-    message_repo: MessageRepository = Depends(get_message_repo),
 ):
     try:
         negotiated_transport = get_negotiated_transport(payload.supported_transports, transports.transport_names)
@@ -127,7 +124,7 @@ async def job_submit(
     await job_repo.create_job(job_record)
 
     # Trigger assignment in background
-    background_tasks.add_task(process_job_assignment, job_id, job_repo, worker_repo, message_repo)
+    background_tasks.add_task(process_job_assignment, job_id, job_repo, worker_repo, transports)
 
     return job_record
 
@@ -136,8 +133,8 @@ async def job_submit(
 async def job_accept(
     job_id: str,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
-    message_repo: MessageRepository = Depends(get_message_repo),
 ):
     try:
         j_id = ULID.from_str(job_id)
@@ -153,7 +150,7 @@ async def job_accept(
 
     await job_repo.update_status(j_id, "running", identity.client_id)
 
-    await message_repo.add_message(
+    await transports.send_message(
         Message(recipient_id=job.requester_id, job_id=j_id, message_type="job_status", payload={"status": "running"})
     )
 
@@ -164,8 +161,8 @@ async def job_accept(
 async def job_cancel(
     job_id: str,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
-    message_repo: MessageRepository = Depends(get_message_repo),
 ):
     try:
         j_id = ULID.from_str(job_id)
@@ -187,14 +184,14 @@ async def job_cancel(
         await job_repo.update_status(j_id, "canceling", job.worker_id)
 
         # Tell the client
-        await message_repo.add_message(
+        await transports.send_message(
             Message(
                 recipient_id=job.requester_id, job_id=j_id, message_type="job_status", payload={"status": "canceling"}
             )
         )
 
         # And tell the assigned worker to cancel
-        await message_repo.add_message(
+        await transports.send_message(
             Message(
                 recipient_id=job.worker_id,
                 job_id=j_id,
@@ -207,7 +204,7 @@ async def job_cancel(
         await job_repo.update_status(j_id, "canceled")
 
         # Tell the client
-        await message_repo.add_message(
+        await transports.send_message(
             Message(
                 recipient_id=job.requester_id, job_id=j_id, message_type="job_status", payload={"status": "canceled"}
             )
@@ -242,8 +239,8 @@ async def job_status_update(
     job_id: str,
     payload: JobStatusUpdate,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
-    message_repo: MessageRepository = Depends(get_message_repo),
 ):
     try:
         j_id = ULID.from_str(job_id)
@@ -261,7 +258,7 @@ async def job_status_update(
     # We pass worker_id to ensure we are the owner (already checked above, but good for consistency)
     await job_repo.update_status(j_id, payload.status, identity.client_id)
 
-    await message_repo.add_message(
+    await transports.send_message(
         Message(
             recipient_id=job.requester_id, job_id=j_id, message_type="job_status", payload={"status": payload.status}
         )
@@ -274,8 +271,8 @@ async def job_status_update(
 async def job_heartbeat(
     job_id: str,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
-    message_repo: MessageRepository = Depends(get_message_repo),
 ):
     try:
         j_id = ULID.from_str(job_id)
@@ -291,7 +288,7 @@ async def job_heartbeat(
 
     await job_repo.update_heartbeat(j_id)
 
-    await message_repo.add_message(
+    await transports.send_message(
         Message(
             recipient_id=job.requester_id,
             job_id=j_id,
