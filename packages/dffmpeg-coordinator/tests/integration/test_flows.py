@@ -3,6 +3,7 @@ import json
 import asyncio
 from httpx import AsyncClient, ASGITransport
 from dffmpeg.common.auth.request_signer import RequestSigner
+from dffmpeg.common.models import AuthenticatedIdentity
 
 async def sign_request(signer, client_id, method, path, body=None):
     if body and isinstance(body, dict):
@@ -26,16 +27,13 @@ async def test_worker_registration_and_polling(test_app):
     worker_key = RequestSigner.generate_key()
     signer = RequestSigner(worker_key)
     
-    # We need to inject this key into the DB so the app can authenticate the worker
     async with test_app.router.lifespan_context(test_app):
-        auth_repo = test_app.state.db.auth
-        # Manually insert identity since we don't have a registration API for clients/workers yet
-        encrypted_key, key_id = auth_repo._encrypt(worker_key)
-        import aiosqlite
-        await auth_repo.execute(
-            f"INSERT INTO {auth_repo.tablename} (client_id, role, hmac_key, key_id) VALUES (?, ?, ?, ?)",
-            (worker_id, "worker", encrypted_key, key_id)
-        )
+        # Register worker using the new add_identity method
+        await test_app.state.db.auth.add_identity(AuthenticatedIdentity(
+            client_id=worker_id,
+            role="worker",
+            hmac_key=worker_key
+        ))
 
         transport = ASGITransport(app=test_app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -67,24 +65,21 @@ async def test_worker_registration_and_polling(test_app):
 async def test_client_job_submission_flow(test_app):
     client_id = "client01"
     client_key = RequestSigner.generate_key()
-    signer = RequestSigner(client_key)
+    client_signer = RequestSigner(client_key)
     
     worker_id = "worker01"
     worker_key = RequestSigner.generate_key()
     worker_signer = RequestSigner(worker_key)
 
     async with test_app.router.lifespan_context(test_app):
+        # Register both client and worker using the new add_identity method
         auth_repo = test_app.state.db.auth
-        # Register both client and worker in DB
-        import aiosqlite
-        async with aiosqlite.connect(auth_repo.path) as db:
-            for cid, key, role in [(client_id, client_key, "client"), (worker_id, worker_key, "worker")]:
-                enc_key, kid = auth_repo._encrypt(key)
-                await db.execute(
-                    f"INSERT INTO {auth_repo.tablename} (client_id, role, hmac_key, key_id) VALUES (?, ?, ?, ?)",
-                    (cid, role, enc_key, kid)
-                )
-            await db.commit()
+        for cid, key, role in [(client_id, client_key, "client"), (worker_id, worker_key, "worker")]:
+            await auth_repo.add_identity(AuthenticatedIdentity(
+                client_id=cid,
+                role=role,
+                hmac_key=key
+            ))
 
         transport = ASGITransport(app=test_app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -109,7 +104,7 @@ async def test_client_job_submission_flow(test_app):
                 "supported_transports": ["http_polling"],
             }
             job_body_str = json.dumps(job_body)
-            headers = await sign_request(signer, client_id, "POST", submit_path, job_body_str)
+            headers = await sign_request(client_signer, client_id, "POST", submit_path, job_body_str)
             resp = await client.post(submit_path, content=job_body_str, headers=headers)
             assert resp.status_code == 200
             job_data = resp.json()

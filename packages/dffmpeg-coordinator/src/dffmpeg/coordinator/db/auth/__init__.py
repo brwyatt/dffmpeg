@@ -25,6 +25,9 @@ class AuthRepository(BaseDB):
     ) -> Optional[AuthenticatedIdentity]:
         raise NotImplementedError()
 
+    async def add_identity(self, identity: AuthenticatedIdentity) -> None:
+        raise NotImplementedError()
+
     def _encrypt(self, hmac_key: str, key_id: Optional[str] = None) -> Tuple[str, str]:
         """
         Encrypts an HMAC key using the specified or default encryption key.

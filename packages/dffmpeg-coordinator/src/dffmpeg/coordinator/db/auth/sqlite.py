@@ -33,6 +33,16 @@ class SQLiteAuthRepository(AuthRepository, SQLiteDB):
         )
         return identity
 
+    async def add_identity(self, identity: AuthenticatedIdentity) -> None:
+        if not identity.hmac_key:
+            raise ValueError("hmac_key is required to add an identity")
+
+        encrypted_key, key_id = self._encrypt(identity.hmac_key)
+        await self.execute(
+            f"INSERT OR REPLACE INTO {self.tablename} (client_id, role, hmac_key, key_id) VALUES (?, ?, ?, ?)",
+            (identity.client_id, identity.role, encrypted_key, key_id),
+        )
+
     @property
     def table_create(self) -> str:
         return f"""
