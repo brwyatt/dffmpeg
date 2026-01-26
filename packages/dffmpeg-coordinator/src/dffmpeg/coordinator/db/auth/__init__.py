@@ -20,9 +20,7 @@ class AuthRepository(BaseDB):
         self._crypto = CryptoManager(encryption_keys or {})
         self._default_key_id = default_encryption_key_id
 
-    async def get_identity(
-        self, client_id: str, include_hmac_key: bool = False
-    ) -> Optional[AuthenticatedIdentity]:
+    async def get_identity(self, client_id: str, include_hmac_key: bool = False) -> Optional[AuthenticatedIdentity]:
         raise NotImplementedError()
 
     async def add_identity(self, identity: AuthenticatedIdentity) -> None:

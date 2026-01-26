@@ -1,11 +1,11 @@
-from base64 import b64decode, b64encode
+from base64 import b64decode
 from importlib.metadata import entry_points
 from typing import Dict, Type, TypeVar, cast
 
 T = TypeVar("T", bound="BaseEncryption")
 
 
-class BaseEncryption():
+class BaseEncryption:
     def __init__(self, key: str):
         self.key = b64decode(key.encode("ascii"))
 
@@ -24,18 +24,12 @@ def load_encryption_provider(algo: str) -> Type[BaseEncryption]:
 
     if len(matching) != 1:
         available_names = ", ".join([x.name for x in available_entrypoints])
-        raise ValueError(
-            f'Invalid encryption algorithm "{algo}"! '
-            f"Expected one of: {available_names}"
-        )
+        raise ValueError(f'Invalid encryption algorithm "{algo}"! ' f"Expected one of: {available_names}")
 
     loaded = matching[0].load()
 
     if not isinstance(loaded, type) or not issubclass(loaded, BaseEncryption):
-        raise TypeError(
-            f"Entrypoint {algo} loaded {matching[0].name}, "
-            f"which is not a subclass of BaseEncryption"
-        )
+        raise TypeError(f"Entrypoint {algo} loaded {matching[0].name}, " f"which is not a subclass of BaseEncryption")
 
     return cast(Type[BaseEncryption], loaded)
 
@@ -57,9 +51,7 @@ class CryptoManager:
 
             key_str = self._keys[key_id]
             if ":" not in key_str:
-                raise ValueError(
-                    f"Invalid key format for {key_id}. Expected 'algo:key_b64'"
-                )
+                raise ValueError(f"Invalid key format for {key_id}. Expected 'algo:key_b64'")
 
             algo, key_b64 = key_str.split(":", 1)
             if algo not in self.loaded_providers:
@@ -80,9 +72,7 @@ class CryptoManager:
         for x in available_entrypoints:
             cls = x.load()
             if not isinstance(cls, type) or not issubclass(cls, BaseEncryption):
-                raise TypeError(
-                    f"Loaded entrypoint {x.name} for dffmpeg.common.crypto is not a valid BaseEncryption!"
-                )
+                raise TypeError(f"Loaded entrypoint {x.name} for dffmpeg.common.crypto is not a valid BaseEncryption!")
             loaded[x.name] = cls
 
         return loaded

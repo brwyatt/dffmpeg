@@ -1,5 +1,7 @@
-import pytest
 import os
+
+import pytest
+
 
 def pytest_collection_modifyitems(items):
     conftest_dir = os.path.dirname(__file__)

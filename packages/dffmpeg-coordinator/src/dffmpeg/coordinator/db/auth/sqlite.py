@@ -1,4 +1,4 @@
-from typing import Dict, Optional
+from typing import Optional
 
 from dffmpeg.common.models import AuthenticatedIdentity
 from dffmpeg.coordinator.db.auth import AuthRepository
@@ -10,9 +10,7 @@ class SQLiteAuthRepository(AuthRepository, SQLiteDB):
         AuthRepository.__init__(self, *args, **kwargs)
         SQLiteDB.__init__(self, *args, tablename=tablename, **kwargs)
 
-    async def get_identity(
-        self, client_id: str, include_hmac_key: bool = False
-    ) -> Optional[AuthenticatedIdentity]:
+    async def get_identity(self, client_id: str, include_hmac_key: bool = False) -> Optional[AuthenticatedIdentity]:
         result = await self.get_row(
             f"SELECT client_id, role, hmac_key, key_id FROM {self.tablename} WHERE client_id = ?",
             (client_id,),

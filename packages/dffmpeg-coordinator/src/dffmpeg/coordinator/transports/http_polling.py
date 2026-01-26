@@ -113,7 +113,11 @@ class HTTPPollingTransport(BaseServerTransport):
                         del self._recipient_waiters[cid]
 
     async def handle_job_poll(
-        self, job_id: ULID, last_message_id: Optional[ULID] = None, wait: Optional[int] = None, identity=Depends(required_hmac_auth)
+        self,
+        job_id: ULID,
+        last_message_id: Optional[ULID] = None,
+        wait: Optional[int] = None,
+        identity=Depends(required_hmac_auth),
     ):
         """
         Endpoint handler for job-specific polling.
