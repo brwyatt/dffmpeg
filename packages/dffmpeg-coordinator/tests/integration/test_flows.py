@@ -93,7 +93,10 @@ async def test_client_job_submission_flow(test_app):
                 "supported_transports": ["http_polling"],
             }
             reg_body_str = json.dumps(reg_body)
-            await client.post(reg_path, content=reg_body_str, headers=await sign_request(worker_signer, worker_id, "POST", reg_path, reg_body_str))
+            resp = await client.post(reg_path, content=reg_body_str, headers=await sign_request(worker_signer, worker_id, "POST", reg_path, reg_body_str))
+            worker_data = resp.json()
+            assert worker_data.get("transport") == "http_polling"
+            assert "transport_metadata" in worker_data
 
             # 2. Submit Job as Client
             submit_path = "/jobs/submit"
@@ -108,10 +111,11 @@ async def test_client_job_submission_flow(test_app):
             resp = await client.post(submit_path, content=job_body_str, headers=headers)
             assert resp.status_code == 200
             job_data = resp.json()
+            assert job_data.get("transport") == "http_polling"
             assert "transport_metadata" in job_data
             
             # 3. Worker polls and should get the job request
-            poll_path = "/poll/worker"
+            poll_path = worker_data.get("transport_metadata", {}).get("path", "/")
             headers = await sign_request(worker_signer, worker_id, "GET", poll_path)
             resp = await client.get(poll_path, headers=headers)
             assert resp.status_code == 200

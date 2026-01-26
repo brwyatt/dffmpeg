@@ -41,7 +41,7 @@ class HTTPPollingTransport(BaseServerTransport):
         self,
         identity: AuthenticatedIdentity,
         last_message_id: Optional[ULID] = None,
-        wait: int = 20,
+        wait: Optional[int] = None,
         job_id: Optional[ULID] = None,
     ):
         """
@@ -57,6 +57,8 @@ class HTTPPollingTransport(BaseServerTransport):
         Returns:
             dict: A dictionary containing the list of messages.
         """
+        if wait is None:
+            wait = 0
         repo: MessageRepository = self.app.state.db.messages
         end_time = asyncio.get_event_loop().time() + wait
 
@@ -111,7 +113,7 @@ class HTTPPollingTransport(BaseServerTransport):
                         del self._recipient_waiters[cid]
 
     async def handle_job_poll(
-        self, job_id: ULID, last_message_id: Optional[ULID] = None, wait: int = 20, identity=Depends(required_hmac_auth)
+        self, job_id: ULID, last_message_id: Optional[ULID] = None, wait: Optional[int] = None, identity=Depends(required_hmac_auth)
     ):
         """
         Endpoint handler for job-specific polling.
@@ -119,7 +121,7 @@ class HTTPPollingTransport(BaseServerTransport):
         return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait, job_id=job_id)
 
     async def handle_worker_poll(
-        self, last_message_id: Optional[ULID] = None, wait: int = 20, identity=Depends(required_hmac_auth)
+        self, last_message_id: Optional[ULID] = None, wait: Optional[int] = None, identity=Depends(required_hmac_auth)
     ):
         """
         Endpoint handler for worker polling (general messages).
