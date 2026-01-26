@@ -7,3 +7,12 @@ include = '\.pyi?$'
 profile = "black"
 line_length = 120
 multi_line_output = 3
+
+[tool.pytest.ini_options]
+testpaths = ["packages"]
+pythonpath = [
+    "packages/dffmpeg-common/src",
+    "packages/dffmpeg-coordinator/src",
+    "packages/dffmpeg-client/src",
+    "packages/dffmpeg-worker/src",
+]

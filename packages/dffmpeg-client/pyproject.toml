@@ -25,10 +25,12 @@ namespaces = true
 
 [project.optional-dependencies]
 test = [
-    "pytest",
+    "anyio",
     "black",
-    "isort",
     "flake8",
+    "isort",
+    "pytest",
+    "pytest-asyncio",
 ]
 dev = [
     "dffmpeg-client[test]",
