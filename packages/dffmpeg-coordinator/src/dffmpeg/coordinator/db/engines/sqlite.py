@@ -18,7 +18,7 @@ class SQLiteDB(BaseDB):
         tablename (str): Name of the table this repository manages.
     """
 
-    def __init__(self, path: str, tablename: str):
+    def __init__(self, *args, path: str, tablename: str, **kwargs):
         self.path = path
         self.tablename = tablename
 

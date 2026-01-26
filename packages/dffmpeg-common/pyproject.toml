@@ -10,10 +10,14 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
+    "cryptography",
     "pydantic>=2.0",
     "python-ulid[pydantic]",
     "pydantic-extra-types[python_ulid]",
 ]
+
+[project.entry-points."dffmpeg.common.crypto"]
+fernet = "dffmpeg.common.crypto.fernet:FernetEncryption"
 
 [build-system]
 requires = ["setuptools", "wheel"]
