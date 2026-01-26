@@ -10,9 +10,14 @@ multi_line_output = 3
 
 [tool.pytest.ini_options]
 testpaths = ["packages"]
+addopts = "--strict-markers"
 pythonpath = [
     "packages/dffmpeg-common/src",
     "packages/dffmpeg-coordinator/src",
     "packages/dffmpeg-client/src",
     "packages/dffmpeg-worker/src",
+]
+markers = [
+    "unit: small, fast tests",
+    "integration: larger tests involving multiple components",
 ]
