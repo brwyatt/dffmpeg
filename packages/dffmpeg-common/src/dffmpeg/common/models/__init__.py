@@ -99,7 +99,24 @@ class JobStatusUpdate(BaseModel):
     status: Literal["completed", "failed", "canceled"]
 
 
-MessageType = Literal["job_status", "job_request"]
+class LogEntry(BaseModel):
+    """
+    Represents a single log line from a job.
+    """
+
+    stream: Literal["stdout", "stderr"]
+    content: str
+
+
+class JobLogsPayload(BaseModel):
+    """
+    Payload for submitting a batch of job logs.
+    """
+
+    logs: List[LogEntry] = Field(min_length=1)
+
+
+MessageType = Literal["job_status", "job_request", "job_logs"]
 
 
 class Message(BaseModel):

@@ -7,6 +7,7 @@ from ulid import ULID
 
 from dffmpeg.common.models import (
     AuthenticatedIdentity,
+    JobLogsPayload,
     JobRequest,
     JobStatusUpdate,
     Message,
@@ -397,6 +398,56 @@ async def job_heartbeat(
             job_id=j_id,
             message_type="job_status",
             payload={"status": "running", "last_update": str(datetime.now(timezone.utc))},
+        )
+    )
+
+    return {"status": "ok"}
+
+
+@router.post("/jobs/{job_id}/logs")
+async def job_logs(
+    job_id: str,
+    payload: JobLogsPayload,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    transports: TransportManager = Depends(get_transports),
+    job_repo: JobRepository = Depends(get_job_repo),
+):
+    """
+    Endpoint for a worker to submit a batch of logs for an assigned job.
+    Relays the logs to the job's requester.
+
+    Args:
+        job_id (str): The ID of the job.
+        payload (JobLogsPayload): The batch of logs.
+        identity (AuthenticatedIdentity): The authenticated worker identity.
+        transports (TransportManager): Transport manager.
+        job_repo (JobRepository): Job repository.
+
+    Returns:
+        dict: Status OK if successful.
+
+    Raises:
+        HTTPException: If job not found or not assigned to this worker.
+    """
+    try:
+        j_id = ULID.from_str(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    job = await job_repo.get_job(j_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.worker_id != identity.client_id:
+        raise HTTPException(status_code=403, detail="Not assigned to this job")
+
+    # Relay the logs to the requester
+    await transports.send_message(
+        Message(
+            recipient_id=job.requester_id,
+            job_id=j_id,
+            message_type="job_logs",
+            payload=[{"stream": log.stream, "content": log.content} for log in payload.logs],
         )
     )
 
