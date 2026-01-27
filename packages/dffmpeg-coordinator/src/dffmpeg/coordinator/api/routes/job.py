@@ -1,6 +1,7 @@
 import random
 from datetime import datetime, timezone
 from logging import getLogger
+from typing import List
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from ulid import ULID
@@ -8,18 +9,22 @@ from ulid import ULID
 from dffmpeg.common.models import (
     AuthenticatedIdentity,
     JobLogsPayload,
+    JobLogsResponse,
     JobRequest,
     JobStatusUpdate,
+    LogEntry,
     Message,
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import (
     get_job_repo,
+    get_message_repo,
     get_transports,
     get_worker_repo,
 )
 from dffmpeg.coordinator.api.utils import get_negotiated_transport
 from dffmpeg.coordinator.db.jobs import JobRecord, JobRepository
+from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
 from dffmpeg.coordinator.transports import TransportManager
 
@@ -405,7 +410,7 @@ async def job_heartbeat(
 
 
 @router.post("/jobs/{job_id}/logs")
-async def job_logs(
+async def job_logs_submit(
     job_id: str,
     payload: JobLogsPayload,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
@@ -447,8 +452,78 @@ async def job_logs(
             recipient_id=job.requester_id,
             job_id=j_id,
             message_type="job_logs",
-            payload=[{"stream": log.stream, "content": log.content} for log in payload.logs],
+            payload=[
+                {"stream": log.stream, "content": log.content, "timestamp": str(log.timestamp) if log.timestamp else None}
+                for log in payload.logs
+            ],
         )
     )
 
     return {"status": "ok"}
+
+
+@router.get("/jobs/{job_id}/logs")
+async def job_logs_get(
+    job_id: str,
+    since_message_id: str | None = None,
+    limit: int | None = None,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    job_repo: JobRepository = Depends(get_job_repo),
+    message_repo: MessageRepository = Depends(get_message_repo),
+) -> JobLogsResponse:
+    """
+    Endpoint for a client or admin to retrieve logs for a job.
+
+    Args:
+        job_id (str): The ID of the job.
+        since_message_id (Optional[str]): Only retrieve logs newer than this message ID.
+        limit (Optional[int]): Limit the number of messages to retrieve.
+        identity (AuthenticatedIdentity): The authenticated user identity.
+        job_repo (JobRepository): Job repository.
+        message_repo (MessageRepository): Message repository.
+
+    Returns:
+        JobLogsResponse: The aggregated logs and the last message ID.
+
+    Raises:
+        HTTPException: If job not found or user lacks permission.
+    """
+    try:
+        j_id = ULID.from_str(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    since_id = None
+    if since_message_id:
+        try:
+            since_id = ULID.from_str(since_message_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid since_message_id")
+
+    job = await job_repo.get_job(j_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.requester_id != identity.client_id and identity.role != "admin":
+        raise HTTPException(status_code=403, detail="No permission to view job logs")
+
+    messages = await message_repo.get_job_messages(
+        j_id, message_type="job_logs", since_message_id=since_id, limit=limit
+    )
+
+    all_entries: List[LogEntry] = []
+    last_msg_id = None
+
+    for msg in messages:
+        last_msg_id = msg.message_id
+        if isinstance(msg.payload, list):
+            for entry in msg.payload:
+                all_entries.append(
+                    LogEntry(
+                        stream=entry.get("stream", "stdout"),
+                        content=entry.get("content", ""),
+                        timestamp=entry.get("timestamp"),
+                    )
+                )
+
+    return JobLogsResponse(logs=all_entries, last_message_id=last_msg_id)

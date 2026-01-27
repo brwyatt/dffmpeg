@@ -106,6 +106,7 @@ class LogEntry(BaseModel):
 
     stream: Literal["stdout", "stderr"]
     content: str
+    timestamp: datetime | None = None
 
 
 class JobLogsPayload(BaseModel):
@@ -114,6 +115,15 @@ class JobLogsPayload(BaseModel):
     """
 
     logs: List[LogEntry] = Field(min_length=1)
+
+
+class JobLogsResponse(BaseModel):
+    """
+    Response containing a batch of job logs and a cursor for the next request.
+    """
+
+    logs: List[LogEntry]
+    last_message_id: ULID | None = None
 
 
 MessageType = Literal["job_status", "job_request", "job_logs"]

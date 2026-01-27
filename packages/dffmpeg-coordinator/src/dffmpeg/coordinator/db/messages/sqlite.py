@@ -120,6 +120,65 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
             for x in results
         ]
 
+    async def get_job_messages(
+        self,
+        job_id: ULID,
+        message_type: Optional[str] = None,
+        since_message_id: Optional[ULID] = None,
+        limit: Optional[int] = None,
+    ) -> List[Message]:
+        """
+        Queries messages from the database for a specific job.
+
+        Args:
+            job_id (ULID): The ID of the job.
+            message_type (Optional[str]): Filter by message type.
+            since_message_id (Optional[ULID]): Only retrieve messages newer than this ID.
+            limit (Optional[int]): Limit the number of messages returned (most recent first).
+
+        Returns:
+            List[Message]: A list of matching messages.
+        """
+        args = [str(job_id)]
+        query = f"SELECT * from {self.tablename} WHERE job_id = ?"
+
+        if message_type is not None:
+            query += " AND message_type = ?"
+            args.append(message_type)
+
+        if since_message_id is not None:
+            query += " AND message_id > ?"
+            args.append(str(since_message_id))
+
+        query += " ORDER BY message_id"
+        if limit is not None:
+            query += " DESC LIMIT ?"
+            args.append(limit)
+
+        results = await self.get_rows(query, tuple(args))
+
+        if results is None:
+            return []
+
+        messages = [
+            Message(
+                message_id=x["message_id"],
+                recipient_id=x["recipient_id"],
+                job_id=x["job_id"],
+                timestamp=x["timestamp"],
+                message_type=x["message_type"],
+                payload=json.loads(x["payload"]),
+                sent_at=x["sent_at"],
+            )
+            for x in results
+        ]
+
+        if limit is not None:
+            # We ordered DESC for the limit, so reverse to maintain chronological order
+            messages.reverse()
+
+        return messages
+
     @property
     def table_create(self) -> str:
         """

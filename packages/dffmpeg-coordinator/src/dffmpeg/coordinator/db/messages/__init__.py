@@ -22,6 +22,15 @@ class MessageRepository(BaseDB):
     ):
         raise NotImplementedError()
 
+    async def get_job_messages(
+        self,
+        job_id: ULID,
+        message_type: Optional[str] = None,
+        since_message_id: Optional[ULID] = None,
+        limit: Optional[int] = None,
+    ):
+        raise NotImplementedError()
+
     async def retrieve_messages(
         self, recipient_id: str, last_message_id: Optional[ULID] = None, job_id: Optional[ULID] = None
     ):
