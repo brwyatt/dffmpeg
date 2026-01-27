@@ -2,9 +2,10 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional
 
+from pydantic import TypeAdapter
 from ulid import ULID
 
-from dffmpeg.common.models import Message
+from dffmpeg.common.models import BaseMessage, Message
 from dffmpeg.coordinator.db.engines.sqlite import SQLiteDB
 from dffmpeg.coordinator.db.messages import MessageRepository
 
@@ -18,7 +19,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
     def __init__(self, *args, path: str, tablename: str = "messages", **kwargs):
         SQLiteDB.__init__(self, path=path, tablename=tablename)
 
-    async def add_message(self, message: Message):
+    async def add_message(self, message: BaseMessage):
         """
         Persists a new message to the database.
 
@@ -43,14 +44,14 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
                 str(message.job_id) if message.job_id is not None else None,
                 message.timestamp,
                 message.message_type,
-                json.dumps(message.payload),
+                message.payload.model_dump_json(),
                 message.sent_at,
             ),
         )
 
     async def retrieve_messages(
         self, recipient_id: str, last_message_id: Optional[ULID] = None, job_id: Optional[ULID] = None
-    ) -> List[Message]:
+    ) -> List[BaseMessage]:
         """
         Retrieves pending messages for a recipient and marks them as sent.
 
@@ -77,7 +78,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
 
     async def get_messages(
         self, recipient_id: str, last_message_id: Optional[ULID] = None, job_id: Optional[ULID] = None
-    ) -> List[Message]:
+    ) -> List[BaseMessage]:
         """
         Queries messages from the database without updating their status.
 
@@ -107,15 +108,18 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
         if results is None:
             return []
 
+        adapter = TypeAdapter(Message)
         return [
-            Message(
-                message_id=x["message_id"],
-                recipient_id=x["recipient_id"],
-                job_id=x["job_id"],
-                timestamp=x["timestamp"],
-                message_type=x["message_type"],
-                payload=json.loads(x["payload"]),
-                sent_at=x["sent_at"],
+            adapter.validate_python(
+                {
+                    "message_id": x["message_id"],
+                    "recipient_id": x["recipient_id"],
+                    "job_id": x["job_id"],
+                    "timestamp": x["timestamp"],
+                    "message_type": x["message_type"],
+                    "payload": json.loads(x["payload"]),
+                    "sent_at": x["sent_at"],
+                }
             )
             for x in results
         ]
@@ -160,15 +164,18 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
         if results is None:
             return []
 
+        adapter = TypeAdapter(Message)
         messages = [
-            Message(
-                message_id=x["message_id"],
-                recipient_id=x["recipient_id"],
-                job_id=x["job_id"],
-                timestamp=x["timestamp"],
-                message_type=x["message_type"],
-                payload=json.loads(x["payload"]),
-                sent_at=x["sent_at"],
+            adapter.validate_python(
+                {
+                    "message_id": x["message_id"],
+                    "recipient_id": x["recipient_id"],
+                    "job_id": x["job_id"],
+                    "timestamp": x["timestamp"],
+                    "message_type": x["message_type"],
+                    "payload": json.loads(x["payload"]),
+                    "sent_at": x["sent_at"],
+                }
             )
             for x in results
         ]

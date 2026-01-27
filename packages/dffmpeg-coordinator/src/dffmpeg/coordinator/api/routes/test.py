@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from dffmpeg.common.models import Message
+from dffmpeg.common.models import JobStatusMessage
 from dffmpeg.coordinator.api.dependencies import get_transports
 from dffmpeg.coordinator.transports import TransportManager
 
@@ -33,9 +33,8 @@ async def emit_test_message(
         payload = {}
 
     # This simulates an internal event (like a worker finishing a job)
-    msg = Message(
+    msg = JobStatusMessage(
         recipient_id=recipient_id,
-        message_type="job_status",
         payload=payload,
     )
     # This calls your new Transport Dispatcher logic

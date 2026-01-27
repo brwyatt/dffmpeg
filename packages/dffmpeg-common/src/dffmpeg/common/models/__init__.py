@@ -1,8 +1,8 @@
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional
+from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Discriminator, Field, Tag
 from ulid import ULID
 
 ClientId: str = Field(min_length=1)
@@ -91,6 +91,26 @@ class JobRequest(BaseModel):
     supported_transports: List[str] = Field(min_length=1)
 
 
+class JobStatusPayload(BaseModel):
+    """
+    Payload for job status updates.
+    """
+
+    status: JobStatus
+    last_update: Optional[datetime] = None
+
+
+class JobRequestPayload(BaseModel):
+    """
+    Payload for job requests sent to workers.
+    """
+
+    job_id: str
+    binary_name: Literal["ffmpeg"]
+    arguments: List[str]
+    paths: List[str]
+
+
 class JobStatusUpdate(BaseModel):
     """
     Payload for updating job status (completion/failure).
@@ -126,30 +146,42 @@ class JobLogsResponse(BaseModel):
     last_message_id: ULID | None = None
 
 
-MessageType = Literal["job_status", "job_request", "job_logs"]
-
-
-class Message(BaseModel):
+class BaseMessage(BaseModel):
     """
-    Represents a message sent between coordinator and clients/workers.
-
-    Attributes:
-        message_id (ULID): Unique identifier for the message.
-        recipient_id (str): The ID of the recipient.
-        job_id (Optional[ULID]): Associated job ID, if any.
-        timestamp (datetime): When the message was created.
-        message_type (Literal): Type of message (job_status, job_request).
-        payload (Union[Dict, List, str]): The message content.
-        sent_at (Optional[datetime]): When the message was actually sent/delivered.
+    Base class for messages sent between coordinator and clients/workers.
     """
 
     message_id: ULID = Field(default_factory=ULID)
     recipient_id: str = ClientId
     job_id: ULID | None = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-    message_type: MessageType
-    payload: Dict | List | str
     sent_at: datetime | None = None
+
+
+class JobStatusMessage(BaseMessage):
+    message_type: Literal["job_status"] = "job_status"
+    payload: JobStatusPayload
+
+
+class JobRequestMessage(BaseMessage):
+    message_type: Literal["job_request"] = "job_request"
+    payload: JobRequestPayload
+
+
+class JobLogsMessage(BaseMessage):
+    message_type: Literal["job_logs"] = "job_logs"
+    payload: JobLogsPayload
+
+
+Message = Annotated[
+    Union[
+        Annotated[JobStatusMessage, Tag("job_status")],
+        Annotated[JobRequestMessage, Tag("job_request")],
+        Annotated[JobLogsMessage, Tag("job_logs")],
+    ],
+    Discriminator("message_type"),
+]
+MessageType = Literal["job_status", "job_request", "job_logs"]
 
 
 class WorkerBase(BaseModel):

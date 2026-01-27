@@ -2,7 +2,7 @@ from typing import Optional
 
 from ulid import ULID
 
-from dffmpeg.common.models import Message
+from dffmpeg.common.models import BaseMessage
 from dffmpeg.coordinator.db.db_loader import load
 from dffmpeg.coordinator.db.engines import BaseDB
 
@@ -14,7 +14,7 @@ class MessageRepository(BaseDB):
     def __init__(self, *args, **kwargs):
         raise NotImplementedError()
 
-    async def add_message(self, message: Message):
+    async def add_message(self, message: BaseMessage):
         raise NotImplementedError()
 
     async def get_messages(

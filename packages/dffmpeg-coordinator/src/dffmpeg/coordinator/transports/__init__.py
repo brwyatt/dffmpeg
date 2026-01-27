@@ -5,7 +5,7 @@ from typing import Dict, List, Type
 from fastapi import FastAPI
 from pydantic import Field
 
-from dffmpeg.common.models import Message
+from dffmpeg.common.models import BaseMessage
 from dffmpeg.common.models.config import ConfigOptions, DefaultConfig
 from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.transports.base import BaseServerTransport
@@ -37,7 +37,7 @@ class TransportManager:
         for key in self.loaded_transports.keys():
             await self[key].setup()
 
-    async def send_message(self, message: Message) -> bool:
+    async def send_message(self, message: BaseMessage) -> bool:
         db: DB = self.app.state.db
 
         await db.messages.add_message(message)

@@ -6,7 +6,7 @@ from typing import Any, Dict, Optional, Set
 from fastapi import Depends, FastAPI
 from ulid import ULID
 
-from dffmpeg.common.models import AuthenticatedIdentity, Message, TransportMetadata
+from dffmpeg.common.models import AuthenticatedIdentity, BaseMessage, TransportMetadata
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.transports.base import BaseServerTransport
@@ -132,7 +132,7 @@ class HTTPPollingTransport(BaseServerTransport):
         """
         return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait)
 
-    async def send_message(self, message: Message, transport_metadata: Optional[TransportMetadata] = None) -> bool:
+    async def send_message(self, message: BaseMessage, transport_metadata: Optional[TransportMetadata] = None) -> bool:
         """
         Notifies polling clients that a new message might be available.
         Does not actually 'send' the message payload directly, but triggers a poll check.

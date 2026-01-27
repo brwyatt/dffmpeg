@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from fastapi import FastAPI
 from ulid import ULID
 
-from dffmpeg.common.models import Message, TransportMetadata
+from dffmpeg.common.models import BaseMessage, TransportMetadata
 
 
 class BaseServerTransport:
@@ -22,7 +22,7 @@ class BaseServerTransport:
         """
         raise NotImplementedError()
 
-    async def send_message(self, message: Message, transport_metadata: Optional[TransportMetadata] = None) -> bool:
+    async def send_message(self, message: BaseMessage, transport_metadata: Optional[TransportMetadata] = None) -> bool:
         """
         Send a message to a recipient.
 

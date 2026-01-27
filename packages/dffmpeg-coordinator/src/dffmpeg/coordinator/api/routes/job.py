@@ -8,12 +8,16 @@ from ulid import ULID
 
 from dffmpeg.common.models import (
     AuthenticatedIdentity,
+    JobLogsMessage,
     JobLogsPayload,
     JobLogsResponse,
     JobRequest,
+    JobRequestMessage,
+    JobRequestPayload,
+    JobStatusMessage,
+    JobStatusPayload,
     JobStatusUpdate,
     LogEntry,
-    Message,
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import (
@@ -84,23 +88,24 @@ async def process_job_assignment(
 
         # Notify Worker
         await transports.send_message(
-            Message(
+            JobRequestMessage(
                 recipient_id=selected_worker.worker_id,
                 job_id=job_id,
-                message_type="job_request",
-                payload={
-                    "job_id": str(job_id),
-                    "binary_name": job.binary_name,
-                    "arguments": job.arguments,
-                    "paths": job.paths,
-                },
+                payload=JobRequestPayload(
+                    job_id=str(job_id),
+                    binary_name=job.binary_name,
+                    arguments=job.arguments,
+                    paths=job.paths,
+                ),
             )
         )
 
         # Notify Client
         await transports.send_message(
-            Message(
-                recipient_id=job.requester_id, job_id=job_id, message_type="job_status", payload={"status": "assigned"}
+            JobStatusMessage(
+                recipient_id=job.requester_id,
+                job_id=job_id,
+                payload=JobStatusPayload(status="assigned"),
             )
         )
 
@@ -198,7 +203,11 @@ async def job_accept(
     await job_repo.update_status(j_id, "running", identity.client_id)
 
     await transports.send_message(
-        Message(recipient_id=job.requester_id, job_id=j_id, message_type="job_status", payload={"status": "running"})
+        JobStatusMessage(
+            recipient_id=job.requester_id,
+            job_id=j_id,
+            payload=JobStatusPayload(status="running"),
+        )
     )
 
     return {"status": "ok"}
@@ -248,18 +257,19 @@ async def job_cancel(
 
         # Tell the client
         await transports.send_message(
-            Message(
-                recipient_id=job.requester_id, job_id=j_id, message_type="job_status", payload={"status": "canceling"}
+            JobStatusMessage(
+                recipient_id=job.requester_id,
+                job_id=j_id,
+                payload=JobStatusPayload(status="canceling"),
             )
         )
 
         # And tell the assigned worker to cancel
         await transports.send_message(
-            Message(
+            JobStatusMessage(
                 recipient_id=job.worker_id,
                 job_id=j_id,
-                message_type="job_status",
-                payload={"job_id": job_id, "status": "canceling"},
+                payload=JobStatusPayload(status="canceling"),
             )
         )
     else:
@@ -268,8 +278,10 @@ async def job_cancel(
 
         # Tell the client
         await transports.send_message(
-            Message(
-                recipient_id=job.requester_id, job_id=j_id, message_type="job_status", payload={"status": "canceled"}
+            JobStatusMessage(
+                recipient_id=job.requester_id,
+                job_id=j_id,
+                payload=JobStatusPayload(status="canceled"),
             )
         )
 
@@ -353,8 +365,10 @@ async def job_status_update(
     await job_repo.update_status(j_id, payload.status, identity.client_id)
 
     await transports.send_message(
-        Message(
-            recipient_id=job.requester_id, job_id=j_id, message_type="job_status", payload={"status": payload.status}
+        JobStatusMessage(
+            recipient_id=job.requester_id,
+            job_id=j_id,
+            payload=JobStatusPayload(status=payload.status),
         )
     )
 
@@ -398,11 +412,10 @@ async def job_heartbeat(
     await job_repo.update_heartbeat(j_id)
 
     await transports.send_message(
-        Message(
+        JobStatusMessage(
             recipient_id=job.requester_id,
             job_id=j_id,
-            message_type="job_status",
-            payload={"status": "running", "last_update": str(datetime.now(timezone.utc))},
+            payload=JobStatusPayload(status="running", last_update=datetime.now(timezone.utc)),
         )
     )
 
@@ -448,14 +461,10 @@ async def job_logs_submit(
 
     # Relay the logs to the requester
     await transports.send_message(
-        Message(
+        JobLogsMessage(
             recipient_id=job.requester_id,
             job_id=j_id,
-            message_type="job_logs",
-            payload=[
-                {"stream": log.stream, "content": log.content, "timestamp": str(log.timestamp) if log.timestamp else None}
-                for log in payload.logs
-            ],
+            payload=payload,
         )
     )
 
@@ -516,14 +525,7 @@ async def job_logs_get(
 
     for msg in messages:
         last_msg_id = msg.message_id
-        if isinstance(msg.payload, list):
-            for entry in msg.payload:
-                all_entries.append(
-                    LogEntry(
-                        stream=entry.get("stream", "stdout"),
-                        content=entry.get("content", ""),
-                        timestamp=entry.get("timestamp"),
-                    )
-                )
+        if isinstance(msg, JobLogsMessage):
+            all_entries.extend(msg.payload.logs)
 
     return JobLogsResponse(logs=all_entries, last_message_id=last_msg_id)
