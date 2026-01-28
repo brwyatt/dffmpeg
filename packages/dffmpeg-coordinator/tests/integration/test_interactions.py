@@ -80,7 +80,7 @@ async def test_job_assignment_logic(test_app, create_auth_identity, create_worke
         messages = await test_app.state.db.messages.get_messages(worker_id)
         assert any(
             m.recipient_id == worker_id
-            and m.sender_id == None
+            and m.sender_id is None
             and m.message_type == "job_request"
             and m.job_id == job_id
             and m.payload.job_id == str(job_id)
@@ -91,7 +91,7 @@ async def test_job_assignment_logic(test_app, create_auth_identity, create_worke
         messages = await test_app.state.db.messages.get_messages(client_id, job_id=job_id)
         assert any(
             m.recipient_id == client_id
-            and m.sender_id == None
+            and m.sender_id is None
             and m.message_type == "job_status"
             and m.job_id == job_id
             and m.payload.status == "assigned"

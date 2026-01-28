@@ -166,7 +166,11 @@ async def job_submit(
 
     # Trigger assignment in background
     background_tasks.add_task(
-        process_job_assignment, job_id, job_repo, worker_repo, transports,
+        process_job_assignment,
+        job_id,
+        job_repo,
+        worker_repo,
+        transports,
     )
 
     return job_record
