@@ -1,4 +1,5 @@
-from datetime import datetime
+import sqlite3
+from datetime import date, datetime
 from typing import Iterable, Optional
 
 import aiosqlite
@@ -6,6 +7,13 @@ import aiosqlite
 from dffmpeg.coordinator.db.engines import BaseDB
 
 sql_types = str | int | datetime | None
+
+
+sqlite3.register_adapter(date, lambda x: x.isoformat())
+sqlite3.register_adapter(datetime, lambda x: x.isoformat())
+sqlite3.register_converter("date", lambda x: date.fromisoformat(x.decode()))
+sqlite3.register_converter("datetime", lambda x: datetime.fromisoformat(x.decode()))
+sqlite3.register_converter("TIMESTAMP", lambda x: datetime.fromisoformat(x.decode()))
 
 
 class SQLiteDB(BaseDB):
@@ -22,11 +30,14 @@ class SQLiteDB(BaseDB):
         self.path = path
         self.tablename = tablename
 
+    def _connect(self):
+        return aiosqlite.connect(self.path, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
+
     async def setup(self):
         """
         Initializes the database by creating the table if it doesn't exist.
         """
-        async with aiosqlite.connect(self.path) as db:
+        async with self._connect() as db:
             await db.execute(self.table_create)
             await db.commit()
 
@@ -44,7 +55,7 @@ class SQLiteDB(BaseDB):
         if params is None:
             params = tuple()
 
-        async with aiosqlite.connect(self.path) as db:
+        async with self._connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, params) as cursor:
                 return await cursor.fetchall()
@@ -63,7 +74,7 @@ class SQLiteDB(BaseDB):
         if params is None:
             params = tuple()
 
-        async with aiosqlite.connect(self.path) as db:
+        async with self._connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, params) as cursor:
                 return await cursor.fetchone()
@@ -79,7 +90,7 @@ class SQLiteDB(BaseDB):
         if params is None:
             params = tuple()
 
-        async with aiosqlite.connect(self.path) as db:
+        async with self._connect() as db:
             await db.execute(query, params)
             await db.commit()
 
