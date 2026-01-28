@@ -5,6 +5,98 @@ from httpx import ASGITransport, AsyncClient
 from ulid import ULID
 
 from dffmpeg.common.auth.request_signer import RequestSigner
+from dffmpeg.coordinator.api.routes.job import process_job_assignment
+
+
+@pytest.mark.anyio
+async def test_job_submission_interaction(test_app, sign_request, create_auth_identity):
+    """
+    Test that a client can submit a job.
+    """
+    client_id = "client01"
+    client_key = RequestSigner.generate_key()
+    client_signer = RequestSigner(client_key)
+
+    async with test_app.router.lifespan_context(test_app):
+        await create_auth_identity(test_app, client_id, "client", client_key)
+
+        transport = ASGITransport(app=test_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            # Action: Client submits job
+            path = "/jobs/submit"
+            body = {
+                "binary_name": "ffmpeg",
+                "arguments": ["-version"],
+                "paths": [],
+                "supported_transports": ["http_polling"],
+            }
+            body_str = json.dumps(body)
+            headers = await sign_request(client_signer, client_id, "POST", path, body_str)
+
+            resp = await client.post(path, content=body_str, headers=headers)
+            assert resp.status_code == 200
+
+            job_resp = resp.json()
+            job_id = ULID.from_str(job_resp["job_id"])
+
+            # Verify: DB Updated
+            job = await test_app.state.db.jobs.get_job(job_id)
+            assert job is not None
+            assert job.status == "pending"
+            assert job.requester_id == client_id
+
+
+@pytest.mark.anyio
+async def test_job_assignment_logic(test_app, create_auth_identity, create_worker_record, create_job_record):
+    """
+    Test the job assignment logic and message generation.
+    """
+    client_id = "client01"
+    worker_id = "worker01"
+    job_id = ULID()
+
+    async with test_app.router.lifespan_context(test_app):
+        # Setup State
+        await create_auth_identity(test_app, client_id, "client", RequestSigner.generate_key())
+        await create_auth_identity(test_app, worker_id, "worker", RequestSigner.generate_key())
+
+        # Create worker with matching capabilities
+        await create_worker_record(test_app, worker_id)
+
+        # Create pending job
+        await create_job_record(test_app, job_id, client_id, status="pending")
+
+        # Action: Run assignment manually
+        await process_job_assignment(
+            job_id, test_app.state.db.jobs, test_app.state.db.workers, test_app.state.transports
+        )
+
+        # Verify: Job Assigned
+        job = await test_app.state.db.jobs.get_job(job_id)
+        assert job.status == "assigned"
+        assert job.worker_id == worker_id
+
+        # Verify: Worker Notification
+        messages = await test_app.state.db.messages.get_messages(worker_id)
+        assert any(
+            m.recipient_id == worker_id
+            and m.sender_id == None
+            and m.message_type == "job_request"
+            and m.job_id == job_id
+            and m.payload.job_id == str(job_id)
+            for m in messages
+        )
+
+        # Verify: Client Notification
+        messages = await test_app.state.db.messages.get_messages(client_id, job_id=job_id)
+        assert any(
+            m.recipient_id == client_id
+            and m.sender_id == None
+            and m.message_type == "job_status"
+            and m.job_id == job_id
+            and m.payload.status == "assigned"
+            for m in messages
+        )
 
 
 @pytest.mark.anyio
