@@ -11,6 +11,8 @@ classifiers = [
 ]
 dependencies = [
     "dffmpeg-common",
+    "pydantic",
+    "pyyaml",
 ]
 
 [build-system]
@@ -35,3 +37,4 @@ dev = [
 ]
 
 [project.scripts]
+dffmpeg-worker = "dffmpeg.worker.main:main"
