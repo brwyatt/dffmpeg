@@ -42,7 +42,6 @@ async def process_job_assignment(
     job_repo: JobRepository,
     worker_repo: WorkerRepository,
     transports: TransportManager,
-    sender_id: str | None = None,
 ):
     """
     Background task to find a suitable worker for a pending job and assign it.
@@ -96,7 +95,6 @@ async def process_job_assignment(
             JobRequestMessage(
                 recipient_id=selected_worker.worker_id,
                 job_id=job_id,
-                sender_id=sender_id,
                 payload=JobRequestPayload(
                     job_id=str(job_id),
                     binary_name=job.binary_name,
@@ -111,7 +109,6 @@ async def process_job_assignment(
             JobStatusMessage(
                 recipient_id=job.requester_id,
                 job_id=job_id,
-                sender_id=sender_id,
                 payload=JobStatusPayload(status="assigned"),
             )
         )
@@ -169,7 +166,7 @@ async def job_submit(
 
     # Trigger assignment in background
     background_tasks.add_task(
-        process_job_assignment, job_id, job_repo, worker_repo, transports, sender_id=identity.client_id
+        process_job_assignment, job_id, job_repo, worker_repo, transports,
     )
 
     return job_record
