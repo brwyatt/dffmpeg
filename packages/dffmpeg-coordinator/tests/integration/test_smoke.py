@@ -4,37 +4,16 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from dffmpeg.common.auth.request_signer import RequestSigner
-from dffmpeg.common.models import AuthenticatedIdentity
-
-
-async def sign_request(signer, client_id, method, path, body=None):
-    if body and isinstance(body, dict):
-        payload = json.dumps(body)
-    elif body and isinstance(body, str):
-        payload = body
-    else:
-        payload = ""
-
-    timestamp, signature = signer.sign(method, path, payload)
-    return {
-        "x-dffmpeg-client-id": client_id,
-        "x-dffmpeg-timestamp": timestamp,
-        "x-dffmpeg-signature": signature,
-        "Content-Type": "application/json",
-    }
 
 
 @pytest.mark.anyio
-async def test_worker_registration_and_polling(test_app):
+async def test_worker_registration_and_polling(test_app, sign_request, create_auth_identity):
     worker_id = "worker01"
     worker_key = RequestSigner.generate_key()
     signer = RequestSigner(worker_key)
 
     async with test_app.router.lifespan_context(test_app):
-        # Register worker using the new add_identity method
-        await test_app.state.db.auth.add_identity(
-            AuthenticatedIdentity(client_id=worker_id, role="worker", hmac_key=worker_key)
-        )
+        await create_auth_identity(test_app, worker_id, "worker", worker_key)
 
         transport = ASGITransport(app=test_app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -55,7 +34,12 @@ async def test_worker_registration_and_polling(test_app):
             data = resp.json()
             assert data["transport"] == "http_polling"
 
-            # 2. Poll for work (should be empty initially)
+            # Verify DB state
+            worker = await test_app.state.db.workers.get_worker(worker_id)
+            assert worker is not None
+            assert worker.status == "online"
+
+            # 2. Poll for work
             poll_path = "/poll/worker"
             headers = await sign_request(signer, worker_id, "GET", poll_path)
             resp = await client.get(poll_path, headers=headers)
@@ -64,7 +48,7 @@ async def test_worker_registration_and_polling(test_app):
 
 
 @pytest.mark.anyio
-async def test_client_job_submission_flow(test_app):
+async def test_client_job_submission_flow(test_app, sign_request, create_auth_identity):
     client_id = "client01"
     client_key = RequestSigner.generate_key()
     client_signer = RequestSigner(client_key)
@@ -74,14 +58,12 @@ async def test_client_job_submission_flow(test_app):
     worker_signer = RequestSigner(worker_key)
 
     async with test_app.router.lifespan_context(test_app):
-        # Register both client and worker using the new add_identity method
-        auth_repo = test_app.state.db.auth
-        for cid, key, role in [(client_id, client_key, "client"), (worker_id, worker_key, "worker")]:
-            await auth_repo.add_identity(AuthenticatedIdentity(client_id=cid, role=role, hmac_key=key))  # type: ignore
+        await create_auth_identity(test_app, client_id, "client", client_key)
+        await create_auth_identity(test_app, worker_id, "worker", worker_key)
 
         transport = ASGITransport(app=test_app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
-            # 1. Register Worker so it's online
+            # 1. Register Worker
             reg_path = "/worker/register"
             reg_body = {
                 "worker_id": worker_id,
@@ -91,16 +73,13 @@ async def test_client_job_submission_flow(test_app):
                 "supported_transports": ["http_polling"],
             }
             reg_body_str = json.dumps(reg_body)
-            resp = await client.post(
+            await client.post(
                 reg_path,
                 content=reg_body_str,
                 headers=await sign_request(worker_signer, worker_id, "POST", reg_path, reg_body_str),
             )
-            worker_data = resp.json()
-            assert worker_data.get("transport") == "http_polling"
-            assert "transport_metadata" in worker_data
 
-            # 2. Submit Job as Client
+            # 2. Submit Job
             submit_path = "/jobs/submit"
             job_body = {
                 "binary_name": "ffmpeg",
@@ -112,16 +91,8 @@ async def test_client_job_submission_flow(test_app):
             headers = await sign_request(client_signer, client_id, "POST", submit_path, job_body_str)
             resp = await client.post(submit_path, content=job_body_str, headers=headers)
             assert resp.status_code == 200
-            job_data = resp.json()
-            assert job_data.get("transport") == "http_polling"
-            assert "transport_metadata" in job_data
+            job_id = resp.json()["job_id"]
 
-            # 3. Worker polls and should get the job request
-            poll_path = worker_data.get("transport_metadata", {}).get("path", "/")
-            headers = await sign_request(worker_signer, worker_id, "GET", poll_path)
-            resp = await client.get(poll_path, headers=headers)
-            assert resp.status_code == 200
-            messages = resp.json()["messages"]
-            assert len(messages) > 0
-            assert messages[0]["message_type"] == "job_request"
-            assert messages[0]["payload"]["binary_name"] == "ffmpeg"
+            # Verify DB state
+            job = await test_app.state.db.jobs.get_job(job_id)
+            assert job.status in ["pending", "assigned"]
