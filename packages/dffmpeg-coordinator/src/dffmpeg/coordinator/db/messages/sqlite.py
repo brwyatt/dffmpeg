@@ -30,16 +30,18 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
             f"""
             INSERT INTO {self.tablename} (
                 message_id,
+                sender_id,
                 recipient_id,
                 job_id,
                 timestamp,
                 message_type,
                 payload,
                 sent_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(message.message_id),
+                message.sender_id,
                 message.recipient_id,
                 str(message.job_id) if message.job_id is not None else None,
                 message.timestamp,
@@ -113,6 +115,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
             adapter.validate_python(
                 {
                     "message_id": x["message_id"],
+                    "sender_id": x["sender_id"],
                     "recipient_id": x["recipient_id"],
                     "job_id": x["job_id"],
                     "timestamp": x["timestamp"],
@@ -169,6 +172,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
             adapter.validate_python(
                 {
                     "message_id": x["message_id"],
+                    "sender_id": x["sender_id"],
                     "recipient_id": x["recipient_id"],
                     "job_id": x["job_id"],
                     "timestamp": x["timestamp"],
@@ -194,6 +198,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
         return f"""
         CREATE TABLE IF NOT EXISTS {self.tablename} (
             message_id TEXT PRIMARY KEY,
+            sender_id TEXT,
             recipient_id TEXT NOT NULL,
             job_id TEXT,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -201,6 +206,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
             payload TEXT NOT NULL,
             sent_at TIMESTAMP,
             FOREIGN KEY(recipient_id) REFERENCES auth(client_id),
+            FOREIGN KEY(sender_id) REFERENCES auth(client_id),
             FOREIGN KEY(job_id) REFERENCES jobs(job_id)
         );
         """

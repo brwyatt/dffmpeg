@@ -44,6 +44,7 @@ async def test_job_acceptance_interaction(
             messages = await test_app.state.db.messages.get_messages(client_id, job_id=job_id)
             assert any(
                 m.recipient_id == client_id
+                and m.sender_id == worker_id
                 and m.message_type == "job_status"
                 and m.job_id == job_id
                 and m.payload.status == "running"
@@ -90,6 +91,7 @@ async def test_job_completion_interaction(
             messages = await test_app.state.db.messages.get_messages(client_id, job_id=job_id)
             assert any(
                 m.recipient_id == client_id
+                and m.sender_id == worker_id
                 and m.message_type == "job_status"
                 and m.job_id == job_id
                 and m.payload.status == "completed"
@@ -135,6 +137,7 @@ async def test_job_failure_interaction(
             messages = await test_app.state.db.messages.get_messages(client_id, job_id=job_id)
             assert any(
                 m.recipient_id == client_id
+                and m.sender_id == worker_id
                 and m.message_type == "job_status"
                 and m.job_id == job_id
                 and m.payload.status == "failed"
@@ -255,6 +258,7 @@ async def test_job_cancellation_interaction(
             messages = await test_app.state.db.messages.get_messages(worker_id)
             assert any(
                 m.recipient_id == worker_id
+                and m.sender_id == client_id
                 and m.message_type == "job_status"
                 and m.job_id == job_id
                 and m.payload.status == "canceling"
@@ -265,6 +269,7 @@ async def test_job_cancellation_interaction(
             messages = await test_app.state.db.messages.get_messages(client_id, job_id=job_id)
             assert any(
                 m.recipient_id == client_id
+                and m.sender_id == client_id
                 and m.message_type == "job_status"
                 and m.job_id == job_id
                 and m.payload.status == "canceling"
@@ -312,6 +317,7 @@ async def test_job_worker_cancellation_acknowledgment(
             messages = await test_app.state.db.messages.get_messages(client_id, job_id=job_id)
             assert any(
                 m.recipient_id == client_id
+                and m.sender_id == worker_id
                 and m.message_type == "job_status"
                 and m.job_id == job_id
                 and m.payload.status == "canceled"

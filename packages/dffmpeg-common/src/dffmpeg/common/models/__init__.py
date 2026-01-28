@@ -157,6 +157,7 @@ class BaseMessage(BaseModel):
     """
 
     message_id: ULID = Field(default_factory=ULID)
+    sender_id: str | None = OptionalClientId
     recipient_id: str = ClientId
     job_id: ULID | None = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

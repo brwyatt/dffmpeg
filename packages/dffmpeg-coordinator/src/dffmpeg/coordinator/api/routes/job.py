@@ -38,7 +38,11 @@ logger = getLogger(__name__)
 
 
 async def process_job_assignment(
-    job_id: ULID, job_repo: JobRepository, worker_repo: WorkerRepository, transports: TransportManager
+    job_id: ULID,
+    job_repo: JobRepository,
+    worker_repo: WorkerRepository,
+    transports: TransportManager,
+    sender_id: str | None = None,
 ):
     """
     Background task to find a suitable worker for a pending job and assign it.
@@ -48,6 +52,7 @@ async def process_job_assignment(
         job_repo (JobRepository): Repository for accessing job data.
         worker_repo (WorkerRepository): Repository for accessing worker data.
         transports (TransportManager): Transport manager for sending notifications.
+        sender_id (str | None): The ID of the user triggering the assignment.
     """
     try:
         job = await job_repo.get_job(job_id)
@@ -91,6 +96,7 @@ async def process_job_assignment(
             JobRequestMessage(
                 recipient_id=selected_worker.worker_id,
                 job_id=job_id,
+                sender_id=sender_id,
                 payload=JobRequestPayload(
                     job_id=str(job_id),
                     binary_name=job.binary_name,
@@ -105,6 +111,7 @@ async def process_job_assignment(
             JobStatusMessage(
                 recipient_id=job.requester_id,
                 job_id=job_id,
+                sender_id=sender_id,
                 payload=JobStatusPayload(status="assigned"),
             )
         )
@@ -161,7 +168,9 @@ async def job_submit(
     await job_repo.create_job(job_record)
 
     # Trigger assignment in background
-    background_tasks.add_task(process_job_assignment, job_id, job_repo, worker_repo, transports)
+    background_tasks.add_task(
+        process_job_assignment, job_id, job_repo, worker_repo, transports, sender_id=identity.client_id
+    )
 
     return job_record
 
@@ -206,6 +215,7 @@ async def job_accept(
         JobStatusMessage(
             recipient_id=job.requester_id,
             job_id=j_id,
+            sender_id=identity.client_id,
             payload=JobStatusPayload(status="running"),
         )
     )
@@ -260,6 +270,7 @@ async def job_cancel(
             JobStatusMessage(
                 recipient_id=job.requester_id,
                 job_id=j_id,
+                sender_id=identity.client_id,
                 payload=JobStatusPayload(status="canceling"),
             )
         )
@@ -269,6 +280,7 @@ async def job_cancel(
             JobStatusMessage(
                 recipient_id=job.worker_id,
                 job_id=j_id,
+                sender_id=identity.client_id,
                 payload=JobStatusPayload(status="canceling"),
             )
         )
@@ -281,6 +293,7 @@ async def job_cancel(
             JobStatusMessage(
                 recipient_id=job.requester_id,
                 job_id=j_id,
+                sender_id=identity.client_id,
                 payload=JobStatusPayload(status="canceled"),
             )
         )
@@ -368,6 +381,7 @@ async def job_status_update(
         JobStatusMessage(
             recipient_id=job.requester_id,
             job_id=j_id,
+            sender_id=identity.client_id,
             payload=JobStatusPayload(status=payload.status),
         )
     )
@@ -415,6 +429,7 @@ async def job_heartbeat(
         JobStatusMessage(
             recipient_id=job.requester_id,
             job_id=j_id,
+            sender_id=identity.client_id,
             payload=JobStatusPayload(status="running", last_update=datetime.now(timezone.utc)),
         )
     )
@@ -464,6 +479,7 @@ async def job_logs_submit(
         JobLogsMessage(
             recipient_id=job.requester_id,
             job_id=j_id,
+            sender_id=identity.client_id,
             payload=payload,
         )
     )
