@@ -1,8 +1,8 @@
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from dffmpeg.common.models import JobStatusMessage
+from dffmpeg.common.models import JobStatusMessage, JobStatusPayload
 from dffmpeg.coordinator.api.dependencies import get_transports
 from dffmpeg.coordinator.transports import TransportManager
 
@@ -12,7 +12,7 @@ router = APIRouter()
 @router.post("/test/emit-message/{recipient_id}")
 async def emit_test_message(
     recipient_id: str,
-    payload: Optional[Dict[str, Any]] = None,
+    payload: Optional[JobStatusPayload] = None,
     transports: TransportManager = Depends(get_transports),
 ):
     """
@@ -20,7 +20,7 @@ async def emit_test_message(
 
     Args:
         recipient_id (str): The ID of the message recipient.
-        payload (Optional[Dict[str, Any]]): The message payload.
+        payload (Optional[JobStatusPayload]): The message payload.
         transports (Transports): Transport manager.
 
     Returns:
@@ -30,7 +30,7 @@ async def emit_test_message(
         HTTPException: If the transport for the message cannot be found.
     """
     if payload is None:
-        payload = {}
+        payload = JobStatusPayload(status="running")
 
     # This simulates an internal event (like a worker finishing a job)
     msg = JobStatusMessage(

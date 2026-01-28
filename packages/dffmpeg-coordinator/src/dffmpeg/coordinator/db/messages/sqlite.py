@@ -157,7 +157,7 @@ class SQLiteMessageRepository(MessageRepository, SQLiteDB):
         query += " ORDER BY message_id"
         if limit is not None:
             query += " DESC LIMIT ?"
-            args.append(limit)
+            args.append(str(limit))
 
         results = await self.get_rows(query, tuple(args))
 

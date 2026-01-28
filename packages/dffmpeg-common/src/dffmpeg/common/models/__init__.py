@@ -8,6 +8,8 @@ from ulid import ULID
 ClientId: str = Field(min_length=1)
 OptionalClientId: str | None = Field(default=None, min_length=1)
 
+type IdentityRole = Literal["client", "worker", "admin"]
+
 
 class AuthenticatedIdentity(BaseModel):
     """
@@ -23,7 +25,7 @@ class AuthenticatedIdentity(BaseModel):
 
     authenticated: bool = False
     client_id: str = ClientId
-    role: Literal["client", "worker", "admin"]
+    role: IdentityRole
     timestamp: float = Field(default_factory=time.time)
     hmac_key: Optional[str] = Field(min_length=44, max_length=44)
 
@@ -44,7 +46,7 @@ class TransportRecord(BaseModel):
     transport_metadata: TransportMetadata = Field(default_factory=dict)
 
 
-JobStatus = Literal["pending", "assigned", "running", "completed", "failed", "canceled", "canceling"]
+type JobStatus = Literal["pending", "assigned", "running", "completed", "failed", "canceled", "canceling"]
 
 
 class Job(BaseModel):
@@ -146,6 +148,9 @@ class JobLogsResponse(BaseModel):
     last_message_id: ULID | None = None
 
 
+type MessageType = Literal["job_status", "job_request", "job_logs"]
+
+
 class BaseMessage(BaseModel):
     """
     Base class for messages sent between coordinator and clients/workers.
@@ -156,6 +161,8 @@ class BaseMessage(BaseModel):
     job_id: ULID | None = None
     timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     sent_at: datetime | None = None
+    message_type: Any
+    payload: Any
 
 
 class JobStatusMessage(BaseMessage):
@@ -173,7 +180,7 @@ class JobLogsMessage(BaseMessage):
     payload: JobLogsPayload
 
 
-Message = Annotated[
+type Message = Annotated[
     Union[
         Annotated[JobStatusMessage, Tag("job_status")],
         Annotated[JobRequestMessage, Tag("job_request")],
@@ -181,7 +188,6 @@ Message = Annotated[
     ],
     Discriminator("message_type"),
 ]
-MessageType = Literal["job_status", "job_request", "job_logs"]
 
 
 class WorkerBase(BaseModel):
@@ -201,7 +207,7 @@ class WorkerBase(BaseModel):
     paths: List[str] = Field(default_factory=list)
 
 
-WorkerStatus = Literal["online", "offline", "error"]
+type WorkerStatus = Literal["online", "offline", "error"]
 
 
 class Worker(WorkerBase):
