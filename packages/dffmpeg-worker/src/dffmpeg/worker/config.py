@@ -5,6 +5,8 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, Field
 
+from dffmpeg.common.transports import ClientTransportConfig
+
 logger = getLogger(__name__)
 
 
@@ -20,6 +22,7 @@ class WorkerConfig(BaseModel):
     hmac_key: str | None = None
     hmac_key_file: str | None = None
     coordinator: CoordinatorConnectionConfig = Field(default_factory=CoordinatorConnectionConfig)
+    transports: ClientTransportConfig = Field(default_factory=ClientTransportConfig)
 
 
 def load_config(path: Path | str = "./config.yml") -> WorkerConfig:
@@ -52,5 +55,29 @@ def load_config(path: Path | str = "./config.yml") -> WorkerConfig:
 
     if not config.hmac_key:
         raise ValueError("hmac_key must be provided either directly or via hmac_key_file")
+
+    # Inject default config for http_polling if not present
+    http_polling_config = config.transports.transport_settings.get("http_polling", {})
+
+    # Construct coordinator URL
+    coord = config.coordinator
+    base_url = (
+        f"{coord.scheme}://{coord.host}:{coord.port}{'' if coord.path_base.startswith('/') else '/'}{coord.path_base}"
+    )
+
+    defaults = {
+        "client_id": config.client_id,
+        "hmac_key": config.hmac_key,
+        "coordinator_url": base_url,
+    }
+
+    # Merge defaults into the transport config (existing values take precedence?
+    # Actually, these are system values, they probably should take precedence or be defaults.
+    # Let's treat them as defaults that overwrite if missing, but we're populating the dict.)
+    for k, v in defaults.items():
+        if k not in http_polling_config:
+            http_polling_config[k] = v
+
+    config.transports.transport_settings["http_polling"] = http_polling_config
 
     return config
