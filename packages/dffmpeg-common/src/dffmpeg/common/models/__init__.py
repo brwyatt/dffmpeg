@@ -93,6 +93,14 @@ class JobRequest(BaseModel):
     supported_transports: List[str] = Field(min_length=1)
 
 
+class WorkerDeregistration(BaseModel):
+    """
+    Payload for worker deregistration.
+    """
+
+    worker_id: str = ClientId
+
+
 class JobStatusPayload(BaseModel):
     """
     Payload for job status updates.

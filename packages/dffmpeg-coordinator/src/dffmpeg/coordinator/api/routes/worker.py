@@ -6,6 +6,7 @@ from dffmpeg.common.models import (
     AuthenticatedIdentity,
     TransportRecord,
     WorkerRegistration,
+    WorkerDeregistration,
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import get_transports, get_worker_repo
@@ -62,3 +63,42 @@ async def worker_register(
     await worker_repo.add_or_update(record)
 
     return TransportRecord(transport=record.transport, transport_metadata=record.transport_metadata)
+
+
+@router.post("/worker/deregister")
+async def worker_deregister(
+    payload: WorkerDeregistration,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    worker_repo: WorkerRepository = Depends(get_worker_repo),
+):
+    """
+    Deregisters a worker from the coordinator (marks as offline).
+
+    Args:
+        payload (WorkerDeregistration): Deregistration details.
+        identity (AuthenticatedIdentity): The authenticated worker identity.
+        worker_repo (WorkerRepository): Repository for worker storage.
+
+    Returns:
+        dict: Status OK.
+
+    Raises:
+        HTTPException: If authentication fails or worker ID mismatches.
+    """
+    if identity.client_id != payload.worker_id:
+        raise HTTPException(status_code=403, detail="WorkerID does not match authenticated ClientID")
+
+    # Mark offline by updating with minimal info
+    record = WorkerRecord(
+        worker_id=payload.worker_id,
+        status="offline",
+        # Use existing transport for now or empty, doesn't matter much if offline
+        transport="none",
+        transport_metadata={},
+        capabilities=[],
+        binaries=[],
+        paths=[],
+    )
+
+    await worker_repo.add_or_update(record)
+    return {"status": "ok"}

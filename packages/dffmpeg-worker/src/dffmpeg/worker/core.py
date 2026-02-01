@@ -14,6 +14,7 @@ from dffmpeg.common.models import (
     JobStatusUpdate,
     LogEntry,
     WorkerRegistration,
+    WorkerDeregistration,
 )
 from dffmpeg.common.transports import TransportManager
 from dffmpeg.common.transports.base import BaseClientTransport
@@ -199,9 +200,16 @@ class Worker:
         # Cancel all jobs
         for job_runner in list(self._active_jobs.values()):
             await job_runner.cancel()
+            
+        # De-register
+        try:
+            logger.info(f"[{self.client_id}] Deregistering...")
+            payload = WorkerDeregistration(worker_id=self.client_id)
+            await self._sign_and_send("POST", "/worker/deregister", payload.model_dump(mode="json"))
+        except Exception as e:
+            logger.warning(f"Failed to deregister: {e}")
 
         await self._http_client.aclose()
-        # TODO: Call de-register endpoint when available
 
     async def _sign_and_send(self, method: str, path: str, body: dict | None = None) -> httpx.Response:
         """Helper to sign and send requests."""
