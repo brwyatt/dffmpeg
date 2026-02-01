@@ -21,6 +21,7 @@ class WorkerConfig(BaseModel):
     client_id: str
     hmac_key: str | None = None
     hmac_key_file: str | None = None
+    registration_interval: int = 15
     coordinator: CoordinatorConnectionConfig = Field(default_factory=CoordinatorConnectionConfig)
     transports: ClientTransportConfig = Field(default_factory=ClientTransportConfig)
 

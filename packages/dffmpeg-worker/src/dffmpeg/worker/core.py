@@ -1,0 +1,375 @@
+import asyncio
+import json
+import logging
+import random
+from typing import Dict, Optional
+
+import httpx
+from ulid import ULID
+
+from dffmpeg.common.auth.request_signer import RequestSigner
+from dffmpeg.common.models import (
+    JobLogsPayload,
+    JobRequestMessage,
+    JobStatusMessage,
+    JobStatusUpdate,
+    LogEntry,
+    WorkerRegistration,
+)
+from dffmpeg.common.transports import TransportManager
+from dffmpeg.common.transports.base import BaseClientTransport
+from dffmpeg.worker.config import WorkerConfig
+
+logger = logging.getLogger(__name__)
+
+
+class JobRunner:
+    """
+    Manages the execution of a single assigned job.
+    Includes heartbeats, log streaming, and status reporting.
+    """
+
+    def __init__(
+        self,
+        config: WorkerConfig,
+        signer: RequestSigner,
+        job_id: ULID,
+        job_payload: Dict,
+        cleanup_callback: callable,
+    ):
+        self.config = config
+        self.signer = signer
+        self.job_id = job_id
+        self.payload = job_payload
+        self.cleanup_callback = cleanup_callback
+        self.client_id = config.client_id
+        self.base_url = (
+            f"{config.coordinator.scheme}://{config.coordinator.host}:{config.coordinator.port}"
+            f"{'' if config.coordinator.path_base.startswith('/') else '/'}{config.coordinator.path_base}"
+        )
+
+        self._main_task: Optional[asyncio.Task] = None
+        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._http_client = httpx.AsyncClient(base_url=self.base_url)
+
+    async def start(self):
+        """Starts the job execution."""
+        logger.info(f"[{self.client_id}] Starting job {self.job_id}")
+        self._main_task = asyncio.create_task(self._run())
+
+    async def cancel(self):
+        """Cancels the job execution."""
+        logger.info(f"[{self.client_id}] Canceling job {self.job_id}")
+        if self._main_task and not self._main_task.done():
+            self._main_task.cancel()
+            try:
+                await self._main_task
+            except asyncio.CancelledError:
+                pass
+        
+        # Don't call _report_status("canceled") here, let the _run loop handle cleanup
+        # actually, if main task is cancelled, _run's finally block or exception handler should catch it.
+
+    async def _sign_and_send(self, method: str, path: str, body: dict | None = None) -> httpx.Response:
+        """Helper to sign and send requests."""
+        # TODO: Refactor RequestSigner to return full headers to avoid this boilerplate
+        method = method.upper()
+        payload = json.dumps(body) if body else ""
+        timestamp, signature = self.signer.sign(method, path, payload)
+        headers = {
+            "x-dffmpeg-client-id": self.client_id,
+            "x-dffmpeg-timestamp": str(timestamp),
+            "x-dffmpeg-signature": signature,
+        }
+        
+        request_kwargs = {"headers": headers}
+        request_kwargs["content"] = payload
+
+        return await self._http_client.request(method, path, **request_kwargs)
+
+    async def _heartbeat_loop(self):
+        """Sends periodic heartbeats."""
+        path = f"/jobs/{self.job_id}/heartbeat"
+        while True:
+            try:
+                await asyncio.sleep(5)
+                await self._sign_and_send("POST", path)
+                logger.debug(f"[{self.client_id}] Sent heartbeat for {self.job_id}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"[{self.client_id}] Heartbeat failed for {self.job_id}: {e}")
+
+    async def _run(self):
+        """Main execution flow."""
+        try:
+            # 1. Accept the job
+            logger.info(f"[{self.client_id}] Accepting job {self.job_id}")
+            await self._sign_and_send("POST", f"/jobs/{self.job_id}/accept")
+
+            # 2. Start heartbeat
+            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
+
+            # 3. Execute (Simulate for now)
+            # In real implementation, this would spawn an ffmpeg subprocess
+            logger.info(f"[{self.client_id}] Simulating ffmpeg work for {self.job_id}")
+            
+            # Simulate work steps
+            for i in range(10):
+                await asyncio.sleep(1)
+                
+                # Send some fake logs
+                log_entry = LogEntry(stream="stdout", content=f"Processing frame {i * 100}...")
+                logs_payload = JobLogsPayload(logs=[log_entry])
+                # Note: In a real app, we'd batch these
+                try:
+                    await self._sign_and_send(
+                        "POST", 
+                        f"/jobs/{self.job_id}/logs", 
+                        logs_payload.model_dump(mode="json", exclude_none=True)
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to send logs: {e}")
+
+            # 4. Report Success
+            logger.info(f"[{self.client_id}] Job {self.job_id} completed successfully")
+            await self._report_status("completed")
+
+        except asyncio.CancelledError:
+            logger.info(f"[{self.client_id}] Job {self.job_id} execution canceled")
+            await self._report_status("canceled")
+            raise
+
+        except Exception as e:
+            logger.error(f"[{self.client_id}] Job {self.job_id} failed: {e}", exc_info=True)
+            await self._report_status("failed")
+
+        finally:
+            if self._heartbeat_task:
+                self._heartbeat_task.cancel()
+            await self._http_client.aclose()
+            self.cleanup_callback(self.job_id)
+
+    async def _report_status(self, status: str):
+        """Reports final status to coordinator."""
+        try:
+            payload = JobStatusUpdate(status=status)
+            await self._sign_and_send(
+                "POST", 
+                f"/jobs/{self.job_id}/status", 
+                payload.model_dump(mode="json")
+            )
+        except Exception as e:
+            logger.error(f"[{self.client_id}] Failed to report status {status} for {self.job_id}: {e}")
+
+
+class Worker:
+    """
+    Main worker coordinator class.
+    """
+
+    def __init__(self, config: WorkerConfig):
+        self.config = config
+        self.client_id = config.client_id
+        self.base_url = (
+            f"{config.coordinator.scheme}://{config.coordinator.host}:{config.coordinator.port}"
+            f"{'' if config.coordinator.path_base.startswith('/') else '/'}{config.coordinator.path_base}"
+        )
+
+        logger.info(f"BASE URL: {self.base_url}")
+        
+        self.signer = RequestSigner(config.hmac_key)
+        self.transports = TransportManager(config.transports)
+
+        logger.info(f"ClientID: {config.client_id} HMAC: {config.hmac_key}")
+        
+        self._running = False
+        self._registration_task: Optional[asyncio.Task] = None
+        self._transport_task: Optional[asyncio.Task] = None
+        self._current_transport: Optional[BaseClientTransport] = None
+        self._current_transport_name: Optional[str] = None
+        self._http_client = httpx.AsyncClient(base_url=self.base_url)
+        
+        self._active_jobs: Dict[ULID, JobRunner] = {}
+
+    async def start(self):
+        """Starts the worker operations."""
+        logger.info(f"[{self.client_id}] Starting worker...")
+        self._running = True
+        self._registration_task = asyncio.create_task(self._registration_loop())
+        
+        # Keep running until stopped
+        while self._running:
+            await asyncio.sleep(1)
+
+    async def stop(self):
+        """Stops the worker gracefully."""
+        logger.info(f"[{self.client_id}] Stopping worker...")
+        self._running = False
+        
+        # Cancel registration
+        if self._registration_task:
+            self._registration_task.cancel()
+            
+        # Cancel transport
+        await self._stop_transport()
+        
+        # Cancel all jobs
+        for job_runner in list(self._active_jobs.values()):
+            await job_runner.cancel()
+            
+        await self._http_client.aclose()
+        # TODO: Call de-register endpoint when available
+
+    async def _sign_and_send(self, method: str, path: str, body: dict | None = None) -> httpx.Response:
+        """Helper to sign and send requests."""
+        method = method.upper()
+        payload = json.dumps(body) if body else ""
+        timestamp, signature = self.signer.sign(method, path, payload)
+        headers = {
+            "x-dffmpeg-client-id": self.client_id,
+            "x-dffmpeg-timestamp": str(timestamp),
+            "x-dffmpeg-signature": signature,
+        }
+        
+        request_kwargs = {"headers": headers}
+        request_kwargs["content"] = payload
+
+        response = await self._http_client.request(method, path, **request_kwargs)
+        logger.info(f"{response.request.url} -- {response.status_code} -- {response.json()}")
+        return response
+
+    async def _registration_loop(self):
+        """Periodically registers with the coordinator."""
+        while self._running:
+            try:
+                # Prepare payload
+                # TODO: Retrieve actual capabilities and binaries dynamically
+                payload = WorkerRegistration(
+                    worker_id=self.client_id,
+                    capabilities=["h264"],
+                    binaries=["ffmpeg"],
+                    paths=["Movies"],  # Placeholder
+                    supported_transports=self.transports.transport_names
+                )
+                
+                resp = await self._sign_and_send(
+                    "POST", 
+                    "/worker/register", 
+                    payload.model_dump(mode="json")
+                )
+                
+                if resp.status_code == 200:
+                    data = resp.json()
+                    new_transport = data.get("transport")
+                    metadata = data.get("transport_metadata", {})
+                    
+                    if new_transport != self._current_transport_name:
+                        logger.info(f"Transport changed from {self._current_transport_name} to {new_transport}")
+                        await self._update_transport(new_transport, metadata)
+                else:
+                    logger.warning(f"Registration failed: {resp.status_code} - {resp.text}")
+
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in registration loop: {e}")
+
+            # Sleep with jitter
+            sleep_time = self.config.registration_interval + random.uniform(-2, 2)
+            await asyncio.sleep(max(1, sleep_time))
+
+    async def _update_transport(self, transport_name: str, metadata: dict):
+        """Switches the active transport."""
+        await self._stop_transport()
+        
+        try:
+            transport_cls = self.transports[transport_name]
+            # Create a new instance or reuse? TransportManager manages instances.
+            # BaseClientTransport instances are stateful (running flag), so we use the manager's instance.
+            # Wait, TransportManager.__getitem__ returns an instance.
+            
+            self._current_transport = transport_cls
+            self._current_transport_name = transport_name
+            
+            await self._current_transport.connect(metadata)
+            self._transport_task = asyncio.create_task(self._listen_loop())
+            
+        except Exception as e:
+            logger.error(f"Failed to start transport {transport_name}: {e}")
+            self._current_transport = None
+            self._current_transport_name = None
+
+    async def _stop_transport(self):
+        """Stops the current transport."""
+        if self._transport_task:
+            self._transport_task.cancel()
+            try:
+                await self._transport_task
+            except asyncio.CancelledError:
+                pass
+            self._transport_task = None
+            
+        if self._current_transport:
+            await self._current_transport.disconnect()
+            self._current_transport = None
+
+    async def _listen_loop(self):
+        """Listens for messages from the transport."""
+        if not self._current_transport:
+            return
+
+        logger.info(f"Listening on transport {self._current_transport_name}...")
+        try:
+            async for message in self._current_transport.listen():
+                if isinstance(message, JobRequestMessage):
+                    await self._handle_job_request(message)
+                elif isinstance(message, JobStatusMessage):
+                    await self._handle_job_status(message)
+                else:
+                    logger.debug(f"Ignored message type: {message.message_type}")
+        except Exception as e:
+            logger.error(f"Transport listener error: {e}")
+
+    async def _handle_job_request(self, message: JobRequestMessage):
+        """Handles a new job request."""
+        job_id_str = message.payload.job_id
+        try:
+            job_id = ULID.from_str(job_id_str)
+        except ValueError:
+            logger.error(f"Invalid job ID received: {job_id_str}")
+            return
+
+        if job_id in self._active_jobs:
+            logger.warning(f"Job {job_id} already exists, ignoring duplicate request.")
+            return
+
+        runner = JobRunner(
+            config=self.config,
+            signer=self.signer,
+            job_id=job_id,
+            job_payload=message.payload.model_dump(),
+            cleanup_callback=self._cleanup_job
+        )
+        self._active_jobs[job_id] = runner
+        await runner.start()
+
+    async def _handle_job_status(self, message: JobStatusMessage):
+        """Handles a job status update (e.g., cancel)."""
+        if not message.job_id:
+            return
+
+        job_id = message.job_id
+        status = message.payload.status
+        
+        if job_id in self._active_jobs:
+            if status == "canceling":
+                logger.info(f"Received cancellation request for {job_id}")
+                await self._active_jobs[job_id].cancel()
+        else:
+            logger.debug(f"Received status update for unknown job {job_id}")
+
+    def _cleanup_job(self, job_id: ULID):
+        """Callback to remove job from active registry."""
+        if job_id in self._active_jobs:
+            del self._active_jobs[job_id]
