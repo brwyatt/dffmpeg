@@ -40,17 +40,6 @@ class HTTPPollingClientTransport(BaseClientTransport):
             self._client = None
         logger.info("Disconnected from HTTP Polling transport")
 
-    async def _sign_request(self, method: str, path: str, body: str | bytes = "") -> Dict[str, str]:
-        if isinstance(body, bytes):
-            body = body.decode("utf-8")
-
-        timestamp, signature = self.signer.sign(method, path, body)
-        return {
-            "x-dffmpeg-client-id": self.client_id,
-            "x-dffmpeg-timestamp": str(timestamp),
-            "x-dffmpeg-signature": signature,
-        }
-
     async def listen(self) -> AsyncIterator[BaseMessage]:
         if not self._client or not self.poll_path:
             raise RuntimeError("Transport not connected")
@@ -60,7 +49,7 @@ class HTTPPollingClientTransport(BaseClientTransport):
         while self._running:
             try:
                 # Sign the request (path only, params are handled separately)
-                headers = await self._sign_request("GET", self.poll_path)
+                headers, _ = self.signer.sign_request(self.client_id, "GET", self.poll_path)
 
                 params = {"wait": self.poll_wait}
                 if last_message_id:

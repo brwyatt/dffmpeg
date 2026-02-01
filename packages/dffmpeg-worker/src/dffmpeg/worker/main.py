@@ -26,13 +26,13 @@ async def run_worker(config):
 
     try:
         worker_task = asyncio.create_task(worker.start())
-        
+
         # Wait for stop signal
         await stop_event.wait()
-        
+
         # Shutdown
         await worker.stop()
-        
+
         # Wait for worker task to complete (it checks _running flag)
         try:
             await asyncio.wait_for(worker_task, timeout=5.0)
@@ -52,7 +52,7 @@ def main():
     args = parser.parse_args()
 
     config = load_config(args.config)
-    
+
     try:
         asyncio.run(run_worker(config))
     except KeyboardInterrupt:

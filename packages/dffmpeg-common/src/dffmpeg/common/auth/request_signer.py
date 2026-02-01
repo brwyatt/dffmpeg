@@ -1,10 +1,11 @@
 import hashlib
 import hmac
+import json
 import time
 from base64 import b64decode, b64encode
 from logging import getLogger
 from os import urandom
-from typing import Tuple, Union
+from typing import Dict, Tuple, Union
 
 logger = getLogger(__name__)
 
@@ -57,6 +58,33 @@ class RequestSigner:
             logger.warning("HMACs do not match!")
 
         return result
+
+    def sign_request(
+        self, client_id: str, method: str, path: str, body: Dict | None = None
+    ) -> Tuple[Dict[str, str], str]:
+        """
+        Signs a request and returns the headers and serialized body.
+
+        Args:
+            client_id (str): The ID of the client making the request.
+            method (str): HTTP method.
+            path (str): Request path.
+            body (Dict | None): Request body as a dictionary.
+
+        Returns:
+            Tuple[Dict[str, str], str]: A tuple containing the headers (dict) and the serialized payload (str).
+        """
+        method = method.upper()
+        payload = json.dumps(body) if body else ""
+
+        timestamp, signature = self.sign(method, path, payload)
+        headers = {
+            "x-dffmpeg-client-id": client_id,
+            "x-dffmpeg-timestamp": str(timestamp),
+            "x-dffmpeg-signature": signature,
+        }
+
+        return headers, payload
 
     @classmethod
     def generate_key(cls) -> str:
