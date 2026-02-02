@@ -116,7 +116,7 @@ class JobRunner:
         """
         Executes the actual job work.
         """
-        await self.executor.execute(str(self.job_id), self._send_log)
+        await self.executor.execute(self._send_log)
 
     async def _run(self):
         """Main execution flow for the job."""

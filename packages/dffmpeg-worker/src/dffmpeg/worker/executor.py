@@ -14,14 +14,12 @@ class JobExecutor(Protocol):
 
     async def execute(
         self,
-        job_id: str,
         log_callback: Callable[[LogEntry], Awaitable[None]],
     ) -> None:
         """
         Executes a job.
 
         Args:
-            job_id (str): The ID of the job.
             log_callback (Callable): A callback to handle log entries.
         """
         ...
@@ -32,19 +30,20 @@ class SimulatedJobExecutor:
     Executor that simulates a job execution with sleep statements.
     """
 
+    def __init__(self, job_id: str):
+        self.job_id = job_id
+
     async def execute(
         self,
-        job_id: str,
         log_callback: Callable[[LogEntry], Awaitable[None]],
     ) -> None:
         """
         Executes the simulated work.
 
         Args:
-            job_id (str): The ID of the job.
             log_callback (Callable): A callback to handle log entries.
         """
-        logger.info(f"Simulating work for job {job_id}")
+        logger.info(f"Simulating work for job {self.job_id}")
 
         for i in range(10):
             await asyncio.sleep(1)
