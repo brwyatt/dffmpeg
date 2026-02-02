@@ -3,10 +3,9 @@ import logging
 import random
 from typing import Dict, Optional
 
-import httpx
 from ulid import ULID
 
-from dffmpeg.common.auth.request_signer import RequestSigner
+from dffmpeg.common.http_client import AuthenticatedAsyncClient
 from dffmpeg.common.models import (
     JobLogsPayload,
     JobStatusUpdate,
@@ -27,27 +26,22 @@ class JobRunner:
     def __init__(
         self,
         config: WorkerConfig,
-        signer: RequestSigner,
+        client: AuthenticatedAsyncClient,
         job_id: ULID,
         job_payload: Dict,
         cleanup_callback: callable,
         executor: JobExecutor,
     ):
         self.config = config
-        self.signer = signer
+        self.client = client
         self.job_id = job_id
         self.payload = job_payload
         self.cleanup_callback = cleanup_callback
         self.executor = executor
         self.client_id = config.client_id
-        self.base_url = (
-            f"{config.coordinator.scheme}://{config.coordinator.host}:{config.coordinator.port}"
-            f"{'' if config.coordinator.path_base.startswith('/') else '/'}{config.coordinator.path_base}"
-        )
 
         self._main_task: Optional[asyncio.Task] = None
         self._heartbeat_task: Optional[asyncio.Task] = None
-        self._http_client = httpx.AsyncClient(base_url=self.base_url)
 
         self.coordinator_paths = {
             "heartbeat": f"/jobs/{self.job_id}/heartbeat",
@@ -84,14 +78,11 @@ class JobRunner:
                 jitter = random.uniform(-jitter_bound, jitter_bound)
                 await asyncio.sleep(max(1, interval + jitter))
 
-                headers, payload = self.signer.sign_request(self.client_id, "POST", path)
-                await self._http_client.request("POST", path, headers=headers, content=payload)
+                await self.client.post(path)
 
                 logger.debug(f"[{self.client_id}] Sent heartbeat for {self.job_id}")
             except asyncio.CancelledError:
                 break
-            except httpx.RequestError as e:
-                logger.warning(f"[{self.client_id}] Heartbeat failed for {self.job_id} (network error): {e}")
             except Exception as e:
                 logger.warning(f"[{self.client_id}] Heartbeat failed for {self.job_id}: {e}")
 
@@ -107,8 +98,7 @@ class JobRunner:
         body = logs_payload.model_dump(mode="json", exclude_none=True)
 
         try:
-            headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
-            await self._http_client.request("POST", path, headers=headers, content=payload)
+            await self.client.post(path, json=body)
         except Exception as e:
             logger.warning(f"Failed to send logs: {e}")
 
@@ -124,8 +114,7 @@ class JobRunner:
             # 1. Accept the job
             logger.info(f"[{self.client_id}] Accepting job {self.job_id}")
             path = self.coordinator_paths["accept"]
-            headers, payload = self.signer.sign_request(self.client_id, "POST", path)
-            await self._http_client.request("POST", path, headers=headers, content=payload)
+            await self.client.post(path)
 
             # 2. Start heartbeat
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
@@ -149,7 +138,7 @@ class JobRunner:
         finally:
             if self._heartbeat_task:
                 self._heartbeat_task.cancel()
-            await self._http_client.aclose()
+            # client is owned by Worker, do not close here
             self.cleanup_callback(self.job_id)
 
     async def _report_status(self, status: str):
@@ -164,7 +153,6 @@ class JobRunner:
             path = self.coordinator_paths["status"]
             body = payload_model.model_dump(mode="json")
 
-            headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
-            await self._http_client.request("POST", path, headers=headers, content=payload)
+            await self.client.post(path, json=body)
         except Exception as e:
             logger.error(f"[{self.client_id}] Failed to report status {status} for {self.job_id}: {e}")

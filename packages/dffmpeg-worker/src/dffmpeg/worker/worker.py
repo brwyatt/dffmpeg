@@ -6,7 +6,7 @@ from typing import Dict, Optional
 import httpx
 from ulid import ULID
 
-from dffmpeg.common.auth.request_signer import RequestSigner
+from dffmpeg.common.http_client import AuthenticatedAsyncClient
 from dffmpeg.common.models import (
     JobRequestMessage,
     JobStatusMessage,
@@ -26,7 +26,11 @@ class Worker:
     Main worker coordinator class.
     """
 
-    def __init__(self, config: WorkerConfig):
+    def __init__(
+        self,
+        config: WorkerConfig,
+        http_client_cls: type[httpx.AsyncClient] = httpx.AsyncClient,
+    ):
         self.config = config
         self.client_id = config.client_id
         self.base_url = (
@@ -36,7 +40,12 @@ class Worker:
 
         logger.info(f"BASE URL: {self.base_url}")
 
-        self.signer = RequestSigner(config.hmac_key)
+        self.client = AuthenticatedAsyncClient(
+            base_url=self.base_url,
+            client_id=self.client_id,
+            hmac_key=config.hmac_key,
+            http_client_cls=http_client_cls,
+        )
         self.transport_manager = WorkerTransportManager(config.transports)
 
         logger.info(f"ClientID: {config.client_id} HMAC: {config.hmac_key}")
@@ -44,7 +53,6 @@ class Worker:
         self._running = False
         self._registration_task: Optional[asyncio.Task] = None
         self._transport_task: Optional[asyncio.Task] = None
-        self._http_client = httpx.AsyncClient(base_url=self.base_url)
 
         self.coordinator_paths = {
             "register": "/worker/register",
@@ -86,12 +94,11 @@ class Worker:
             path = self.coordinator_paths["deregister"]
             body = payload_model.model_dump(mode="json")
 
-            headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
-            await self._http_client.request("POST", path, headers=headers, content=payload)
+            await self.client.post(path, json=body)
         except Exception as e:
             logger.warning(f"Failed to deregister: {e}")
 
-        await self._http_client.aclose()
+        await self.client.aclose()
 
     async def _registration_loop(self):
         """Periodically registers with the coordinator."""
@@ -111,8 +118,7 @@ class Worker:
                 path = self.coordinator_paths["register"]
                 body = payload_model.model_dump(mode="json")
 
-                headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
-                resp = await self._http_client.request("POST", path, headers=headers, content=payload)
+                resp = await self.client.post(path, json=body)
 
                 if resp.status_code == 200:
                     data = resp.json()
@@ -201,11 +207,11 @@ class Worker:
 
         runner = JobRunner(
             config=self.config,
-            signer=self.signer,
+            client=self.client,
             job_id=job_id,
             job_payload=message.payload.model_dump(),
             cleanup_callback=self._cleanup_job,
-            executor=SimulatedJobExecutor(job_id),
+            executor=SimulatedJobExecutor(str(job_id)),
         )
         self._active_jobs[job_id] = runner
         await runner.start()
