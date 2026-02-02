@@ -13,6 +13,7 @@ from dffmpeg.common.models import (
     LogEntry,
 )
 from dffmpeg.worker.config import WorkerConfig
+from dffmpeg.worker.executor import JobExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -30,12 +31,14 @@ class JobRunner:
         job_id: ULID,
         job_payload: Dict,
         cleanup_callback: callable,
+        executor: JobExecutor,
     ):
         self.config = config
         self.signer = signer
         self.job_id = job_id
         self.payload = job_payload
         self.cleanup_callback = cleanup_callback
+        self.executor = executor
         self.client_id = config.client_id
         self.base_url = (
             f"{config.coordinator.scheme}://{config.coordinator.host}:{config.coordinator.port}"
@@ -92,28 +95,28 @@ class JobRunner:
             except Exception as e:
                 logger.warning(f"[{self.client_id}] Heartbeat failed for {self.job_id}: {e}")
 
+    async def _send_log(self, entry: LogEntry):
+        """
+        Sends a log entry to the coordinator.
+
+        Args:
+            entry (LogEntry): The log entry to send.
+        """
+        logs_payload = JobLogsPayload(logs=[entry])
+        path = self.coordinator_paths["logs"]
+        body = logs_payload.model_dump(mode="json", exclude_none=True)
+
+        try:
+            headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
+            await self._http_client.request("POST", path, headers=headers, content=payload)
+        except Exception as e:
+            logger.warning(f"Failed to send logs: {e}")
+
     async def _do_work(self):
         """
-        Executes the actual job work (simulated for now).
+        Executes the actual job work.
         """
-        logger.info(f"[{self.client_id}] Simulating ffmpeg work for {self.job_id}")
-
-        # Simulate work steps
-        for i in range(10):
-            await asyncio.sleep(1)
-
-            # Send some fake logs
-            log_entry = LogEntry(stream="stdout", content=f"Processing frame {i * 100}...")
-            logs_payload = JobLogsPayload(logs=[log_entry])
-            
-            path = self.coordinator_paths["logs"]
-            body = logs_payload.model_dump(mode="json", exclude_none=True)
-            
-            try:
-                headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
-                await self._http_client.request("POST", path, headers=headers, content=payload)
-            except Exception as e:
-                logger.warning(f"Failed to send logs: {e}")
+        await self.executor.execute(str(self.job_id), self._send_log)
 
     async def _run(self):
         """Main execution flow for the job."""

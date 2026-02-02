@@ -14,6 +14,7 @@ from dffmpeg.common.models import (
     WorkerRegistration,
 )
 from dffmpeg.worker.config import WorkerConfig
+from dffmpeg.worker.executor import SimulatedJobExecutor
 from dffmpeg.worker.job import JobRunner
 from dffmpeg.worker.transport import WorkerTransportManager
 
@@ -202,6 +203,7 @@ class Worker:
             job_id=job_id,
             job_payload=message.payload.model_dump(),
             cleanup_callback=self._cleanup_job,
+            executor=SimulatedJobExecutor(),
         )
         self._active_jobs[job_id] = runner
         await runner.start()
