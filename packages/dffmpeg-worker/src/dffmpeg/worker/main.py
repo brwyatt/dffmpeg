@@ -4,7 +4,7 @@ import logging
 import signal
 
 from dffmpeg.worker.config import load_config
-from dffmpeg.worker.core import Worker
+from dffmpeg.worker.worker import Worker
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

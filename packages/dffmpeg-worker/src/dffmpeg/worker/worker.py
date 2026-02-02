@@ -8,164 +8,16 @@ from ulid import ULID
 
 from dffmpeg.common.auth.request_signer import RequestSigner
 from dffmpeg.common.models import (
-    JobLogsPayload,
     JobRequestMessage,
     JobStatusMessage,
-    JobStatusUpdate,
-    LogEntry,
     WorkerDeregistration,
     WorkerRegistration,
 )
-from dffmpeg.common.transports import TransportManager
-from dffmpeg.common.transports.base import BaseClientTransport
 from dffmpeg.worker.config import WorkerConfig
+from dffmpeg.worker.job import JobRunner
+from dffmpeg.worker.transport import WorkerTransportManager
 
 logger = logging.getLogger(__name__)
-
-
-class JobRunner:
-    """
-    Manages the execution of a single assigned job.
-    Includes heartbeats, log streaming, and status reporting.
-    """
-
-    def __init__(
-        self,
-        config: WorkerConfig,
-        signer: RequestSigner,
-        job_id: ULID,
-        job_payload: Dict,
-        cleanup_callback: callable,
-    ):
-        self.config = config
-        self.signer = signer
-        self.job_id = job_id
-        self.payload = job_payload
-        self.cleanup_callback = cleanup_callback
-        self.client_id = config.client_id
-        self.base_url = (
-            f"{config.coordinator.scheme}://{config.coordinator.host}:{config.coordinator.port}"
-            f"{'' if config.coordinator.path_base.startswith('/') else '/'}{config.coordinator.path_base}"
-        )
-
-        self._main_task: Optional[asyncio.Task] = None
-        self._heartbeat_task: Optional[asyncio.Task] = None
-        self._http_client = httpx.AsyncClient(base_url=self.base_url)
-
-        self.coordinator_paths = {
-            "heartbeat": f"/jobs/{self.job_id}/heartbeat",
-            "accept": f"/jobs/{self.job_id}/accept",
-            "logs": f"/jobs/{self.job_id}/logs",
-            "status": f"/jobs/{self.job_id}/status",
-        }
-
-    async def start(self):
-        """Starts the job execution."""
-        logger.info(f"[{self.client_id}] Starting job {self.job_id}")
-        self._main_task = asyncio.create_task(self._run())
-
-    async def cancel(self):
-        """Cancels the job execution."""
-        logger.info(f"[{self.client_id}] Canceling job {self.job_id}")
-        if self._main_task and not self._main_task.done():
-            self._main_task.cancel()
-            try:
-                await self._main_task
-            except asyncio.CancelledError:
-                pass
-
-        # Don't call _report_status("canceled") here, let the _run loop handle cleanup
-        # actually, if main task is cancelled, _run's finally block or exception handler should catch it.
-
-    async def _heartbeat_loop(self):
-        """Sends periodic heartbeats to the coordinator."""
-        path = self.coordinator_paths["heartbeat"]
-        interval = self.payload.get("heartbeat_interval", 5)
-        jitter_bound = min(0.5 * interval, self.config.jitter)
-        while True:
-            try:
-                jitter = random.uniform(-jitter_bound, jitter_bound)
-                await asyncio.sleep(max(1, interval + jitter))
-
-                headers, payload = self.signer.sign_request(self.client_id, "POST", path)
-                await self._http_client.request("POST", path, headers=headers, content=payload)
-
-                logger.debug(f"[{self.client_id}] Sent heartbeat for {self.job_id}")
-            except asyncio.CancelledError:
-                break
-            except httpx.RequestError as e:
-                logger.warning(f"[{self.client_id}] Heartbeat failed for {self.job_id} (network error): {e}")
-            except Exception as e:
-                logger.warning(f"[{self.client_id}] Heartbeat failed for {self.job_id}: {e}")
-
-    async def _run(self):
-        """Main execution flow for the job."""
-        try:
-            # 1. Accept the job
-            logger.info(f"[{self.client_id}] Accepting job {self.job_id}")
-            path = self.coordinator_paths["accept"]
-            headers, payload = self.signer.sign_request(self.client_id, "POST", path)
-            await self._http_client.request("POST", path, headers=headers, content=payload)
-
-            # 2. Start heartbeat
-            self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
-
-            # 3. Execute (Simulate for now)
-            # In real implementation, this would spawn an ffmpeg subprocess
-            logger.info(f"[{self.client_id}] Simulating ffmpeg work for {self.job_id}")
-
-            # Simulate work steps
-            for i in range(10):
-                await asyncio.sleep(1)
-
-                # Send some fake logs
-                log_entry = LogEntry(stream="stdout", content=f"Processing frame {i * 100}...")
-                logs_payload = JobLogsPayload(logs=[log_entry])
-
-                path = self.coordinator_paths["logs"]
-                body = logs_payload.model_dump(mode="json", exclude_none=True)
-
-                try:
-                    headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
-                    await self._http_client.request("POST", path, headers=headers, content=payload)
-                except Exception as e:
-                    logger.warning(f"Failed to send logs: {e}")
-
-            # 4. Report Success
-            logger.info(f"[{self.client_id}] Job {self.job_id} completed successfully")
-            await self._report_status("completed")
-
-        except asyncio.CancelledError:
-            logger.info(f"[{self.client_id}] Job {self.job_id} execution canceled")
-            await self._report_status("canceled")
-            raise
-
-        except Exception as e:
-            logger.error(f"[{self.client_id}] Job {self.job_id} failed: {e}", exc_info=True)
-            await self._report_status("failed")
-
-        finally:
-            if self._heartbeat_task:
-                self._heartbeat_task.cancel()
-            await self._http_client.aclose()
-            self.cleanup_callback(self.job_id)
-
-    async def _report_status(self, status: str):
-        """
-        Reports final status to coordinator.
-
-        Args:
-            status (str): The final status of the job (e.g., "completed", "failed", "canceled").
-        """
-        try:
-            payload_model = JobStatusUpdate(status=status)
-            path = self.coordinator_paths["status"]
-            body = payload_model.model_dump(mode="json")
-
-            headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
-            await self._http_client.request("POST", path, headers=headers, content=payload)
-        except Exception as e:
-            logger.error(f"[{self.client_id}] Failed to report status {status} for {self.job_id}: {e}")
 
 
 class Worker:
@@ -184,15 +36,13 @@ class Worker:
         logger.info(f"BASE URL: {self.base_url}")
 
         self.signer = RequestSigner(config.hmac_key)
-        self.transports = TransportManager(config.transports)
+        self.transport_manager = WorkerTransportManager(config.transports)
 
         logger.info(f"ClientID: {config.client_id} HMAC: {config.hmac_key}")
 
         self._running = False
         self._registration_task: Optional[asyncio.Task] = None
         self._transport_task: Optional[asyncio.Task] = None
-        self._current_transport: Optional[BaseClientTransport] = None
-        self._current_transport_name: Optional[str] = None
         self._http_client = httpx.AsyncClient(base_url=self.base_url)
 
         self.coordinator_paths = {
@@ -234,7 +84,7 @@ class Worker:
             payload_model = WorkerDeregistration(worker_id=self.client_id)
             path = self.coordinator_paths["deregister"]
             body = payload_model.model_dump(mode="json")
-
+            
             headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
             await self._http_client.request("POST", path, headers=headers, content=payload)
         except Exception as e:
@@ -254,12 +104,12 @@ class Worker:
                     capabilities=["h264"],
                     binaries=["ffmpeg"],
                     paths=["Movies"],  # Placeholder
-                    supported_transports=self.transports.transport_names,
+                    supported_transports=self.transport_manager.transport_names,
                 )
-
+                
                 path = self.coordinator_paths["register"]
                 body = payload_model.model_dump(mode="json")
-
+                
                 headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
                 resp = await self._http_client.request("POST", path, headers=headers, content=payload)
 
@@ -268,8 +118,8 @@ class Worker:
                     new_transport = data.get("transport")
                     metadata = data.get("transport_metadata", {})
 
-                    if new_transport != self._current_transport_name:
-                        logger.info(f"Transport changed from {self._current_transport_name} to {new_transport}")
+                    if new_transport != self.transport_manager.current_transport_name:
+                        logger.info(f"Transport changed from {self.transport_manager.current_transport_name} to {new_transport}")
                         await self._update_transport(new_transport, metadata)
                 else:
                     logger.warning(f"Registration failed: {resp.status_code} - {resp.text}")
@@ -296,21 +146,11 @@ class Worker:
         await self._stop_transport()
 
         try:
-            transport_cls = self.transports[transport_name]
-            # Create a new instance or reuse? TransportManager manages instances.
-            # BaseClientTransport instances are stateful (running flag), so we use the manager's instance.
-            # Wait, TransportManager.__getitem__ returns an instance.
-
-            self._current_transport = transport_cls
-            self._current_transport_name = transport_name
-
-            await self._current_transport.connect(metadata)
+            await self.transport_manager.connect(transport_name, metadata)
             self._transport_task = asyncio.create_task(self._listen_loop())
 
         except Exception as e:
             logger.error(f"Failed to start transport {transport_name}: {e}")
-            self._current_transport = None
-            self._current_transport_name = None
 
     async def _stop_transport(self):
         """Stops the current transport."""
@@ -322,18 +162,13 @@ class Worker:
                 pass
             self._transport_task = None
 
-        if self._current_transport:
-            await self._current_transport.disconnect()
-            self._current_transport = None
+        await self.transport_manager.disconnect()
 
     async def _listen_loop(self):
         """Listens for messages from the transport."""
-        if not self._current_transport:
-            return
-
-        logger.info(f"Listening on transport {self._current_transport_name}...")
+        logger.info(f"Listening on transport {self.transport_manager.current_transport_name}...")
         try:
-            async for message in self._current_transport.listen():
+            async for message in self.transport_manager.listen():
                 if isinstance(message, JobRequestMessage):
                     await self._handle_job_request(message)
                 elif isinstance(message, JobStatusMessage):
