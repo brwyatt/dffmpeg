@@ -22,6 +22,7 @@ class WorkerConfig(BaseModel):
     hmac_key: str | None = None
     hmac_key_file: str | None = None
     registration_interval: int = 15
+    jitter: float = 0.5
     coordinator: CoordinatorConnectionConfig = Field(default_factory=CoordinatorConnectionConfig)
     transports: ClientTransportConfig = Field(default_factory=ClientTransportConfig)
 

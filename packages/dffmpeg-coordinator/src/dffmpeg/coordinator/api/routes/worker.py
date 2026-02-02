@@ -5,8 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from dffmpeg.common.models import (
     AuthenticatedIdentity,
     TransportRecord,
-    WorkerRegistration,
     WorkerDeregistration,
+    WorkerRegistration,
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import get_transports, get_worker_repo

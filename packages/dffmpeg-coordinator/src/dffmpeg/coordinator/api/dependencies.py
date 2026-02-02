@@ -1,5 +1,6 @@
 from fastapi import Request
 
+from dffmpeg.coordinator.config import CoordinatorConfig
 from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
@@ -32,3 +33,10 @@ def get_transports(request: Request) -> TransportManager:
     Dependency to retrieve the Transports manager from the application state.
     """
     return request.app.state.transports
+
+
+def get_config(request: Request) -> CoordinatorConfig:
+    """
+    Dependency to retrieve the CoordinatorConfig from the application state.
+    """
+    return request.app.state.config

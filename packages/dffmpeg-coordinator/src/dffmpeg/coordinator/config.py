@@ -4,6 +4,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
+from dffmpeg.common.models import default_job_heartbeat_interval
 from dffmpeg.coordinator.db import DBConfig
 from dffmpeg.coordinator.transports import TransportConfig
 
@@ -13,6 +14,7 @@ logger = getLogger(__name__)
 class CoordinatorConfig(BaseModel):
     database: DBConfig = Field(default_factory=DBConfig)
     transports: TransportConfig = Field(default_factory=TransportConfig)
+    job_heartbeat_interval: int = default_job_heartbeat_interval
 
 
 def load_config(path: Path | str = "./config.yml") -> CoordinatorConfig:

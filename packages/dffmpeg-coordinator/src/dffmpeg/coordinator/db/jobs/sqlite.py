@@ -37,8 +37,9 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
                 created_at,
                 last_update,
                 callback_transport,
-                callback_transport_metadata
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                callback_transport_metadata,
+                heartbeat_interval
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 str(job.job_id),
@@ -52,6 +53,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
                 job.last_update,
                 job.transport,
                 json.dumps(job.transport_metadata),
+                job.heartbeat_interval,
             ),
         )
 
@@ -89,6 +91,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             last_update=result["last_update"],
             transport=result["callback_transport"],
             transport_metadata=json.loads(result["callback_transport_metadata"]),
+            heartbeat_interval=result["heartbeat_interval"],
         )
 
     async def update_status(self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None):
@@ -200,6 +203,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             last_update TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             callback_transport TEXT NOT NULL,
             callback_transport_metadata TEXT NOT NULL,
+            heartbeat_interval INTEGER NOT NULL,
             FOREIGN KEY(requester_id) REFERENCES auth(client_id),
             FOREIGN KEY(worker_id) REFERENCES auth(client_id)
         );

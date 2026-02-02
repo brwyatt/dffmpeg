@@ -13,8 +13,8 @@ from dffmpeg.common.models import (
     JobStatusMessage,
     JobStatusUpdate,
     LogEntry,
-    WorkerRegistration,
     WorkerDeregistration,
+    WorkerRegistration,
 )
 from dffmpeg.common.transports import TransportManager
 from dffmpeg.common.transports.base import BaseClientTransport
@@ -79,9 +79,12 @@ class JobRunner:
     async def _heartbeat_loop(self):
         """Sends periodic heartbeats."""
         path = f"/jobs/{self.job_id}/heartbeat"
+        interval = self.payload.get("heartbeat_interval", 5)
+        jitter_bound = min(0.5 * interval, self.config.jitter)
         while True:
             try:
-                await asyncio.sleep(5)
+                jitter = random.uniform(-jitter_bound, jitter_bound)
+                await asyncio.sleep(max(1, interval + jitter))
                 await self._sign_and_send("POST", path)
                 logger.debug(f"[{self.client_id}] Sent heartbeat for {self.job_id}")
             except asyncio.CancelledError:
@@ -200,7 +203,7 @@ class Worker:
         # Cancel all jobs
         for job_runner in list(self._active_jobs.values()):
             await job_runner.cancel()
-            
+
         # De-register
         try:
             logger.info(f"[{self.client_id}] Deregistering...")
@@ -219,6 +222,7 @@ class Worker:
 
     async def _registration_loop(self):
         """Periodically registers with the coordinator."""
+        jitter_bound = min(0.5 * self.config.registration_interval, self.config.jitter)
         while self._running:
             try:
                 # Prepare payload
@@ -250,8 +254,8 @@ class Worker:
                 logger.error(f"Error in registration loop: {e}")
 
             # Sleep with jitter
-            sleep_time = self.config.registration_interval + random.uniform(-2, 2)
-            await asyncio.sleep(max(1, sleep_time))
+            jitter = random.uniform(-jitter_bound, jitter_bound)
+            await asyncio.sleep(max(1, self.config.registration_interval + jitter))
 
     async def _update_transport(self, transport_name: str, metadata: dict):
         """Switches the active transport."""

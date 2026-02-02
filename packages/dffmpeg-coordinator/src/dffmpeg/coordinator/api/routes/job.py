@@ -21,12 +21,14 @@ from dffmpeg.common.models import (
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import (
+    get_config,
     get_job_repo,
     get_message_repo,
     get_transports,
     get_worker_repo,
 )
 from dffmpeg.coordinator.api.utils import get_negotiated_transport
+from dffmpeg.coordinator.config import CoordinatorConfig
 from dffmpeg.coordinator.db.jobs import JobRecord, JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
@@ -100,6 +102,7 @@ async def process_job_assignment(
                     binary_name=job.binary_name,
                     arguments=job.arguments,
                     paths=job.paths,
+                    heartbeat_interval=job.heartbeat_interval,
                 ),
             )
         )
@@ -127,6 +130,7 @@ async def job_submit(
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
     worker_repo: WorkerRepository = Depends(get_worker_repo),
+    config: CoordinatorConfig = Depends(get_config),
 ):
     """
     Submits a new job to the system.
@@ -138,6 +142,7 @@ async def job_submit(
         transports (TransportManager): Transport manager.
         job_repo (JobRepository): Job repository.
         worker_repo (WorkerRepository): Worker repository.
+        config (CoordinatorConfig): Coordinator configuration.
 
     Returns:
         JobRecord: The created job record.
@@ -160,6 +165,7 @@ async def job_submit(
         status="pending",
         transport=negotiated_transport,
         transport_metadata=transports[negotiated_transport].get_metadata(identity.client_id, job_id),
+        heartbeat_interval=config.job_heartbeat_interval,
     )
 
     await job_repo.create_job(job_record)

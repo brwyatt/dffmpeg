@@ -48,6 +48,8 @@ class TransportRecord(BaseModel):
 
 type JobStatus = Literal["pending", "assigned", "running", "completed", "failed", "canceled", "canceling"]
 
+default_job_heartbeat_interval = 5
+
 
 class Job(BaseModel):
     """
@@ -63,6 +65,7 @@ class Job(BaseModel):
         worker_id (Optional[str]): The worker assigned to the job, if any.
         created_at (datetime): Timestamp of creation.
         last_update (datetime): Timestamp of last update.
+        heartbeat_interval (int): Number of seconds between worker heartbeats
     """
 
     job_id: ULID = Field(default_factory=ULID)
@@ -74,6 +77,7 @@ class Job(BaseModel):
     worker_id: str | None = OptionalClientId
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_update: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    heartbeat_interval: int = default_job_heartbeat_interval
 
 
 class JobRequest(BaseModel):
@@ -119,6 +123,7 @@ class JobRequestPayload(BaseModel):
     binary_name: Literal["ffmpeg"]
     arguments: List[str]
     paths: List[str]
+    heartbeat_interval: int = default_job_heartbeat_interval
 
 
 class JobStatusUpdate(BaseModel):
