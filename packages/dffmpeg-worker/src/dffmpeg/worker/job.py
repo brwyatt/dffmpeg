@@ -83,10 +83,10 @@ class JobRunner:
             try:
                 jitter = random.uniform(-jitter_bound, jitter_bound)
                 await asyncio.sleep(max(1, interval + jitter))
-                
+
                 headers, payload = self.signer.sign_request(self.client_id, "POST", path)
                 await self._http_client.request("POST", path, headers=headers, content=payload)
-                
+
                 logger.debug(f"[{self.client_id}] Sent heartbeat for {self.job_id}")
             except asyncio.CancelledError:
                 break
@@ -163,7 +163,7 @@ class JobRunner:
             payload_model = JobStatusUpdate(status=status)
             path = self.coordinator_paths["status"]
             body = payload_model.model_dump(mode="json")
-            
+
             headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
             await self._http_client.request("POST", path, headers=headers, content=payload)
         except Exception as e:

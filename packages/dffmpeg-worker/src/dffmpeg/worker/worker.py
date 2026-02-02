@@ -85,7 +85,7 @@ class Worker:
             payload_model = WorkerDeregistration(worker_id=self.client_id)
             path = self.coordinator_paths["deregister"]
             body = payload_model.model_dump(mode="json")
-            
+
             headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
             await self._http_client.request("POST", path, headers=headers, content=payload)
         except Exception as e:
@@ -107,10 +107,10 @@ class Worker:
                     paths=["Movies"],  # Placeholder
                     supported_transports=self.transport_manager.transport_names,
                 )
-                
+
                 path = self.coordinator_paths["register"]
                 body = payload_model.model_dump(mode="json")
-                
+
                 headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
                 resp = await self._http_client.request("POST", path, headers=headers, content=payload)
 
@@ -120,7 +120,9 @@ class Worker:
                     metadata = data.get("transport_metadata", {})
 
                     if new_transport != self.transport_manager.current_transport_name:
-                        logger.info(f"Transport changed from {self.transport_manager.current_transport_name} to {new_transport}")
+                        logger.info(
+                            f"Transport changed from {self.transport_manager.current_transport_name} to {new_transport}"
+                        )
                         await self._update_transport(new_transport, metadata)
                 else:
                     logger.warning(f"Registration failed: {resp.status_code} - {resp.text}")
