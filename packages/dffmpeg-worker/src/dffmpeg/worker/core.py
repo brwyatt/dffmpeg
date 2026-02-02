@@ -52,6 +52,13 @@ class JobRunner:
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._http_client = httpx.AsyncClient(base_url=self.base_url)
 
+        self.coordinator_paths = {
+            "heartbeat": f"/jobs/{self.job_id}/heartbeat",
+            "accept": f"/jobs/{self.job_id}/accept",
+            "logs": f"/jobs/{self.job_id}/logs",
+            "status": f"/jobs/{self.job_id}/status",
+        }
+
     async def start(self):
         """Starts the job execution."""
         logger.info(f"[{self.client_id}] Starting job {self.job_id}")
@@ -70,34 +77,35 @@ class JobRunner:
         # Don't call _report_status("canceled") here, let the _run loop handle cleanup
         # actually, if main task is cancelled, _run's finally block or exception handler should catch it.
 
-    async def _sign_and_send(self, method: str, path: str, body: dict | None = None) -> httpx.Response:
-        """Helper to sign and send requests."""
-        headers, payload = self.signer.sign_request(self.client_id, method, path, body)
-
-        return await self._http_client.request(method, path, headers=headers, content=payload)
-
     async def _heartbeat_loop(self):
-        """Sends periodic heartbeats."""
-        path = f"/jobs/{self.job_id}/heartbeat"
+        """Sends periodic heartbeats to the coordinator."""
+        path = self.coordinator_paths["heartbeat"]
         interval = self.payload.get("heartbeat_interval", 5)
         jitter_bound = min(0.5 * interval, self.config.jitter)
         while True:
             try:
                 jitter = random.uniform(-jitter_bound, jitter_bound)
                 await asyncio.sleep(max(1, interval + jitter))
-                await self._sign_and_send("POST", path)
+
+                headers, payload = self.signer.sign_request(self.client_id, "POST", path)
+                await self._http_client.request("POST", path, headers=headers, content=payload)
+
                 logger.debug(f"[{self.client_id}] Sent heartbeat for {self.job_id}")
             except asyncio.CancelledError:
                 break
+            except httpx.RequestError as e:
+                logger.warning(f"[{self.client_id}] Heartbeat failed for {self.job_id} (network error): {e}")
             except Exception as e:
                 logger.warning(f"[{self.client_id}] Heartbeat failed for {self.job_id}: {e}")
 
     async def _run(self):
-        """Main execution flow."""
+        """Main execution flow for the job."""
         try:
             # 1. Accept the job
             logger.info(f"[{self.client_id}] Accepting job {self.job_id}")
-            await self._sign_and_send("POST", f"/jobs/{self.job_id}/accept")
+            path = self.coordinator_paths["accept"]
+            headers, payload = self.signer.sign_request(self.client_id, "POST", path)
+            await self._http_client.request("POST", path, headers=headers, content=payload)
 
             # 2. Start heartbeat
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
@@ -113,11 +121,13 @@ class JobRunner:
                 # Send some fake logs
                 log_entry = LogEntry(stream="stdout", content=f"Processing frame {i * 100}...")
                 logs_payload = JobLogsPayload(logs=[log_entry])
-                # Note: In a real app, we'd batch these
+
+                path = self.coordinator_paths["logs"]
+                body = logs_payload.model_dump(mode="json", exclude_none=True)
+
                 try:
-                    await self._sign_and_send(
-                        "POST", f"/jobs/{self.job_id}/logs", logs_payload.model_dump(mode="json", exclude_none=True)
-                    )
+                    headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
+                    await self._http_client.request("POST", path, headers=headers, content=payload)
                 except Exception as e:
                     logger.warning(f"Failed to send logs: {e}")
 
@@ -141,10 +151,19 @@ class JobRunner:
             self.cleanup_callback(self.job_id)
 
     async def _report_status(self, status: str):
-        """Reports final status to coordinator."""
+        """
+        Reports final status to coordinator.
+
+        Args:
+            status (str): The final status of the job (e.g., "completed", "failed", "canceled").
+        """
         try:
-            payload = JobStatusUpdate(status=status)
-            await self._sign_and_send("POST", f"/jobs/{self.job_id}/status", payload.model_dump(mode="json"))
+            payload_model = JobStatusUpdate(status=status)
+            path = self.coordinator_paths["status"]
+            body = payload_model.model_dump(mode="json")
+
+            headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
+            await self._http_client.request("POST", path, headers=headers, content=payload)
         except Exception as e:
             logger.error(f"[{self.client_id}] Failed to report status {status} for {self.job_id}: {e}")
 
@@ -175,6 +194,11 @@ class Worker:
         self._current_transport: Optional[BaseClientTransport] = None
         self._current_transport_name: Optional[str] = None
         self._http_client = httpx.AsyncClient(base_url=self.base_url)
+
+        self.coordinator_paths = {
+            "register": "/worker/register",
+            "deregister": "/worker/deregister",
+        }
 
         self._active_jobs: Dict[ULID, JobRunner] = {}
 
@@ -207,18 +231,16 @@ class Worker:
         # De-register
         try:
             logger.info(f"[{self.client_id}] Deregistering...")
-            payload = WorkerDeregistration(worker_id=self.client_id)
-            await self._sign_and_send("POST", "/worker/deregister", payload.model_dump(mode="json"))
+            payload_model = WorkerDeregistration(worker_id=self.client_id)
+            path = self.coordinator_paths["deregister"]
+            body = payload_model.model_dump(mode="json")
+
+            headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
+            await self._http_client.request("POST", path, headers=headers, content=payload)
         except Exception as e:
             logger.warning(f"Failed to deregister: {e}")
 
         await self._http_client.aclose()
-
-    async def _sign_and_send(self, method: str, path: str, body: dict | None = None) -> httpx.Response:
-        """Helper to sign and send requests."""
-        headers, payload = self.signer.sign_request(self.client_id, method, path, body)
-
-        return await self._http_client.request(method, path, headers=headers, content=payload)
 
     async def _registration_loop(self):
         """Periodically registers with the coordinator."""
@@ -227,7 +249,7 @@ class Worker:
             try:
                 # Prepare payload
                 # TODO: Retrieve actual capabilities and binaries dynamically
-                payload = WorkerRegistration(
+                payload_model = WorkerRegistration(
                     worker_id=self.client_id,
                     capabilities=["h264"],
                     binaries=["ffmpeg"],
@@ -235,7 +257,11 @@ class Worker:
                     supported_transports=self.transports.transport_names,
                 )
 
-                resp = await self._sign_and_send("POST", "/worker/register", payload.model_dump(mode="json"))
+                path = self.coordinator_paths["register"]
+                body = payload_model.model_dump(mode="json")
+
+                headers, payload = self.signer.sign_request(self.client_id, "POST", path, body)
+                resp = await self._http_client.request("POST", path, headers=headers, content=payload)
 
                 if resp.status_code == 200:
                     data = resp.json()
@@ -250,6 +276,8 @@ class Worker:
 
             except asyncio.CancelledError:
                 break
+            except httpx.RequestError as e:
+                logger.warning(f"Registration request failed (network error): {e}")
             except Exception as e:
                 logger.error(f"Error in registration loop: {e}")
 
@@ -258,7 +286,13 @@ class Worker:
             await asyncio.sleep(max(1, self.config.registration_interval + jitter))
 
     async def _update_transport(self, transport_name: str, metadata: dict):
-        """Switches the active transport."""
+        """
+        Switches the active transport.
+
+        Args:
+            transport_name (str): The name of the new transport to switch to.
+            metadata (dict): Metadata required for the transport connection.
+        """
         await self._stop_transport()
 
         try:
@@ -310,7 +344,12 @@ class Worker:
             logger.error(f"Transport listener error: {e}")
 
     async def _handle_job_request(self, message: JobRequestMessage):
-        """Handles a new job request."""
+        """
+        Handles a new job request.
+
+        Args:
+            message (JobRequestMessage): The job request message received.
+        """
         job_id_str = message.payload.job_id
         try:
             job_id = ULID.from_str(job_id_str)
@@ -333,7 +372,12 @@ class Worker:
         await runner.start()
 
     async def _handle_job_status(self, message: JobStatusMessage):
-        """Handles a job status update (e.g., cancel)."""
+        """
+        Handles a job status update (e.g., cancel).
+
+        Args:
+            message (JobStatusMessage): The job status message received.
+        """
         if not message.job_id:
             return
 
@@ -348,6 +392,11 @@ class Worker:
             logger.debug(f"Received status update for unknown job {job_id}")
 
     def _cleanup_job(self, job_id: ULID):
-        """Callback to remove job from active registry."""
+        """
+        Callback to remove job from active registry.
+
+        Args:
+            job_id (ULID): The ID of the job to remove.
+        """
         if job_id in self._active_jobs:
             del self._active_jobs[job_id]
