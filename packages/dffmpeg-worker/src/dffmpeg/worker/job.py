@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import random
-from typing import Dict, Optional
+from typing import Callable, Dict, Optional
 
 from ulid import ULID
 
@@ -9,6 +9,7 @@ from dffmpeg.common.http_client import AuthenticatedAsyncClient
 from dffmpeg.common.models import (
     JobLogsPayload,
     JobStatusUpdate,
+    JobStatusUpdateStatus,
     LogEntry,
 )
 from dffmpeg.worker.config import WorkerConfig
@@ -29,7 +30,7 @@ class JobRunner:
         client: AuthenticatedAsyncClient,
         job_id: ULID,
         job_payload: Dict,
-        cleanup_callback: callable,
+        cleanup_callback: Callable,
         executor: JobExecutor,
     ):
         self.config = config
@@ -141,7 +142,7 @@ class JobRunner:
             # client is owned by Worker, do not close here
             self.cleanup_callback(self.job_id)
 
-    async def _report_status(self, status: str):
+    async def _report_status(self, status: JobStatusUpdateStatus):
         """
         Reports final status to coordinator.
 

@@ -126,12 +126,15 @@ class JobRequestPayload(BaseModel):
     heartbeat_interval: int = default_job_heartbeat_interval
 
 
+type JobStatusUpdateStatus = Literal["completed", "failed", "canceled"]
+
+
 class JobStatusUpdate(BaseModel):
     """
     Payload for updating job status (completion/failure).
     """
 
-    status: Literal["completed", "failed", "canceled"]
+    status: JobStatusUpdateStatus
 
 
 class LogEntry(BaseModel):

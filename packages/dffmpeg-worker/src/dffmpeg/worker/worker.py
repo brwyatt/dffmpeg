@@ -43,7 +43,7 @@ class Worker:
         self.client = AuthenticatedAsyncClient(
             base_url=self.base_url,
             client_id=self.client_id,
-            hmac_key=config.hmac_key,
+            hmac_key=config.hmac_key or "",
             http_client_cls=http_client_cls,
         )
         self.transport_manager = WorkerTransportManager(config.transports)

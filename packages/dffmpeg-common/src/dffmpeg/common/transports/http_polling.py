@@ -40,7 +40,7 @@ class HTTPPollingClientTransport(BaseClientTransport):
             self._client = None
         logger.info("Disconnected from HTTP Polling transport")
 
-    async def listen(self) -> AsyncIterator[BaseMessage]:
+    async def listen(self) -> AsyncIterator[BaseMessage]:  # type: ignore
         if not self._client or not self.poll_path:
             raise RuntimeError("Transport not connected")
 
@@ -51,7 +51,7 @@ class HTTPPollingClientTransport(BaseClientTransport):
                 # Sign the request (path only, params are handled separately)
                 headers, _ = self.signer.sign_request(self.client_id, "GET", self.poll_path)
 
-                params = {"wait": self.poll_wait}
+                params: Dict[str, Any] = {"wait": self.poll_wait}
                 if last_message_id:
                     params["last_message_id"] = str(last_message_id)
 

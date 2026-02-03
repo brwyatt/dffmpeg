@@ -72,5 +72,5 @@ class WorkerTransportManager:
         if not self._current_transport:
             return
 
-        async for message in self._current_transport.listen():
+        async for message in self._current_transport.listen():  # type: ignore
             yield message
