@@ -98,6 +98,7 @@ async def worker_deregister(
         capabilities=[],
         binaries=[],
         paths=[],
+        registration_interval=0,
     )
 
     await worker_repo.add_or_update(record)

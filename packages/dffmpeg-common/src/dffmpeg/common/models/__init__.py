@@ -216,12 +216,14 @@ class WorkerBase(BaseModel):
         capabilities (List[str]): List of capabilities (e.g., "h264").
         binaries (List[str]): List of available binaries (e.g., "ffmpeg", "ffprobe").
         paths (List[str]): List of available paths/mounts.
+        registration_interval (int): How often the worker is expected to check in (seconds).
     """
 
     worker_id: str = ClientId
     capabilities: List[str] = Field(default_factory=list)
     binaries: List[str] = Field(default_factory=list)
     paths: List[str] = Field(default_factory=list)
+    registration_interval: int
 
 
 type WorkerStatus = Literal["online", "offline", "error"]

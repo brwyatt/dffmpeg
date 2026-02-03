@@ -114,6 +114,7 @@ class Worker:
                     binaries=list(self.config.binaries.keys()),
                     paths=list(self.config.paths.keys()),
                     supported_transports=self.transport_manager.transport_names,
+                    registration_interval=self.config.registration_interval,
                 )
 
                 path = self.coordinator_paths["register"]

@@ -88,6 +88,7 @@ def create_worker_record():
             transport=transport,
             transport_metadata=transport_metadata if transport_metadata is not None else {},
             last_seen=datetime.now(timezone.utc),
+            registration_interval=30,
         )
         await app.state.db.workers.add_or_update(record)
         return record

@@ -35,7 +35,8 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
                 binaries,
                 paths,
                 transport,
-                transport_metadata
+                transport_metadata,
+                registration_interval
             FROM {self.tablename}
             WHERE worker_id = ?
             """,
@@ -54,6 +55,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             paths=json.loads(result["paths"]),
             transport=result["transport"],
             transport_metadata=json.loads(result["transport_metadata"]),
+            registration_interval=result["registration_interval"],
         )
 
     async def get_transport(self, worker_id: str) -> Optional[TransportRecord]:
@@ -102,7 +104,8 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
                 binaries,
                 paths,
                 transport,
-                transport_metadata
+                transport_metadata,
+                registration_interval
             FROM {self.tablename}
             WHERE status = 'online'
             """
@@ -121,6 +124,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
                 paths=json.loads(result["paths"]),
                 transport=result["transport"],
                 transport_metadata=json.loads(result["transport_metadata"]),
+                registration_interval=result["registration_interval"],
             )
             for result in results
         ]
@@ -142,8 +146,9 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
                 binaries,
                 paths,
                 transport,
-                transport_metadata
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                transport_metadata,
+                registration_interval
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(worker_id) DO UPDATE SET
                 status=excluded.status,
                 last_seen=excluded.last_seen,
@@ -151,7 +156,8 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
                 binaries=excluded.binaries,
                 paths=excluded.paths,
                 transport=excluded.transport,
-                transport_metadata=excluded.transport_metadata
+                transport_metadata=excluded.transport_metadata,
+                registration_interval=excluded.registration_interval
             """,
             (
                 worker_record.worker_id,
@@ -162,6 +168,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
                 json.dumps(worker_record.paths),
                 worker_record.transport,
                 json.dumps(worker_record.transport_metadata),
+                worker_record.registration_interval,
             ),
         )
 
@@ -180,6 +187,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             paths TEXT,
             transport TEXT NOT NULL,
             transport_metadata TEXT NOT NULL,
+            registration_interval INTEGER NOT NULL,
             FOREIGN KEY(worker_id) REFERENCES auth(client_id)
         );
         """

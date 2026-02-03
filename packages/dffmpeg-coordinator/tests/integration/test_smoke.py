@@ -25,6 +25,7 @@ async def test_worker_registration_and_polling(test_app, sign_request, create_au
                 "binaries": ["ffmpeg"],
                 "paths": ["Movies"],
                 "supported_transports": ["http_polling"],
+                "registration_interval": 30,
             }
             body_str = json.dumps(body)
             headers = await sign_request(signer, worker_id, "POST", path, body_str)
@@ -71,6 +72,7 @@ async def test_client_job_submission_flow(test_app, sign_request, create_auth_id
                 "binaries": ["ffmpeg"],
                 "paths": ["Movies"],
                 "supported_transports": ["http_polling"],
+                "registration_interval": 30,
             }
             reg_body_str = json.dumps(reg_body)
             await client.post(
