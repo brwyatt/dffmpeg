@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import json
 from typing import Optional
 
@@ -109,6 +110,49 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             FROM {self.tablename}
             WHERE status = 'online'
             """
+        )
+
+        if not results:
+            return []
+
+        return [
+            WorkerRecord(
+                worker_id=result["worker_id"],
+                status=result["status"],
+                last_seen=result["last_seen"],
+                capabilities=json.loads(result["capabilities"]),
+                binaries=json.loads(result["binaries"]),
+                paths=json.loads(result["paths"]),
+                transport=result["transport"],
+                transport_metadata=json.loads(result["transport_metadata"]),
+                registration_interval=result["registration_interval"],
+            )
+            for result in results
+        ]
+
+    async def get_stale_workers(self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None) -> list[WorkerRecord]:
+        """
+        Retrieves workers that have not been seen within their specific registration interval.
+        """
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+        results = await self.get_rows(
+            f"""
+            SELECT
+                worker_id,
+                status,
+                last_seen,
+                capabilities,
+                binaries,
+                paths,
+                transport,
+                transport_metadata,
+                registration_interval
+            FROM {self.tablename}
+            WHERE status = 'online'
+            AND datetime(last_seen) < datetime(?, '-' || (registration_interval * ?) || ' seconds')
+            """,
+            (timestamp, threshold_factor,),
         )
 
         if not results:

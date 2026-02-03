@@ -25,9 +25,20 @@ class JobRepository(BaseDB):
     async def get_job(self, job_id: ULID) -> Optional[JobRecord]:
         raise NotImplementedError()
 
+    async def get_stale_running_jobs(self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+        raise NotImplementedError()
+
+    async def get_stale_assigned_jobs(self, timeout_seconds: int, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+        raise NotImplementedError()
+
     async def update_status(
-        self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None, timestamp: Optional[datetime] = None
-    ):
+        self,
+        job_id: ULID,
+        status: JobStatus,
+        worker_id: Optional[str] = None,
+        timestamp: Optional[datetime] = None,
+        previous_status: Optional[JobStatus] = None,
+    ) -> bool:
         raise NotImplementedError()
 
     async def update_heartbeat(self, job_id: ULID, timestamp: Optional[datetime] = None):

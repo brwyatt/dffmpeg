@@ -6,7 +6,7 @@ import aiosqlite
 
 from dffmpeg.coordinator.db.engines import BaseDB
 
-sql_types = str | int | datetime | None
+sql_types = str | int | float | datetime | None
 
 
 sqlite3.register_adapter(date, lambda x: x.isoformat())

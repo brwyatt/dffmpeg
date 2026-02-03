@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from dffmpeg.common.models import TransportRecord, Worker
@@ -23,4 +24,7 @@ class WorkerRepository(BaseDB):
         raise NotImplementedError()
 
     async def get_online_workers(self) -> list[WorkerRecord]:
+        raise NotImplementedError()
+
+    async def get_stale_workers(self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None) -> list[WorkerRecord]:
         raise NotImplementedError()

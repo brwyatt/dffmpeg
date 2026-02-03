@@ -94,9 +94,86 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             heartbeat_interval=result["heartbeat_interval"],
         )
 
+    async def get_stale_running_jobs(self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+        """
+        Retrieves running jobs that have missed their heartbeat window.
+        """
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+        results = await self.get_rows(
+            f"""
+            SELECT * FROM {self.tablename}
+            WHERE status = 'running'
+            AND datetime(last_update) < datetime(?, '-' || (heartbeat_interval * ?) || ' seconds')
+            """,
+            (timestamp, threshold_factor,),
+        )
+
+        if not results:
+            return []
+
+        return [
+            JobRecord(
+                job_id=ULID.from_str(result["job_id"]),
+                requester_id=result["requester_id"],
+                binary_name=result["binary_name"],
+                arguments=json.loads(result["arguments"]),
+                paths=json.loads(result["paths"]),
+                status=result["status"],
+                worker_id=result["worker_id"],
+                created_at=result["created_at"],
+                last_update=result["last_update"],
+                transport=result["callback_transport"],
+                transport_metadata=json.loads(result["callback_transport_metadata"]),
+                heartbeat_interval=result["heartbeat_interval"],
+            )
+            for result in results
+        ]
+
+    async def get_stale_assigned_jobs(self, timeout_seconds: int, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+        """
+        Retrieves assigned jobs that haven't been accepted within the timeout.
+        """
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+        results = await self.get_rows(
+            f"""
+            SELECT * FROM {self.tablename}
+            WHERE status = 'assigned'
+            AND datetime(last_update) < datetime(?, '-' || ? || ' seconds')
+            """,
+            (timestamp, timeout_seconds,),
+        )
+
+        if not results:
+            return []
+
+        return [
+            JobRecord(
+                job_id=ULID.from_str(result["job_id"]),
+                requester_id=result["requester_id"],
+                binary_name=result["binary_name"],
+                arguments=json.loads(result["arguments"]),
+                paths=json.loads(result["paths"]),
+                status=result["status"],
+                worker_id=result["worker_id"],
+                created_at=result["created_at"],
+                last_update=result["last_update"],
+                transport=result["callback_transport"],
+                transport_metadata=json.loads(result["callback_transport_metadata"]),
+                heartbeat_interval=result["heartbeat_interval"],
+            )
+            for result in results
+        ]
+
     async def update_status(
-        self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None, timestamp: Optional[datetime] = None
-    ):
+        self,
+        job_id: ULID,
+        status: JobStatus,
+        worker_id: Optional[str] = None,
+        timestamp: Optional[datetime] = None,
+        previous_status: Optional[JobStatus] = None,
+    ) -> bool:
         """
         Updates the status of a job.
 
@@ -106,28 +183,34 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             worker_id (Optional[str]): The worker ID to assign (if any). If provided,
                 it updates the worker assignment as well.
             timestamp (Optional[datetime]): Time of the status update. Defaults to current UTC time.
+            previous_status (Optional[JobStatus]): If provided, only update if current status matches.
+
+        Returns:
+            bool: True if the update was successful (rows affected > 0), False otherwise.
         """
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
 
+        updates = ["status = ?", "last_update = ?"]
+        params = [status, timestamp]
+
         if worker_id:
-            await self.execute(
-                f"""
-                UPDATE {self.tablename}
-                SET status = ?, worker_id = ?, last_update = ?
-                WHERE job_id = ?
-                """,
-                (status, worker_id, timestamp, str(job_id)),
-            )
-        else:
-            await self.execute(
-                f"""
-                UPDATE {self.tablename}
-                SET status = ?, last_update = ?
-                WHERE job_id = ?
-                """,
-                (status, timestamp, str(job_id)),
-            )
+            updates.append("worker_id = ?")
+            params.append(worker_id)
+
+        params.append(str(job_id))
+
+        where_clause = "WHERE job_id = ?"
+        if previous_status:
+            where_clause += " AND status = ?"
+            params.append(previous_status)
+
+        query = f"UPDATE {self.tablename} SET {', '.join(updates)} {where_clause}"
+
+        async with self._connect() as db:
+            cursor = await db.execute(query, tuple(params))
+            await db.commit()
+            return cursor.rowcount > 0
 
     async def update_heartbeat(self, job_id: ULID, timestamp: Optional[datetime] = None):
         """
