@@ -1,6 +1,6 @@
 import asyncio
-from datetime import datetime, timezone
 import logging
+from datetime import datetime, timezone
 from typing import Awaitable, Callable, Dict, List, Protocol
 
 from dffmpeg.common.models import LogEntry
@@ -104,12 +104,29 @@ class SubprocessJobExecutor:
                         LogEntry(stream=stream_name, content=decoded_line, timestamp=datetime.now(timezone.utc))
                     )
 
-        await asyncio.gather(
-            read_stream(process.stdout, "stdout"),
-            read_stream(process.stderr, "stderr"),
-        )
+        try:
+            await asyncio.gather(
+                read_stream(process.stdout, "stdout"),
+                read_stream(process.stderr, "stderr"),
+            )
 
-        return_code = await process.wait()
+            return_code = await process.wait()
 
-        if return_code != 0:
-            raise Exception(f"Process failed with return code {return_code}")
+            if return_code != 0:
+                raise Exception(f"Process failed with return code {return_code}")
+
+        except asyncio.CancelledError:
+            logger.warning(f"Job {self.job_id} canceled, terminating subprocess...")
+            raise
+        finally:
+            if process.returncode is None:
+                try:
+                    process.terminate()
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=5.0)
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Process {process.pid} did not terminate, killing...")
+                        process.kill()
+                        await process.wait()
+                except Exception as e:
+                    logger.error(f"Failed to ensure process termination: {e}")

@@ -51,6 +51,9 @@ class JobRunner:
             "status": f"/jobs/{self.job_id}/status",
         }
 
+        self._log_buffer: list[LogEntry] = []
+        self._last_status: Optional[str] = None
+
     async def start(self):
         """Starts the job execution."""
         logger.info(f"[{self.client_id}] Starting job {self.job_id}")
@@ -94,14 +97,19 @@ class JobRunner:
         Args:
             entry (LogEntry): The log entry to send.
         """
-        logs_payload = JobLogsPayload(logs=[entry])
+        self._log_buffer.append(entry)
+
+        # Try to flush buffer
+        logs_payload = JobLogsPayload(logs=self._log_buffer)
         path = self.coordinator_paths["logs"]
         body = logs_payload.model_dump(mode="json", exclude_none=True)
 
         try:
             await self.client.post(path, json=body)
+            # If successful, clear buffer
+            self._log_buffer.clear()
         except Exception as e:
-            logger.warning(f"Failed to send logs: {e}")
+            logger.warning(f"Failed to send logs: {e}. Buffered {len(self._log_buffer)} entries.")
 
     async def _do_work(self):
         """
@@ -149,11 +157,21 @@ class JobRunner:
         Args:
             status (str): The final status of the job (e.g., "completed", "failed", "canceled").
         """
-        try:
-            payload_model = JobStatusUpdate(status=status)
-            path = self.coordinator_paths["status"]
-            body = payload_model.model_dump(mode="json")
+        self._last_status = status
+        payload_model = JobStatusUpdate(status=status)
+        path = self.coordinator_paths["status"]
+        body = payload_model.model_dump(mode="json")
 
-            await self.client.post(path, json=body)
-        except Exception as e:
-            logger.error(f"[{self.client_id}] Failed to report status {status} for {self.job_id}: {e}")
+        for i in range(5):
+            try:
+                await self.client.post(path, json=body)
+                return
+            except Exception as e:
+                wait_time = min(30, 2**i)
+                logger.error(
+                    f"[{self.client_id}] Failed to report status {status} for {self.job_id}: {e}. "
+                    f"Retrying in {wait_time}s ({i + 1}/5)..."
+                )
+                await asyncio.sleep(wait_time)
+
+        logger.critical(f"[{self.client_id}] Could not report status {status} for {self.job_id} after retries.")

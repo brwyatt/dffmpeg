@@ -94,7 +94,9 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             heartbeat_interval=result["heartbeat_interval"],
         )
 
-    async def update_status(self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None, timestamp: Optional[datetime] = None):
+    async def update_status(
+        self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None, timestamp: Optional[datetime] = None
+    ):
         """
         Updates the status of a job.
 
