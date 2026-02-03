@@ -53,6 +53,7 @@ class JobRunner:
 
         self._log_buffer: list[LogEntry] = []
         self._last_status: Optional[str] = None
+        self._silent_cancellation: bool = False
 
     async def start(self):
         """Starts the job execution."""
@@ -62,6 +63,7 @@ class JobRunner:
     async def cancel(self):
         """Cancels the job execution."""
         logger.info(f"[{self.client_id}] Canceling job {self.job_id}")
+        self._silent_cancellation = False
         if self._main_task and not self._main_task.done():
             self._main_task.cancel()
             try:
@@ -71,6 +73,17 @@ class JobRunner:
 
         # Don't call _report_status("canceled") here, let the _run loop handle cleanup
         # actually, if main task is cancelled, _run's finally block or exception handler should catch it.
+
+    async def abort(self):
+        """Aborts the job execution without reporting status."""
+        logger.info(f"[{self.client_id}] Aborting job {self.job_id}")
+        self._silent_cancellation = True
+        if self._main_task and not self._main_task.done():
+            self._main_task.cancel()
+            try:
+                await self._main_task
+            except asyncio.CancelledError:
+                pass
 
     async def _heartbeat_loop(self):
         """Sends periodic heartbeats to the coordinator."""
@@ -137,7 +150,8 @@ class JobRunner:
 
         except asyncio.CancelledError:
             logger.info(f"[{self.client_id}] Job {self.job_id} execution canceled")
-            await self._report_status("canceled")
+            if not self._silent_cancellation:
+                await self._report_status("canceled")
             raise
 
         except Exception as e:

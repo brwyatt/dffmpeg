@@ -276,6 +276,9 @@ class Worker:
             if status == "canceling":
                 logger.info(f"Received cancellation request for {job_id}")
                 await self._active_jobs[job_id].cancel()
+            elif status in ["canceled", "failed"]:
+                logger.info(f"Job {job_id} {status} by coordinator. Aborting execution.")
+                await self._active_jobs[job_id].abort()
         else:
             logger.debug(f"Received status update for unknown job {job_id}")
 
