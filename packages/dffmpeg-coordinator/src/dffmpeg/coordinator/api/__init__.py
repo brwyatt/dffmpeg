@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
         worker_repo=app.state.db.workers,
         job_repo=app.state.db.jobs,
         transports=app.state.transports,
+        config=config.janitor,
     )
     janitor_task = asyncio.create_task(janitor.start())
 

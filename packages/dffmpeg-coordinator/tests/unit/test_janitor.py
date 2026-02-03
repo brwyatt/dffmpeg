@@ -3,6 +3,7 @@ from unittest.mock import ANY, AsyncMock, patch
 import pytest
 from ulid import ULID
 
+from dffmpeg.coordinator.config import JanitorConfig
 from dffmpeg.coordinator.db.jobs import JobRecord
 from dffmpeg.coordinator.db.workers import WorkerRecord
 from dffmpeg.coordinator.janitor import Janitor
@@ -24,8 +25,13 @@ def transports():
 
 
 @pytest.fixture
-def janitor(worker_repo, job_repo, transports):
-    return Janitor(worker_repo, job_repo, transports)
+def config():
+    return JanitorConfig()
+
+
+@pytest.fixture
+def janitor(worker_repo, job_repo, transports, config):
+    return Janitor(worker_repo, job_repo, transports, config)
 
 
 @pytest.mark.anyio

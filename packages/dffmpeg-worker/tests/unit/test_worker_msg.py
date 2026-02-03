@@ -4,13 +4,13 @@ import pytest
 from ulid import ULID
 
 from dffmpeg.common.models import JobStatusMessage, JobStatusPayload
-from dffmpeg.worker.config import WorkerConfig
+from dffmpeg.worker.config import CoordinatorConnectionConfig, WorkerConfig
 from dffmpeg.worker.worker import Worker
 
 
 @pytest.fixture
 def worker_config():
-    return WorkerConfig(client_id="test-worker", hmac_key="x" * 44, coordinator={"host": "localhost", "port": 8000})
+    return WorkerConfig(client_id="test-worker", hmac_key="x" * 44, coordinator=CoordinatorConnectionConfig(host="localhost", port=8000))
 
 
 @pytest.fixture
