@@ -1,9 +1,11 @@
 import asyncio
+from datetime import datetime, timezone
 from logging import getLogger
 
 from dffmpeg.common.models import JobStatus, JobStatusMessage, JobStatusPayload
 from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
+from dffmpeg.coordinator.scheduler import process_job_assignment
 from dffmpeg.coordinator.transports import TransportManager
 
 logger = getLogger(__name__)
@@ -27,6 +29,7 @@ class Janitor:
                 await self.reap_workers()
                 await self.reap_running_jobs()
                 await self.reap_assigned_jobs()
+                await self.reap_pending_jobs()
             except asyncio.CancelledError:
                 logger.info("Janitor service cancelled.")
                 self.running = False
@@ -58,8 +61,9 @@ class Janitor:
         """
         stale_jobs = await self.job_repo.get_stale_running_jobs()
         for job in stale_jobs:
+            timestamp = datetime.now(timezone.utc)
             success = await self.job_repo.update_status(
-                job.job_id, "failed", previous_status="running"
+                job.job_id, "failed", previous_status="running", timestamp=timestamp,
             )
             if success:
                 logger.warning(f"Job {job.job_id} timed out. Marked as failed.")
@@ -68,7 +72,7 @@ class Janitor:
                 msg = JobStatusMessage(
                     recipient_id=job.requester_id,
                     job_id=job.job_id,
-                    payload=JobStatusPayload(status="failed"),
+                    payload=JobStatusPayload(status="failed", last_update=timestamp),
                 )
                 await self.transports.send_message(msg)
                 
@@ -77,7 +81,7 @@ class Janitor:
                     msg_worker = JobStatusMessage(
                         recipient_id=job.worker_id,
                         job_id=job.job_id,
-                        payload=JobStatusPayload(status="failed"),
+                        payload=JobStatusPayload(status="failed", last_update=timestamp),
                     )
                     await self.transports.send_message(msg_worker)
 
@@ -89,8 +93,9 @@ class Janitor:
         assignment_timeout = 30 
         stale_jobs = await self.job_repo.get_stale_assigned_jobs(timeout_seconds=assignment_timeout)
         for job in stale_jobs:
+            timestamp = datetime.now(timezone.utc)
             success = await self.job_repo.update_status(
-                job.job_id, "pending", previous_status="assigned"
+                job.job_id, "pending", previous_status="assigned", timestamp=timestamp,
             )
             if success:
                 logger.warning(f"Job {job.job_id} assignment timed out. Re-queueing as pending.")
@@ -100,10 +105,42 @@ class Janitor:
                     msg = JobStatusMessage(
                         recipient_id=job.worker_id,
                         job_id=job.job_id,
-                        payload=JobStatusPayload(status="canceled"), # Or canceling? "canceled" is terminal.
+                        payload=JobStatusPayload(status="canceled", last_update=timestamp), # Or canceling? "canceled" is terminal.
                     )
-                    # Use 'canceling' or 'canceled'? 
                     # If we set job status to 'pending', effectively we canceled the assignment.
-                    # The worker might still try to accept it, but it will fail because status is pending.
-                    # Letting the worker know it's canceled is good.
+                    # Letting the worker know it's canceled is good, just in case.
                     await self.transports.send_message(msg)
+
+    async def reap_pending_jobs(self):
+        """
+        Manages pending jobs:
+        1. Retries assignment for jobs aged 5s-30s.
+        2. Fails jobs aged > 30s.
+        """
+        # Retry Phase (5s to 30s)
+        retry_jobs = await self.job_repo.get_stale_pending_jobs(min_seconds=5, max_seconds=30)
+        for job in retry_jobs:
+            await process_job_assignment(
+                job.job_id,
+                self.job_repo,
+                self.worker_repo,
+                self.transports
+            )
+
+        # Fail Phase (> 30s)
+        fail_jobs = await self.job_repo.get_stale_pending_jobs(min_seconds=30)
+        for job in fail_jobs:
+            timestamp = datetime.now(timezone.utc)
+            success = await self.job_repo.update_status(
+                job.job_id, "failed", previous_status="pending", timestamp=timestamp,
+            )
+            if success:
+                logger.warning(f"Job {job.job_id} pending timeout. Marked as failed.")
+
+                # Notify Client
+                msg = JobStatusMessage(
+                    recipient_id=job.requester_id,
+                    job_id=job.job_id,
+                    payload=JobStatusPayload(status="failed", last_update=timestamp),
+                )
+                await self.transports.send_message(msg)

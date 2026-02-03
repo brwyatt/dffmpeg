@@ -166,6 +166,49 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             for result in results
         ]
 
+    async def get_stale_pending_jobs(self, min_seconds: int, max_seconds: Optional[int] = None, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+        """
+        Retrieves pending jobs within a specific age window.
+        """
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+
+        where_clauses = ["status = 'pending'", "datetime(last_update) < datetime(?, '-' || ? || ' seconds')"]
+        params = [timestamp, min_seconds]
+
+        if max_seconds is not None:
+            where_clauses.append("datetime(last_update) > datetime(?, '-' || ? || ' seconds')")
+            params.extend([timestamp, max_seconds])
+
+        results = await self.get_rows(
+            f"""
+            SELECT * FROM {self.tablename}
+            WHERE {' AND '.join(where_clauses)}
+            """,
+            tuple(params),
+        )
+
+        if not results:
+            return []
+
+        return [
+            JobRecord(
+                job_id=ULID.from_str(result["job_id"]),
+                requester_id=result["requester_id"],
+                binary_name=result["binary_name"],
+                arguments=json.loads(result["arguments"]),
+                paths=json.loads(result["paths"]),
+                status=result["status"],
+                worker_id=result["worker_id"],
+                created_at=result["created_at"],
+                last_update=result["last_update"],
+                transport=result["callback_transport"],
+                transport_metadata=json.loads(result["callback_transport_metadata"]),
+                heartbeat_interval=result["heartbeat_interval"],
+            )
+            for result in results
+        ]
+
     async def update_status(
         self,
         job_id: ULID,

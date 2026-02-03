@@ -95,6 +95,57 @@ async def test_get_stale_assigned_jobs(job_repo):
     assert stale[0].job_id == job1.job_id
 
 @pytest.mark.anyio
+async def test_get_stale_pending_jobs(job_repo):
+    now = datetime.now(timezone.utc)
+
+    # Job 1: Pending, Retry window (10s old)
+    job1 = JobRecord(
+        job_id=ULID(),
+        requester_id="c1",
+        binary_name="ffmpeg",
+        status="pending",
+        last_update=now - timedelta(seconds=10),
+        transport="http",
+        transport_metadata={}
+    )
+
+    # Job 2: Pending, Fail window (40s old)
+    job2 = JobRecord(
+        job_id=ULID(),
+        requester_id="c1",
+        binary_name="ffmpeg",
+        status="pending",
+        last_update=now - timedelta(seconds=40),
+        transport="http",
+        transport_metadata={}
+    )
+
+    # Job 3: Pending, Too young (2s old)
+    job3 = JobRecord(
+        job_id=ULID(),
+        requester_id="c1",
+        binary_name="ffmpeg",
+        status="pending",
+        last_update=now - timedelta(seconds=2),
+        transport="http",
+        transport_metadata={}
+    )
+
+    await job_repo.create_job(job1)
+    await job_repo.create_job(job2)
+    await job_repo.create_job(job3)
+
+    # Test retry window (5s to 30s)
+    retry_jobs = await job_repo.get_stale_pending_jobs(min_seconds=5, max_seconds=30, timestamp=now)
+    assert len(retry_jobs) == 1
+    assert retry_jobs[0].job_id == job1.job_id
+
+    # Test fail window (> 30s)
+    fail_jobs = await job_repo.get_stale_pending_jobs(min_seconds=30, timestamp=now)
+    assert len(fail_jobs) == 1
+    assert fail_jobs[0].job_id == job2.job_id
+
+@pytest.mark.anyio
 async def test_update_status_conditional(job_repo):
     job = JobRecord(
         job_id=ULID(),

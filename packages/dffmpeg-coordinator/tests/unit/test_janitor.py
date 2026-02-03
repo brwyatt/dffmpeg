@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, MagicMock, call
+from unittest.mock import AsyncMock, MagicMock, call, patch
 from dffmpeg.coordinator.janitor import Janitor
 from dffmpeg.coordinator.db.workers import WorkerRecord
 from dffmpeg.coordinator.db.jobs import JobRecord
@@ -104,3 +104,49 @@ async def test_reap_assigned_jobs(janitor, job_repo, transports):
     
     # Check notifications (only worker)
     assert transports.send_message.call_count == 1
+
+@pytest.mark.anyio
+async def test_reap_pending_jobs(janitor, job_repo, transports):
+    with patch("dffmpeg.coordinator.janitor.process_job_assignment", new_callable=AsyncMock) as mock_process:
+        # Job 1: Retry (10s old)
+        job1 = JobRecord(
+            job_id=ULID(),
+            requester_id="c1",
+            binary_name="ffmpeg",
+            status="pending",
+            transport="http",
+            transport_metadata={}
+        )
+
+        # Job 2: Fail (40s old)
+        job2 = JobRecord(
+            job_id=ULID(),
+            requester_id="c1",
+            binary_name="ffmpeg",
+            status="pending",
+            transport="http",
+            transport_metadata={}
+        )
+
+        # Setup job repo returns
+        # get_stale_pending_jobs called twice:
+        # 1. min=5, max=30 -> returns [job1]
+        # 2. min=30 -> returns [job2]
+        job_repo.get_stale_pending_jobs.side_effect = [[job1], [job2]]
+
+        job_repo.update_status.return_value = True
+
+        await janitor.reap_pending_jobs()
+
+        # Verify process_job_assignment called for job1
+        mock_process.assert_called_once()
+        assert mock_process.call_args[0][0] == job1.job_id
+
+        # Verify fail logic for job2
+        job_repo.update_status.assert_called_once_with(
+            job2.job_id, "failed", previous_status="pending"
+        )
+
+        # Verify notification for job2
+        assert transports.send_message.call_count == 1
+        assert transports.send_message.call_args[0][0].job_id == job2.job_id
