@@ -89,8 +89,10 @@ async def process_job_assignment(
 
         selected_worker = candidates[0]
 
+        timestamp = datetime.now(timezone.utc)
+
         # Assign
-        await job_repo.update_status(job_id, "assigned", selected_worker.worker_id)
+        await job_repo.update_status(job_id, "assigned", selected_worker.worker_id, timestamp=timestamp)
 
         # Notify Worker
         await transports.send_message(
@@ -112,7 +114,7 @@ async def process_job_assignment(
             JobStatusMessage(
                 recipient_id=job.requester_id,
                 job_id=job_id,
-                payload=JobStatusPayload(status="assigned"),
+                payload=JobStatusPayload(status="assigned", last_update=timestamp),
             )
         )
 
@@ -216,14 +218,16 @@ async def job_accept(
     if job.worker_id != identity.client_id:
         raise HTTPException(status_code=403, detail="Not assigned to this job")
 
-    await job_repo.update_status(j_id, "running", identity.client_id)
+    timestamp = datetime.now(timezone.utc)
+
+    await job_repo.update_status(j_id, "running", identity.client_id, timestamp=timestamp)
 
     await transports.send_message(
         JobStatusMessage(
             recipient_id=job.requester_id,
             job_id=j_id,
             sender_id=identity.client_id,
-            payload=JobStatusPayload(status="running"),
+            payload=JobStatusPayload(status="running", last_update=timestamp),
         )
     )
 
@@ -268,9 +272,11 @@ async def job_cancel(
     if job.status in ["completed", "failed", "canceled"]:
         return {"status": "ok", "detail": "Job already finished"}
 
+    timestamp = datetime.now(timezone.utc)
+
     if job.worker_id is not None:
         # Update status to canceling
-        await job_repo.update_status(j_id, "canceling", job.worker_id)
+        await job_repo.update_status(j_id, "canceling", job.worker_id, timestamp=timestamp)
 
         # Tell the client
         await transports.send_message(
@@ -278,7 +284,7 @@ async def job_cancel(
                 recipient_id=job.requester_id,
                 job_id=j_id,
                 sender_id=identity.client_id,
-                payload=JobStatusPayload(status="canceling"),
+                payload=JobStatusPayload(status="canceling", last_update=timestamp),
             )
         )
 
@@ -288,12 +294,12 @@ async def job_cancel(
                 recipient_id=job.worker_id,
                 job_id=j_id,
                 sender_id=identity.client_id,
-                payload=JobStatusPayload(status="canceling"),
+                payload=JobStatusPayload(status="canceling", last_update=timestamp),
             )
         )
     else:
         # Update status to canceled
-        await job_repo.update_status(j_id, "canceled")
+        await job_repo.update_status(j_id, "canceled", timestamp=timestamp)
 
         # Tell the client
         await transports.send_message(
@@ -301,7 +307,7 @@ async def job_cancel(
                 recipient_id=job.requester_id,
                 job_id=j_id,
                 sender_id=identity.client_id,
-                payload=JobStatusPayload(status="canceled"),
+                payload=JobStatusPayload(status="canceled", last_update=timestamp),
             )
         )
 
@@ -380,16 +386,18 @@ async def job_status_update(
     if job.worker_id != identity.client_id:
         raise HTTPException(status_code=403, detail="Not assigned to this job")
 
+    timestamp = datetime.now(timezone.utc)
+
     # Update status
     # We pass worker_id to ensure we are the owner (already checked above, but good for consistency)
-    await job_repo.update_status(j_id, payload.status, identity.client_id)
+    await job_repo.update_status(j_id, payload.status, identity.client_id, timestamp=timestamp)
 
     await transports.send_message(
         JobStatusMessage(
             recipient_id=job.requester_id,
             job_id=j_id,
             sender_id=identity.client_id,
-            payload=JobStatusPayload(status=payload.status),
+            payload=JobStatusPayload(status=payload.status, last_update=timestamp),
         )
     )
 
@@ -430,14 +438,16 @@ async def job_heartbeat(
     if job.worker_id != identity.client_id:
         raise HTTPException(status_code=403, detail="Not assigned to this job")
 
-    await job_repo.update_heartbeat(j_id)
+    timestamp = datetime.now(timezone.utc)
+
+    await job_repo.update_heartbeat(j_id, timestamp=timestamp)
 
     await transports.send_message(
         JobStatusMessage(
             recipient_id=job.requester_id,
             job_id=j_id,
             sender_id=identity.client_id,
-            payload=JobStatusPayload(status="running", last_update=datetime.now(timezone.utc)),
+            payload=JobStatusPayload(status="running", last_update=timestamp),
         )
     )
 

@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from ulid import ULID
@@ -24,10 +25,10 @@ class JobRepository(BaseDB):
     async def get_job(self, job_id: ULID) -> Optional[JobRecord]:
         raise NotImplementedError()
 
-    async def update_status(self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None):
+    async def update_status(self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None, timestamp: Optional[datetime] = None):
         raise NotImplementedError()
 
-    async def update_heartbeat(self, job_id: ULID):
+    async def update_heartbeat(self, job_id: ULID, timestamp: Optional[datetime] = None):
         raise NotImplementedError()
 
     async def get_transport(self, job_id: ULID) -> Optional[TransportRecord]:

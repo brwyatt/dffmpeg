@@ -94,7 +94,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             heartbeat_interval=result["heartbeat_interval"],
         )
 
-    async def update_status(self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None):
+    async def update_status(self, job_id: ULID, status: JobStatus, worker_id: Optional[str] = None, timestamp: Optional[datetime] = None):
         """
         Updates the status of a job.
 
@@ -103,7 +103,11 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             status (JobStatus): The new status.
             worker_id (Optional[str]): The worker ID to assign (if any). If provided,
                 it updates the worker assignment as well.
+            timestamp (Optional[datetime]): Time of the status update. Defaults to current UTC time.
         """
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+
         if worker_id:
             await self.execute(
                 f"""
@@ -111,7 +115,7 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
                 SET status = ?, worker_id = ?, last_update = ?
                 WHERE job_id = ?
                 """,
-                (status, worker_id, datetime.now(timezone.utc), str(job_id)),
+                (status, worker_id, timestamp, str(job_id)),
             )
         else:
             await self.execute(
@@ -120,24 +124,28 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
                 SET status = ?, last_update = ?
                 WHERE job_id = ?
                 """,
-                (status, datetime.now(timezone.utc), str(job_id)),
+                (status, timestamp, str(job_id)),
             )
 
-    async def update_heartbeat(self, job_id: ULID):
+    async def update_heartbeat(self, job_id: ULID, timestamp: Optional[datetime] = None):
         """
         Updates the last_update timestamp of a job to now.
         Used to indicate the job/worker is still active.
 
         Args:
             job_id (ULID): The ID of the job.
+            timestamp (Optional[datetime]): Time of the heartbeat. Defaults to current UTC time.
         """
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+
         await self.execute(
             f"""
             UPDATE {self.tablename}
             SET last_update = ?
             WHERE job_id = ?
             """,
-            (datetime.now(timezone.utc), str(job_id)),
+            (timestamp, str(job_id)),
         )
 
     async def get_transport(self, job_id: ULID) -> Optional[TransportRecord]:
