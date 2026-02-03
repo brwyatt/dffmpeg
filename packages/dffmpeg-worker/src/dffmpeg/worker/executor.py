@@ -101,7 +101,11 @@ class SubprocessJobExecutor:
                 decoded_line = line.decode()
                 if decoded_line:
                     await log_callback(
-                        LogEntry(stream=stream_name, content=decoded_line, timestamp=datetime.now(timezone.utc))
+                        LogEntry(
+                            stream=stream_name,
+                            content=decoded_line.rstrip("\r\n"),
+                            timestamp=datetime.now(timezone.utc),
+                        )
                     )
 
         try:
