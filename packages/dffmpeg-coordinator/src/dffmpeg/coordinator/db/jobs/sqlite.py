@@ -94,7 +94,9 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             heartbeat_interval=result["heartbeat_interval"],
         )
 
-    async def get_stale_running_jobs(self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+    async def get_stale_running_jobs(
+        self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None
+    ) -> list[JobRecord]:
         """
         Retrieves running jobs that have missed their heartbeat window.
         """
@@ -106,7 +108,10 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             WHERE status = 'running'
             AND datetime(last_update) < datetime(?, '-' || (heartbeat_interval * ?) || ' seconds')
             """,
-            (timestamp, threshold_factor,),
+            (
+                timestamp,
+                threshold_factor,
+            ),
         )
 
         if not results:
@@ -130,7 +135,9 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             for result in results
         ]
 
-    async def get_stale_assigned_jobs(self, timeout_seconds: int, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+    async def get_stale_assigned_jobs(
+        self, timeout_seconds: int, timestamp: Optional[datetime] = None
+    ) -> list[JobRecord]:
         """
         Retrieves assigned jobs that haven't been accepted within the timeout.
         """
@@ -142,7 +149,10 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             WHERE status = 'assigned'
             AND datetime(last_update) < datetime(?, '-' || ? || ' seconds')
             """,
-            (timestamp, timeout_seconds,),
+            (
+                timestamp,
+                timeout_seconds,
+            ),
         )
 
         if not results:
@@ -166,7 +176,9 @@ class SQLiteJobRepository(JobRepository, SQLiteDB):
             for result in results
         ]
 
-    async def get_stale_pending_jobs(self, min_seconds: int, max_seconds: Optional[int] = None, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+    async def get_stale_pending_jobs(
+        self, min_seconds: int, max_seconds: Optional[int] = None, timestamp: Optional[datetime] = None
+    ) -> list[JobRecord]:
         """
         Retrieves pending jobs within a specific age window.
         """

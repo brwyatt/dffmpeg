@@ -1,4 +1,3 @@
-import random
 from datetime import datetime, timezone
 from logging import getLogger
 from typing import List
@@ -12,8 +11,6 @@ from dffmpeg.common.models import (
     JobLogsPayload,
     JobLogsResponse,
     JobRequest,
-    JobRequestMessage,
-    JobRequestPayload,
     JobStatusMessage,
     JobStatusPayload,
     JobStatusUpdate,

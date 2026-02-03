@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import json
+from datetime import datetime, timezone
 from typing import Optional
 
 from dffmpeg.common.models import TransportRecord
@@ -130,7 +130,9 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             for result in results
         ]
 
-    async def get_stale_workers(self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None) -> list[WorkerRecord]:
+    async def get_stale_workers(
+        self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None
+    ) -> list[WorkerRecord]:
         """
         Retrieves workers that have not been seen within their specific registration interval.
         """
@@ -152,7 +154,10 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
             WHERE status = 'online'
             AND datetime(last_seen) < datetime(?, '-' || (registration_interval * ?) || ' seconds')
             """,
-            (timestamp, threshold_factor,),
+            (
+                timestamp,
+                threshold_factor,
+            ),
         )
 
         if not results:

@@ -1,8 +1,11 @@
-import pytest
 from datetime import datetime, timedelta, timezone
+
+import pytest
 from ulid import ULID
-from dffmpeg.coordinator.db.jobs.sqlite import SQLiteJobRepository
+
 from dffmpeg.coordinator.db.jobs import JobRecord
+from dffmpeg.coordinator.db.jobs.sqlite import SQLiteJobRepository
+
 
 @pytest.fixture
 async def job_repo(tmp_path):
@@ -11,10 +14,11 @@ async def job_repo(tmp_path):
     await repo.setup()
     return repo
 
+
 @pytest.mark.anyio
 async def test_get_stale_running_jobs(job_repo):
     now = datetime.now(timezone.utc)
-    
+
     # Job 1: Running, Stale (last_update 20s ago, interval 10s, threshold 1.5 -> cutoff 15s)
     job1 = JobRecord(
         job_id=ULID(),
@@ -24,9 +28,9 @@ async def test_get_stale_running_jobs(job_repo):
         last_update=now - timedelta(seconds=20),
         heartbeat_interval=10,
         transport="http",
-        transport_metadata={}
+        transport_metadata={},
     )
-    
+
     # Job 2: Running, Active (last_update 10s ago)
     job2 = JobRecord(
         job_id=ULID(),
@@ -36,7 +40,7 @@ async def test_get_stale_running_jobs(job_repo):
         last_update=now - timedelta(seconds=10),
         heartbeat_interval=10,
         transport="http",
-        transport_metadata={}
+        transport_metadata={},
     )
 
     # Job 3: Pending, Old (should be ignored)
@@ -48,21 +52,22 @@ async def test_get_stale_running_jobs(job_repo):
         last_update=now - timedelta(seconds=100),
         heartbeat_interval=10,
         transport="http",
-        transport_metadata={}
+        transport_metadata={},
     )
-    
+
     await job_repo.create_job(job1)
     await job_repo.create_job(job2)
     await job_repo.create_job(job3)
-    
+
     stale = await job_repo.get_stale_running_jobs(threshold_factor=1.5, timestamp=now)
     assert len(stale) == 1
     assert stale[0].job_id == job1.job_id
 
+
 @pytest.mark.anyio
 async def test_get_stale_assigned_jobs(job_repo):
     now = datetime.now(timezone.utc)
-    
+
     # Job 1: Assigned, Stale (last_update 40s ago, timeout 30s)
     job1 = JobRecord(
         job_id=ULID(),
@@ -72,9 +77,9 @@ async def test_get_stale_assigned_jobs(job_repo):
         last_update=now - timedelta(seconds=40),
         heartbeat_interval=10,
         transport="http",
-        transport_metadata={}
+        transport_metadata={},
     )
-    
+
     # Job 2: Assigned, Active (last_update 10s ago)
     job2 = JobRecord(
         job_id=ULID(),
@@ -84,15 +89,16 @@ async def test_get_stale_assigned_jobs(job_repo):
         last_update=now - timedelta(seconds=10),
         heartbeat_interval=10,
         transport="http",
-        transport_metadata={}
+        transport_metadata={},
     )
-    
+
     await job_repo.create_job(job1)
     await job_repo.create_job(job2)
-    
+
     stale = await job_repo.get_stale_assigned_jobs(timeout_seconds=30, timestamp=now)
     assert len(stale) == 1
     assert stale[0].job_id == job1.job_id
+
 
 @pytest.mark.anyio
 async def test_get_stale_pending_jobs(job_repo):
@@ -106,7 +112,7 @@ async def test_get_stale_pending_jobs(job_repo):
         status="pending",
         last_update=now - timedelta(seconds=10),
         transport="http",
-        transport_metadata={}
+        transport_metadata={},
     )
 
     # Job 2: Pending, Fail window (40s old)
@@ -117,7 +123,7 @@ async def test_get_stale_pending_jobs(job_repo):
         status="pending",
         last_update=now - timedelta(seconds=40),
         transport="http",
-        transport_metadata={}
+        transport_metadata={},
     )
 
     # Job 3: Pending, Too young (2s old)
@@ -128,7 +134,7 @@ async def test_get_stale_pending_jobs(job_repo):
         status="pending",
         last_update=now - timedelta(seconds=2),
         transport="http",
-        transport_metadata={}
+        transport_metadata={},
     )
 
     await job_repo.create_job(job1)
@@ -145,6 +151,7 @@ async def test_get_stale_pending_jobs(job_repo):
     assert len(fail_jobs) == 1
     assert fail_jobs[0].job_id == job2.job_id
 
+
 @pytest.mark.anyio
 async def test_update_status_conditional(job_repo):
     job = JobRecord(
@@ -153,20 +160,20 @@ async def test_update_status_conditional(job_repo):
         binary_name="ffmpeg",
         status="running",
         transport="http",
-        transport_metadata={}
+        transport_metadata={},
     )
     await job_repo.create_job(job)
-    
+
     # 1. Successful update (previous matches)
     success = await job_repo.update_status(job.job_id, "failed", previous_status="running")
     assert success is True
-    
+
     updated = await job_repo.get_job(job.job_id)
     assert updated.status == "failed"
-    
+
     # 2. Failed update (previous mismatch)
     success = await job_repo.update_status(job.job_id, "running", previous_status="running")
     assert success is False
-    
+
     updated = await job_repo.get_job(job.job_id)
-    assert updated.status == "failed" # Unchanged
+    assert updated.status == "failed"  # Unchanged

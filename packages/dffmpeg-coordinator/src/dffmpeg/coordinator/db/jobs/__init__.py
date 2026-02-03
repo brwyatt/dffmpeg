@@ -25,13 +25,19 @@ class JobRepository(BaseDB):
     async def get_job(self, job_id: ULID) -> Optional[JobRecord]:
         raise NotImplementedError()
 
-    async def get_stale_running_jobs(self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+    async def get_stale_running_jobs(
+        self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None
+    ) -> list[JobRecord]:
         raise NotImplementedError()
 
-    async def get_stale_assigned_jobs(self, timeout_seconds: int, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+    async def get_stale_assigned_jobs(
+        self, timeout_seconds: int, timestamp: Optional[datetime] = None
+    ) -> list[JobRecord]:
         raise NotImplementedError()
 
-    async def get_stale_pending_jobs(self, min_seconds: int, max_seconds: Optional[int] = None, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+    async def get_stale_pending_jobs(
+        self, min_seconds: int, max_seconds: Optional[int] = None, timestamp: Optional[datetime] = None
+    ) -> list[JobRecord]:
         raise NotImplementedError()
 
     async def update_status(

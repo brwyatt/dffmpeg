@@ -1,4 +1,4 @@
-from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
+from unittest.mock import ANY, AsyncMock, patch
 
 import pytest
 from ulid import ULID
