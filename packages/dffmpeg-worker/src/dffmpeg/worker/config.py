@@ -29,7 +29,7 @@ class WorkerConfig(BaseModel):
     paths: dict[str, str] = Field(default_factory=dict)
 
 
-def load_config(path: Path | str = "./config.yml") -> WorkerConfig:
+def load_config(path: Path | str = "./config.yaml") -> WorkerConfig:
     path = Path(path)
     if not path.exists():
         logger.warning(f"Could not find config file at {str(path)}")

@@ -28,7 +28,7 @@ class CoordinatorConfig(BaseModel):
     job_heartbeat_interval: int = default_job_heartbeat_interval
 
 
-def load_config(path: Path | str = "./config.yml") -> CoordinatorConfig:
+def load_config(path: Path | str = "./config.yaml") -> CoordinatorConfig:
     path = Path(path)
     if not path.exists():
         logger.warning(f"Could not find config file at {str(path)}")
