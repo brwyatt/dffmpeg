@@ -43,6 +43,9 @@ class AuthenticatedAsyncClient:
         request_headers = kwargs.pop("headers", {})
         request_headers.update(headers)
 
+        if json is not None:
+            request_headers["Content-Type"] = "application/json"
+
         return await self._client.request(method, url, headers=request_headers, content=content, **kwargs)
 
     async def get(self, url: str, **kwargs) -> httpx.Response:

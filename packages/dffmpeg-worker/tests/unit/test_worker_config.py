@@ -78,3 +78,19 @@ def test_load_config_hmac_file_not_found(tmp_path, caplog):
         load_config(config_file)
 
     assert "HMAC key file not found" in caplog.text
+
+
+def test_load_config_with_paths_and_binaries(tmp_path):
+    config_data = {
+        "client_id": "worker-1",
+        "hmac_key": "secret",
+        "binaries": {"ffmpeg": "/usr/bin/ffmpeg"},
+        "paths": {"Movies": "/mnt/media/movies"},
+    }
+    config_file = tmp_path / "config.yml"
+    with open(config_file, "w") as f:
+        yaml.dump(config_data, f)
+
+    config = load_config(config_file)
+    assert config.binaries == {"ffmpeg": "/usr/bin/ffmpeg"}
+    assert config.paths == {"Movies": "/mnt/media/movies"}

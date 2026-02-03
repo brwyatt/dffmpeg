@@ -10,11 +10,13 @@ from dffmpeg.common.http_client import AuthenticatedAsyncClient
 from dffmpeg.common.models import (
     JobRequestMessage,
     JobStatusMessage,
+    JobStatusUpdate,
+    JobStatusUpdateStatus,
     WorkerDeregistration,
     WorkerRegistration,
 )
 from dffmpeg.worker.config import WorkerConfig
-from dffmpeg.worker.executor import SimulatedJobExecutor
+from dffmpeg.worker.executor import SubprocessJobExecutor
 from dffmpeg.worker.job import JobRunner
 from dffmpeg.worker.transport import WorkerTransportManager
 
@@ -106,12 +108,11 @@ class Worker:
         while self._running:
             try:
                 # Prepare payload
-                # TODO: Retrieve actual capabilities and binaries dynamically
                 payload_model = WorkerRegistration(
                     worker_id=self.client_id,
-                    capabilities=["h264"],
-                    binaries=["ffmpeg"],
-                    paths=["Movies"],  # Placeholder
+                    capabilities=[],  # TODO: Retrieve actual capabilities dynamically
+                    binaries=list(self.config.binaries.keys()),
+                    paths=list(self.config.paths.keys()),
                     supported_transports=self.transport_manager.transport_names,
                 )
 
@@ -205,16 +206,57 @@ class Worker:
             logger.warning(f"Job {job_id} already exists, ignoring duplicate request.")
             return
 
-        runner = JobRunner(
-            config=self.config,
-            client=self.client,
-            job_id=job_id,
-            job_payload=message.payload.model_dump(),
-            cleanup_callback=self._cleanup_job,
-            executor=SimulatedJobExecutor(str(job_id)),
-        )
-        self._active_jobs[job_id] = runner
-        await runner.start()
+        # Validation
+        binary_name = message.payload.binary_name
+        if binary_name not in self.config.binaries:
+            logger.error(f"Job {job_id} requires binary '{binary_name}' which is not configured.")
+            await self._report_job_failure(job_id, "failed")
+            return
+
+        for path_var in message.payload.paths:
+            if path_var not in self.config.paths:
+                logger.error(f"Job {job_id} requires path variable '{path_var}' which is not configured.")
+                await self._report_job_failure(job_id, "failed")
+                return
+
+        try:
+            # Prepare Executor
+            binary_path = self.config.binaries[binary_name]
+
+            # Filter applicable paths (optimization, though config.paths is likely small enough)
+            path_map = {k: v for k, v in self.config.paths.items() if k in message.payload.paths}
+
+            executor = SubprocessJobExecutor(
+                job_id=str(job_id),
+                binary_path=binary_path,
+                arguments=message.payload.arguments,
+                path_map=path_map,
+            )
+
+            runner = JobRunner(
+                config=self.config,
+                client=self.client,
+                job_id=job_id,
+                job_payload=message.payload.model_dump(),
+                cleanup_callback=self._cleanup_job,
+                executor=executor,
+            )
+            self._active_jobs[job_id] = runner
+            await runner.start()
+
+        except Exception as e:
+            logger.error(f"Failed to initialize job {job_id}: {e}")
+            await self._report_job_failure(job_id, "failed")
+
+    async def _report_job_failure(self, job_id: ULID, status: JobStatusUpdateStatus):
+        """Helper to report failure for a job that couldn't be started."""
+        try:
+            payload_model = JobStatusUpdate(status=status)
+            path = f"/jobs/{job_id}/status"
+            body = payload_model.model_dump(mode="json")
+            await self.client.post(path, json=body)
+        except Exception as e:
+            logger.error(f"Failed to report failure for job {job_id}: {e}")
 
     async def _handle_job_status(self, message: JobStatusMessage):
         """

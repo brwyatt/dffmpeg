@@ -25,6 +25,8 @@ class WorkerConfig(BaseModel):
     jitter: float = 0.5
     coordinator: CoordinatorConnectionConfig = Field(default_factory=CoordinatorConnectionConfig)
     transports: ClientTransportConfig = Field(default_factory=ClientTransportConfig)
+    binaries: dict[str, str] = Field(default_factory=dict)
+    paths: dict[str, str] = Field(default_factory=dict)
 
 
 def load_config(path: Path | str = "./config.yml") -> WorkerConfig:
