@@ -16,7 +16,6 @@ class PingRequest(BaseModel):
         message: A message to be echoed back.
     """
 
-    client_id: str
     message: str
 
 
@@ -44,7 +43,6 @@ async def ping(payload: PingRequest, identity: AuthenticatedIdentity = Depends(o
         dict: A dictionary containing the status, echoed message, and identity details.
     """
     return {
-        "status": "received",
         "echo": payload.message,
         "identity": identity,
     }

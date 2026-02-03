@@ -4,7 +4,7 @@ from typing import Optional
 
 from fastapi import FastAPI
 
-from dffmpeg.coordinator.api.routes import health, job, test, worker
+from dffmpeg.coordinator.api.routes import health, job, worker
 from dffmpeg.coordinator.config import CoordinatorConfig, load_config
 from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.transports import TransportManager
@@ -42,6 +42,5 @@ def create_app(config: Optional[CoordinatorConfig] = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(worker.router)
     app.include_router(job.router)
-    app.include_router(test.router)
 
     return app
