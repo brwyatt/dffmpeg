@@ -32,3 +32,10 @@ The coordinator is a FastAPI application.
 ```bash
 uvicorn dffmpeg.coordinator.api.main:app --reload
 ```
+
+## API Documentation
+
+FastAPI automatically generates interactive API documentation. Once the server is running, you can access:
+
+*   **Swagger UI:** `http://localhost:8000/docs`
+*   **ReDoc:** `http://localhost:8000/redoc`
