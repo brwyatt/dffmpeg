@@ -60,9 +60,7 @@ class Janitor:
         """
         Finds and marks stale workers as offline.
         """
-        stale_workers = await self.worker_repo.get_stale_workers(
-            threshold_factor=self.config.worker_threshold_factor
-        )
+        stale_workers = await self.worker_repo.get_stale_workers(threshold_factor=self.config.worker_threshold_factor)
         for worker in stale_workers:
             logger.warning(f"Worker {worker.worker_id} is stale. Marking as offline.")
             worker.status = "offline"
@@ -107,9 +105,7 @@ class Janitor:
         """
         Finds assigned jobs that have not been accepted in time and re-queues them.
         """
-        stale_jobs = await self.job_repo.get_stale_assigned_jobs(
-            timeout_seconds=self.config.job_assignment_timeout
-        )
+        stale_jobs = await self.job_repo.get_stale_assigned_jobs(timeout_seconds=self.config.job_assignment_timeout)
         for job in stale_jobs:
             timestamp = datetime.now(timezone.utc)
             success = await self.job_repo.update_status(
@@ -147,13 +143,14 @@ class Janitor:
         )
         for job in retry_jobs:
             await process_job_assignment(
-                job.job_id, self.job_repo, self.worker_repo, self.transports,
+                job.job_id,
+                self.job_repo,
+                self.worker_repo,
+                self.transports,
             )
 
         # Fail Phase
-        fail_jobs = await self.job_repo.get_stale_pending_jobs(
-            min_seconds=self.config.job_pending_timeout
-        )
+        fail_jobs = await self.job_repo.get_stale_pending_jobs(min_seconds=self.config.job_pending_timeout)
         for job in fail_jobs:
             timestamp = datetime.now(timezone.utc)
             success = await self.job_repo.update_status(

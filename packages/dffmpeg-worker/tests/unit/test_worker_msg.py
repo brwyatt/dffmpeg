@@ -10,7 +10,9 @@ from dffmpeg.worker.worker import Worker
 
 @pytest.fixture
 def worker_config():
-    return WorkerConfig(client_id="test-worker", hmac_key="x" * 44, coordinator=CoordinatorConnectionConfig(host="localhost", port=8000))
+    return WorkerConfig(
+        client_id="test-worker", hmac_key="x" * 44, coordinator=CoordinatorConnectionConfig(host="localhost", port=8000)
+    )
 
 
 @pytest.fixture
