@@ -33,6 +33,14 @@ Thank you for your interest in contributing to `dffmpeg`! This guide will help y
 *   **Pydantic V2:** Use Pydantic V2 for all data models and configuration parsing.
 *   **Type Hinting:** Comprehensive type hinting is required.
 
+### Database Architecture
+
+The database layer follows a hierarchical DAO pattern to support multiple engines while maximizing code reuse:
+
+1.  **Repository Interface (`__init__.py`)**: Defines the abstract base class and the SQLAlchemy `Table` schema.
+2.  **Generic Implementation (`sqlalchemy.py`)**: Implements the repository methods using generic SQLAlchemy Core constructs (SELECT, INSERT, UPDATE). This layer contains the bulk of the logic and is dialect-agnostic.
+3.  **Engine-Specific Implementation (`sqlite.py`, etc.)**: Inherits from the generic implementation and the specific engine class (`SQLiteDB`). It overrides methods only when necessary for dialect-specific optimizations (e.g., `INSERT OR REPLACE` vs generic check-and-set).
+
 ## Plugin System (Entrypoints)
 
 `dffmpeg` uses Python's `entry_points` system for modularity. If you are adding a new Transport or Database backend, you will need to register it in the package's `pyproject.toml`.
