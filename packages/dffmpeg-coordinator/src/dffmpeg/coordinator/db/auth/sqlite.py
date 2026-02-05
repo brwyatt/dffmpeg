@@ -1,54 +1,24 @@
-from typing import Optional
+from sqlalchemy.dialects.sqlite import insert
 
 from dffmpeg.common.models import AuthenticatedIdentity
-from dffmpeg.coordinator.db.auth import AuthRepository
+from dffmpeg.coordinator.db.auth.sqlalchemy import SQLAlchemyAuthRepository
 from dffmpeg.coordinator.db.engines.sqlite import SQLiteDB
 
 
-class SQLiteAuthRepository(AuthRepository, SQLiteDB):
-    def __init__(self, *args, tablename: str = "auth", **kwargs):
-        AuthRepository.__init__(self, *args, **kwargs)
-        SQLiteDB.__init__(self, *args, tablename=tablename, **kwargs)
+class SQLiteAuthRepository(SQLAlchemyAuthRepository, SQLiteDB):
+    def __init__(self, *args, path: str, tablename: str = "auth", **kwargs):
+        # Initialize generic base (AuthRepository)
+        SQLAlchemyAuthRepository.__init__(self, *args, **kwargs)
+        # Initialize engine (SQLiteDB)
+        SQLiteDB.__init__(self, path=path, tablename=tablename)
 
-    async def get_identity(self, client_id: str, include_hmac_key: bool = False) -> Optional[AuthenticatedIdentity]:
-        result = await self.get_row(
-            f"SELECT client_id, role, hmac_key, key_id FROM {self.tablename} WHERE client_id = ?",
-            (client_id,),
-        )
-
-        if not result:
-            return
-
-        hmac_key = result["hmac_key"]
-        if include_hmac_key:
-            hmac_key = self._decrypt(hmac_key, result["key_id"])
-
-        identity = AuthenticatedIdentity(
-            client_id=result["client_id"],
-            role=result["role"],
-            hmac_key=hmac_key if include_hmac_key else None,
-            authenticated=False,
-        )
-        return identity
-
-    async def add_identity(self, identity: AuthenticatedIdentity) -> None:
-        if not identity.hmac_key:
-            raise ValueError("hmac_key is required to add an identity")
-
-        encrypted_key, key_id = self._encrypt(identity.hmac_key)
-        await self.execute(
-            f"INSERT OR REPLACE INTO {self.tablename} (client_id, role, hmac_key, key_id) VALUES (?, ?, ?, ?)",
-            (identity.client_id, identity.role, encrypted_key, key_id),
-        )
-
-    @property
-    def table_create(self) -> str:
-        return f"""
-            CREATE TABLE IF NOT EXISTS {self.tablename} (
-                client_id TEXT PRIMARY KEY,
-                role TEXT NOT NULL,
-                hmac_key TEXT NOT NULL,
-                key_id TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    async def _upsert_identity(self, identity: AuthenticatedIdentity, encrypted_key: str, key_id: str):
+        stmt = (
+            insert(self.table)
+            .values(client_id=identity.client_id, role=identity.role, hmac_key=encrypted_key, key_id=key_id)
+            .on_conflict_do_update(
+                index_elements=["client_id"], set_=dict(role=identity.role, hmac_key=encrypted_key, key_id=key_id)
             )
-        """
+        )
+        sql, params = self.compile_query(stmt)
+        await self.execute(sql, params)
