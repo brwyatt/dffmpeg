@@ -1,24 +1,28 @@
+import json
 import sqlite3
 from datetime import date, datetime
-from typing import Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 import aiosqlite
+from sqlalchemy.dialects import sqlite
 
-from dffmpeg.coordinator.db.engines import BaseDB
+from dffmpeg.coordinator.db.engines.sqlalchemy import SQLAlchemyDB
 
 sql_types = str | int | float | datetime | None
 
 
 sqlite3.register_adapter(date, lambda x: x.isoformat())
 sqlite3.register_adapter(datetime, lambda x: x.isoformat())
+sqlite3.register_adapter(list, lambda x: json.dumps(x))
+sqlite3.register_adapter(dict, lambda x: json.dumps(x))
 sqlite3.register_converter("date", lambda x: date.fromisoformat(x.decode()))
 sqlite3.register_converter("datetime", lambda x: datetime.fromisoformat(x.decode()))
 sqlite3.register_converter("TIMESTAMP", lambda x: datetime.fromisoformat(x.decode()))
 
 
-class SQLiteDB(BaseDB):
+class SQLiteDB(SQLAlchemyDB):
     """
-    SQLite implementation of the BaseDB engine.
+    SQLite-specific implementation of the SQLAlchemyDB engine.
     Provides methods for executing queries and managing connections using aiosqlite.
 
     Attributes:
@@ -29,6 +33,11 @@ class SQLiteDB(BaseDB):
     def __init__(self, *args, path: str, tablename: str, **kwargs):
         self.path = path
         self.tablename = tablename
+        self._dialect = sqlite.dialect(paramstyle="named")
+
+    @property
+    def dialect(self):
+        return self._dialect
 
     def _connect(self):
         return aiosqlite.connect(self.path, detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES)
@@ -37,11 +46,9 @@ class SQLiteDB(BaseDB):
         """
         Initializes the database by creating the table if it doesn't exist.
         """
-        async with self._connect() as db:
-            await db.execute(self.table_create)
-            await db.commit()
+        await self.execute(self.table_create)
 
-    async def get_rows(self, query: str, params: Optional[Iterable[sql_types]] = None) -> Iterable[aiosqlite.Row]:
+    async def get_rows(self, query: str, params: Optional[Iterable[sql_types]] = None) -> Iterable[Dict[str, Any]]:
         """
         Executes a SELECT query and returns all matching rows.
 
@@ -50,7 +57,7 @@ class SQLiteDB(BaseDB):
             params (Optional[Iterable[sql_types]]): Parameters to substitute into the query.
 
         Returns:
-            Iterable[aiosqlite.Row]: The resulting rows.
+            Iterable[Dict[str, Any]]: The resulting rows.
         """
         if params is None:
             params = tuple()
@@ -58,9 +65,10 @@ class SQLiteDB(BaseDB):
         async with self._connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, params) as cursor:
-                return await cursor.fetchall()
+                rows = await cursor.fetchall()
+                return [dict(row) for row in rows]
 
-    async def get_row(self, query: str, params: Optional[Iterable[sql_types]] = None) -> aiosqlite.Row | None:
+    async def get_row(self, query: str, params: Optional[Iterable[sql_types]] = None) -> Optional[Dict[str, Any]]:
         """
         Executes a SELECT query and returns the first matching row.
 
@@ -69,7 +77,7 @@ class SQLiteDB(BaseDB):
             params (Optional[Iterable[sql_types]]): Parameters to substitute into the query.
 
         Returns:
-            Optional[aiosqlite.Row]: The resulting row, or None if no match found.
+            Optional[Dict[str, Any]]: The resulting row, or None if no match found.
         """
         if params is None:
             params = tuple()
@@ -77,7 +85,8 @@ class SQLiteDB(BaseDB):
         async with self._connect() as db:
             db.row_factory = aiosqlite.Row
             async with db.execute(query, params) as cursor:
-                return await cursor.fetchone()
+                row = await cursor.fetchone()
+                return dict(row) if row else None
 
     async def execute(self, query: str, params: Optional[Iterable[sql_types]] = None) -> None:
         """
@@ -94,9 +103,21 @@ class SQLiteDB(BaseDB):
             await db.execute(query, params)
             await db.commit()
 
-    @property
-    def table_create(self) -> str:
+    async def execute_and_return_rowcount(self, query: str, params: Optional[Iterable[sql_types]] = None) -> int:
         """
-        Abstract property that should return the CREATE TABLE SQL statement.
+        Executes a write operation and returns the number of affected rows.
+
+        Args:
+            query (str): The SQL query string.
+            params (Optional[Iterable[sql_types]]): Parameters to substitute into the query.
+
+        Returns:
+            int: The number of affected rows.
         """
-        raise NotImplementedError()
+        if params is None:
+            params = tuple()
+
+        async with self._connect() as db:
+            cursor = await db.execute(query, params)
+            await db.commit()
+            return cursor.rowcount

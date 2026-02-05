@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import JSON, TIMESTAMP, Column, ForeignKey, Integer, MetaData, String, Table, func
 from ulid import ULID
 
 from dffmpeg.common.models import Job, JobStatus, TransportRecord
@@ -13,6 +14,29 @@ class JobRecord(Job, TransportRecord):
 
 
 class JobRepository(BaseDB):
+    metadata = MetaData()
+
+    # Placeholder definition for auth table to satisfy Foreign Key resolution
+    # This will be replaced when AuthRepository is migrated
+    auth_table = Table("auth", metadata, Column("client_id", String, primary_key=True))
+
+    table = Table(
+        "jobs",
+        metadata,
+        Column("job_id", String, primary_key=True),
+        Column("requester_id", String, ForeignKey("auth.client_id"), nullable=False),
+        Column("binary_name", String, nullable=False, default="ffmpeg"),
+        Column("arguments", JSON, nullable=False),
+        Column("paths", JSON, nullable=False),
+        Column("status", String, default="pending"),
+        Column("worker_id", String, ForeignKey("auth.client_id"), nullable=True),
+        Column("created_at", TIMESTAMP, server_default=func.current_timestamp()),
+        Column("last_update", TIMESTAMP, server_default=func.current_timestamp()),
+        Column("callback_transport", String, nullable=False),
+        Column("callback_transport_metadata", JSON, nullable=False),
+        Column("heartbeat_interval", Integer, nullable=False),
+    )
+
     def __new__(cls, *args, engine: str, **kwargs):
         return object.__new__(load("dffmpeg.db.jobs", engine, cls))
 
