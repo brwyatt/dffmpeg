@@ -17,18 +17,21 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
     """
 
     async def create_job(self, job: JobRecord):
+        # Serialize fields that might contain complex types (like datetime) to be JSON-safe
+        safe_job = job.model_dump(mode="json")
+
         query = self.table.insert().values(
             job_id=str(job.job_id),
             requester_id=job.requester_id,
             binary_name=job.binary_name,
-            arguments=job.arguments,  # SQLAlchemy handles JSON serialization
-            paths=job.paths,  # SQLAlchemy handles JSON serialization
+            arguments=safe_job["arguments"],  # SQLAlchemy handles JSON serialization
+            paths=safe_job["paths"],  # SQLAlchemy handles JSON serialization
             status=job.status,
             worker_id=job.worker_id,
             created_at=job.created_at,
             last_update=job.last_update,
             callback_transport=job.transport,
-            callback_transport_metadata=job.transport_metadata,  # JSON serialization
+            callback_transport_metadata=safe_job["transport_metadata"],  # JSON serialization
             heartbeat_interval=job.heartbeat_interval,
         )
         sql, params = self.compile_query(query)
