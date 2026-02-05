@@ -95,8 +95,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
         Returns:
             list[WorkerRecord]: List of online workers.
         """
-        results = await self.get_rows(
-            f"""
+        results = await self.get_rows(f"""
             SELECT
                 worker_id,
                 status,
@@ -109,8 +108,7 @@ class SQLiteWorkerRepository(WorkerRepository, SQLiteDB):
                 registration_interval
             FROM {self.tablename}
             WHERE status = 'online'
-            """
-        )
+            """)
 
         if not results:
             return []
