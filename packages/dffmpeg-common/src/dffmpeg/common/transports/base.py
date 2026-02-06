@@ -1,4 +1,4 @@
-from typing import Any, AsyncIterator, Dict
+from typing import Any, AsyncIterator, Dict, cast
 
 from dffmpeg.common.models import BaseMessage
 
@@ -31,4 +31,6 @@ class BaseClientTransport:
         Yields:
             BaseMessage: Messages received from the coordinator.
         """
+        if False:
+            yield cast(BaseMessage, None)
         raise NotImplementedError()

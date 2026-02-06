@@ -12,6 +12,7 @@ classifiers = [
 dependencies = [
     "dffmpeg-common",
     "httpx",
+    "pyyaml",
 ]
 
 [build-system]
@@ -38,3 +39,5 @@ dev = [
 ]
 
 [project.scripts]
+dffmpeg-client = "dffmpeg.client.cli:main"
+dffmpeg_proxy = "dffmpeg.client.cli:proxy_main"

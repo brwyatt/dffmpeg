@@ -1,1 +1,1 @@
-print("CLIENT")
+# Client package
