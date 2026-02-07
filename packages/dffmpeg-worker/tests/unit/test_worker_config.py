@@ -5,10 +5,22 @@ from pydantic import ValidationError
 from dffmpeg.worker.config import load_config
 
 
-def test_load_config_missing_required(tmp_path):
-    # If file missing or empty, should fail validation due to missing client_id
-    with pytest.raises(ValidationError) as excinfo:
+def test_load_config_nonexistent(tmp_path):
+    # If file missing or empty, should fail due to missing hmac_key (checked before pydantic validation)
+    with pytest.raises(ValueError) as excinfo:
         load_config(tmp_path / "nonexistent.yml")
+    assert "hmac_key must be provided" in str(excinfo.value)
+
+
+def test_load_config_missing_client_id(tmp_path):
+    # If file exists but missing client_id, should fail validation
+    config_data = {"hmac_key": "secret-key"}
+    config_file = tmp_path / "config.yml"
+    with open(config_file, "w") as f:
+        yaml.dump(config_data, f)
+
+    with pytest.raises(ValidationError) as excinfo:
+        load_config(config_file)
     assert "client_id" in str(excinfo.value)
 
 
