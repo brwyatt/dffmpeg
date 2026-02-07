@@ -52,7 +52,13 @@ def create_app(config: Optional[CoordinatorConfig] = None) -> FastAPI:
     if config is None:
         config = load_config()
 
-    app = FastAPI(title="dffmpeg Coordinator", lifespan=lifespan)
+    app = FastAPI(
+        title="dffmpeg Coordinator",
+        lifespan=lifespan,
+        docs_url="/docs" if config.dev_mode else None,
+        redoc_url="/redoc" if config.dev_mode else None,
+        openapi_url="/openapi.json" if config.dev_mode else None,
+    )
     app.state.config = config
 
     # Include routers

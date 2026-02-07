@@ -5,7 +5,6 @@ This document outlines the development phases for DFFmpeg, leading up to version
 ## Phase 1: Beta (Functional & Usable)
 *Goal: A functional system suitable for home production environments.*
 
-- [ ] **Production Hardening (Docs)**: Disable `/docs` and `/redoc` in Coordinator unless `--dev` mode is active.
 - [ ] **MariaDB/MySQL Support**: Implement MariaDB/MySQL database backend via the DAO pattern.
 - [ ] **MQTT Transport**: Implement MQTT transport for worker-coordinator communication.
 - [ ] **Worker Status Code Reporting**: Relay process exit codes from worker to coordinator and client.

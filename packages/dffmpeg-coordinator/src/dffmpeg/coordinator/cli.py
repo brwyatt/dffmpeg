@@ -19,6 +19,9 @@ def main():
     if args.config:
         os.environ["DFFMPEG_COORDINATOR_CONFIG"] = args.config
 
+    if args.dev:
+        os.environ["DFFMPEG_COORDINATOR_DEV"] = "1"
+
     try:
         # Load config to get defaults for host/port
         config = load_config(args.config)

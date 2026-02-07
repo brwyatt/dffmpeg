@@ -1,3 +1,4 @@
+import os
 from logging import getLogger
 from pathlib import Path
 
@@ -30,6 +31,7 @@ class CoordinatorConfig(BaseModel):
     janitor: JanitorConfig = Field(default_factory=JanitorConfig)
     job_heartbeat_interval: int = default_job_heartbeat_interval
     web_dashboard_enabled: bool = True
+    dev_mode: bool = False
 
 
 def load_config(path: Path | str | None = None) -> CoordinatorConfig:
@@ -46,28 +48,33 @@ def load_config(path: Path | str | None = None) -> CoordinatorConfig:
 
     if not config_path:
         logger.warning("Could not find coordinator config file.")
-        return CoordinatorConfig()
+        config_data = CoordinatorConfig()
+    else:
+        with open(config_path, "r") as f:
+            data = yaml.safe_load(f) or {}
 
-    with open(config_path, "r") as f:
-        data = yaml.safe_load(f)
+        # Handle external encryption keys file if referenced in the config
+        auth_config = data.get("database", {}).get("repositories", {}).get("auth", {})
+        keys_file = auth_config.get("encryption_keys_file")
+        if keys_file:
+            keys_path = Path(keys_file)
+            if not keys_path.is_absolute():
+                keys_path = config_path.parent / keys_path
 
-    # Handle external encryption keys file if referenced in the config
-    auth_config = data.get("database", {}).get("repositories", {}).get("auth", {})
-    keys_file = auth_config.get("encryption_keys_file")
-    if keys_file:
-        keys_path = Path(keys_file)
-        if not keys_path.is_absolute():
-            keys_path = config_path.parent / keys_path
+            if keys_path.exists():
+                with open(keys_path, "r") as f:
+                    keys_data = yaml.safe_load(f)
+                    if isinstance(keys_data, dict):
+                        # Merge or set the encryption_keys
+                        if "encryption_keys" not in auth_config:
+                            auth_config["encryption_keys"] = {}
+                        auth_config["encryption_keys"].update(keys_data)
+            else:
+                logger.warning(f"Encryption keys file not found at {keys_path}")
 
-        if keys_path.exists():
-            with open(keys_path, "r") as f:
-                keys_data = yaml.safe_load(f)
-                if isinstance(keys_data, dict):
-                    # Merge or set the encryption_keys
-                    if "encryption_keys" not in auth_config:
-                        auth_config["encryption_keys"] = {}
-                    auth_config["encryption_keys"].update(keys_data)
-        else:
-            logger.warning(f"Encryption keys file not found at {keys_path}")
+        config_data = CoordinatorConfig.model_validate(data)
 
-    return CoordinatorConfig.model_validate(data)
+    if os.environ.get("DFFMPEG_COORDINATOR_DEV") == "1":
+        config_data.dev_mode = True
+
+    return config_data
