@@ -205,3 +205,9 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local test files
+**/dffmpeg-client.yaml
+**/dffmpeg-coordinator.yaml
+**/dffmpeg-worker.yaml
+**/*.sqlite
