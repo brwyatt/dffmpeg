@@ -4,8 +4,9 @@ from logging import getLogger
 from typing import Optional
 
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 
-from dffmpeg.coordinator.api.routes import health, job, worker
+from dffmpeg.coordinator.api.routes import dashboard, health, job, worker
 from dffmpeg.coordinator.config import CoordinatorConfig, load_config
 from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.janitor import Janitor
@@ -58,5 +59,12 @@ def create_app(config: Optional[CoordinatorConfig] = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(worker.router)
     app.include_router(job.router)
+    app.include_router(dashboard.router)
+
+    @app.get("/", include_in_schema=False)
+    async def root_redirect():
+        if config.web_dashboard_enabled:
+            return RedirectResponse(url="/status")
+        return RedirectResponse(url="/health")
 
     return app

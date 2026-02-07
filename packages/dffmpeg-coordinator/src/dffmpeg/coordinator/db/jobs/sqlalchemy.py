@@ -199,7 +199,7 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
 
     async def get_dashboard_jobs(
         self,
-        requester_id: str,
+        requester_id: Optional[str] = None,
         limit: int = 20,
         since_id: Optional[ULID] = None,
         recent_window_seconds: int = 3600,
@@ -211,7 +211,6 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
         finished_statuses = ["completed", "failed", "canceled"]
 
         conditions = [
-            self.table.c.requester_id == requester_id,
             or_(
                 self.table.c.status.in_(active_statuses),
                 and_(
@@ -220,6 +219,9 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
                 ),
             ),
         ]
+
+        if requester_id:
+            conditions.append(self.table.c.requester_id == requester_id)
 
         if since_id:
             conditions.append(self.table.c.job_id < str(since_id))

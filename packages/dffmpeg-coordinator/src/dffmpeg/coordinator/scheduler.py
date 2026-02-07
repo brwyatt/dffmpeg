@@ -37,7 +37,8 @@ async def process_job_assignment(
         if not job or job.status != "pending":
             return
 
-        workers = await worker_repo.get_online_workers()
+        workers = await worker_repo.get_workers_by_status("online")
+
         if not workers:
             logger.warning(f"No online workers found for job {job_id}")
             return

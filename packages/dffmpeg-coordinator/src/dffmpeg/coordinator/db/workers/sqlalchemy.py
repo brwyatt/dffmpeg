@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from sqlalchemy import and_, select, update
@@ -55,8 +55,15 @@ class SQLAlchemyWorkerRepository(WorkerRepository, SQLAlchemyDB):
             transport_metadata=parse_json(result["transport_metadata"]),
         )
 
-    async def get_online_workers(self) -> list[WorkerRecord]:
-        query = select(self.table).where(self.table.c.status == "online")
+    async def get_workers_by_status(self, status: str, since_seconds: Optional[int] = None) -> list[WorkerRecord]:
+        conditions = [self.table.c.status == status]
+
+        if since_seconds is not None:
+            now = datetime.now(timezone.utc)
+            cutoff = now - timedelta(seconds=since_seconds)
+            conditions.append(self.table.c.last_seen > cutoff)
+
+        query = select(self.table).where(and_(*conditions))
         sql, params = self.compile_query(query)
         rows = await self.get_rows(sql, params)
         return [self._row_to_worker(row) for row in rows]

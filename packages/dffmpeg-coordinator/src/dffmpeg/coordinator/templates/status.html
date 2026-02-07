@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="refresh" content="5">
+    <title>DFFmpeg Status</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; }
+        h1, h2 { color: #333; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        .status-online { color: green; font-weight: bold; }
+        .status-offline { color: red; font-weight: bold; }
+        .status-running { color: blue; }
+        .status-completed { color: green; }
+        .status-failed { color: red; }
+    </style>
+</head>
+<body>
+    <h1>DFFmpeg Status</h1>
+
+    <h2>Workers</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Worker ID</th>
+                <th>Status</th>
+                <th>Last Seen</th>
+                <th>Load</th>
+                <th>Binaries</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for worker in workers %}
+            <tr>
+                <td>{{ worker.worker_id }}</td>
+                <td class="status-{{ worker.status }}">{{ worker.status }}</td>
+                <td>{{ worker.last_seen.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+                <td>{{ worker_load.get(worker.worker_id, 0) }}</td>
+                <td>{{ worker.binaries | join(', ') }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5">No workers found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <h2>Recent Jobs</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Job ID</th>
+                <th>Status</th>
+                <th>Binary</th>
+                <th>Requester</th>
+                <th>Worker</th>
+                <th>Created</th>
+                <th>Last Update</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for job in jobs %}
+            <tr>
+                <td>{{ job.job_id }}</td>
+                <td class="status-{{ job.status }}">{{ job.status }}</td>
+                <td>{{ job.binary_name }}</td>
+                <td>{{ job.requester_id }}</td>
+                <td>{{ job.worker_id or '-' }}</td>
+                <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+                <td>{{ job.last_update.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7">No recent jobs.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

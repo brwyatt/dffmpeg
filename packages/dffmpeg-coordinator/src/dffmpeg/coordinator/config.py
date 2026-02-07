@@ -29,6 +29,7 @@ class CoordinatorConfig(BaseModel):
     transports: TransportConfig = Field(default_factory=TransportConfig)
     janitor: JanitorConfig = Field(default_factory=JanitorConfig)
     job_heartbeat_interval: int = default_job_heartbeat_interval
+    web_dashboard_enabled: bool = True
 
 
 def load_config(path: Path | str | None = None) -> CoordinatorConfig:

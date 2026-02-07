@@ -57,3 +57,11 @@ FastAPI automatically generates interactive API documentation. Once the server i
 
 *   **Swagger UI:** `http://localhost:8000/docs`
 *   **ReDoc:** `http://localhost:8000/redoc`
+
+## Web Dashboard
+
+The coordinator provides a built-in, read-only status dashboard that displays worker health and recent job history.
+
+*   **URL:** `http://localhost:8000/status` (The root URL `/` also redirects here by default).
+
+The dashboard can be disabled by setting `web_dashboard_enabled: false` in the configuration.
