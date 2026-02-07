@@ -4,14 +4,10 @@ from typing import Optional
 from sqlalchemy import JSON, TIMESTAMP, Column, ForeignKey, Integer, MetaData, String, Table, func
 from ulid import ULID
 
-from dffmpeg.common.models import Job, JobStatus, TransportRecord
+from dffmpeg.common.models import JobRecord, JobStatus, TransportRecord
 from dffmpeg.coordinator.db.auth import AuthRepository
 from dffmpeg.coordinator.db.db_loader import load
 from dffmpeg.coordinator.db.engines import BaseDB
-
-
-class JobRecord(Job, TransportRecord):
-    pass
 
 
 class JobRepository(BaseDB):

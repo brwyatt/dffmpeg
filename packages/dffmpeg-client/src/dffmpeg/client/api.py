@@ -1,12 +1,14 @@
 import logging
-from typing import Any, AsyncIterator, Dict, List, Tuple, Union
+from typing import Any, AsyncIterator, Dict, List, Union
 
 from ulid import ULID
 
 from dffmpeg.client.config import ClientConfig
 from dffmpeg.common.http_client import AuthenticatedAsyncClient
 from dffmpeg.common.models import (
+    CommandResponse,
     JobLogsMessage,
+    JobRecord,
     JobRequest,
     JobStatusMessage,
     SupportedBinaries,
@@ -37,14 +39,12 @@ class DFFmpegClient:
         self.transport_manager = TransportManager(config.transports)
         self.active_transport = None
 
-    async def submit_job(
-        self, binary_name: SupportedBinaries, arguments: List[str], paths: List[str]
-    ) -> Tuple[str, str, Dict[str, Any]]:
+    async def submit_job(self, binary_name: SupportedBinaries, arguments: List[str], paths: List[str]) -> JobRecord:
         """
         Submits a job to the coordinator.
 
         Returns:
-            Tuple[str, str, Dict]: (job_id, transport_name, transport_metadata)
+            JobRecord: The created job record.
         """
         path = "/jobs/submit"
 
@@ -61,28 +61,23 @@ class DFFmpegClient:
         resp = await self.client.post(path, json=payload.model_dump(mode="json"))
         resp.raise_for_status()
 
-        data = resp.json()
-        job_id = data.get("job_id")
-        transport = data.get("transport")
-        transport_metadata = data.get("transport_metadata", {})
+        return JobRecord.model_validate(resp.json())
 
-        return job_id, transport, transport_metadata
-
-    async def get_job_status(self, job_id: str) -> Dict[str, Any]:
+    async def get_job_status(self, job_id: str) -> JobRecord:
         """Retrieves the current status of a job."""
         path = f"/jobs/{job_id}/status"
         resp = await self.client.get(path)
         resp.raise_for_status()
-        return resp.json()
+        return JobRecord.model_validate(resp.json())
 
-    async def cancel_job(self, job_id: str):
+    async def cancel_job(self, job_id: str) -> CommandResponse:
         """Cancels a job."""
         path = f"/jobs/{job_id}/cancel"
         resp = await self.client.post(path)
         resp.raise_for_status()
-        return resp.json()
+        return CommandResponse.model_validate(resp.json())
 
-    async def list_jobs(self, limit: int = 20, since_id: str = None) -> List[Dict[str, Any]]:
+    async def list_jobs(self, limit: int = 20, since_id: str = None) -> List[JobRecord]:
         """Lists active and recently finished jobs."""
         params = {"limit": limit}
         if since_id:
@@ -91,7 +86,7 @@ class DFFmpegClient:
         path = "/jobs"
         resp = await self.client.get(path, params=params)
         resp.raise_for_status()
-        return resp.json()
+        return [JobRecord.model_validate(j) for j in resp.json()]
 
     async def stream_job(
         self, job_id: str, transport_name: str, transport_metadata: Dict[str, Any]

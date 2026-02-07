@@ -67,7 +67,8 @@ Check status:
 ```bash
 dffmpeg-client status <job_id>
 ```
-To list jobs:
+
+List recent jobs:
 ```bash
 dffmpeg-client status
 ```

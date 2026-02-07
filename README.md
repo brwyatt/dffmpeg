@@ -34,9 +34,9 @@ The project is a monorepo containing:
 
 ## Current Status
 
-*   **Coordinator**: Functional (API, DB, Scheduling, Janitor).
+*   **Coordinator**: Functional (API, DB, Scheduling, Janitor, Dashboard).
 *   **Worker**: Functional (Polling, Execution). Note: Capabilities detection is currently a stub.
-*   **Client**: Stub/Placeholder.
+*   **Client**: Functional (CLI, Library, Proxy).
 
 ## Getting Started (Development)
 

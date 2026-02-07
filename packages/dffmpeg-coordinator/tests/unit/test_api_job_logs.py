@@ -6,6 +6,7 @@ from ulid import ULID
 
 from dffmpeg.common.models import (
     AuthenticatedIdentity,
+    CommandResponse,
     JobLogsMessage,
     JobLogsPayload,
     JobLogsResponse,
@@ -32,7 +33,7 @@ async def test_job_logs_submit_isolated():
         job_id=str(job_id), payload=payload, identity=identity, transports=mock_transports, job_repo=mock_job_repo
     )
 
-    assert response == {"status": "ok"}
+    assert response == CommandResponse(status="ok")
     mock_transports.send_message.assert_called_once()
     sent_msg = mock_transports.send_message.call_args[0][0]
     assert sent_msg.recipient_id == requester_id

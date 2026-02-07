@@ -98,6 +98,26 @@ class JobRequest(BaseModel):
     supported_transports: List[str] = Field(min_length=1)
 
 
+class JobRecord(Job, TransportRecord):
+    """
+    Complete Job record including transport details.
+    """
+
+    pass
+
+
+type CommandStatus = Literal["ok"]
+
+
+class CommandResponse(BaseModel):
+    """
+    Generic response for command acknowledgments.
+    """
+
+    status: CommandStatus
+    detail: Optional[str] = None
+
+
 class WorkerDeregistration(BaseModel):
     """
     Payload for worker deregistration.

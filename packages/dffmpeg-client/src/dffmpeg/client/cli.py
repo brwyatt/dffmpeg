@@ -122,15 +122,15 @@ async def run_submit(binary_name: SupportedBinaries, raw_args: List[str], wait: 
 
     async with DFFmpegClient(config) as client:
         try:
-            job_id, transport, metadata = await client.submit_job(binary_name, job_args, paths)
+            job = await client.submit_job(binary_name, job_args, paths)
 
             if not wait:
                 print("Job submitted successfully.")
-                print(f"Job ID: {job_id}")
+                print(f"Job ID: {str(job.job_id)}")
                 return 0
 
             # Wait mode
-            return await stream_and_wait(client, job_id, transport, metadata)
+            return await stream_and_wait(client, str(job.job_id), job.transport, job.transport_metadata)
 
         except Exception as e:
             logger.error(f"Error submitting job: {e}")
@@ -155,19 +155,19 @@ async def run_status(job_id: str | None, config_file: str | None = None):
                 print(f"{'Job ID':<26} {'Status':<12} {'Binary':<10} {'Created'}")
                 print("-" * 70)
                 for job in jobs:
-                    print(f"{job['job_id']:<26} {job['status']:<12} {job['binary_name']:<10} {job['created_at']}")
+                    print(f"{str(job.job_id):<26} {job.status:<12} {job.binary_name:<10} {job.created_at}")
                 return 0
 
             status = await client.get_job_status(job_id)
             # Pretty print status
-            print(f"Job ID: {status['job_id']}")
-            print(f"Status: {status['status']}")
-            print(f"Worker: {status.get('worker_id', '<Unassigned>')}")
-            print(f"Binary: {status['binary_name']}")
-            print(f"Args: {' '.join(status['arguments'])}")
-            print(f"Paths: {status['paths']}")
-            print(f"Created: {status['created_at']}")
-            print(f"Last Update: {status['last_update']}")
+            print(f"Job ID: {status.job_id}")
+            print(f"Status: {status.status}")
+            print(f"Worker: {status.worker_id or '<Unassigned>'}")
+            print(f"Binary: {status.binary_name}")
+            print(f"Args: {' '.join(status.arguments)}")
+            print(f"Paths: {status.paths}")
+            print(f"Created: {status.created_at}")
+            print(f"Last Update: {status.last_update}")
             return 0
         except Exception as e:
             logger.error(f"Error getting status: {e}")

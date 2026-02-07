@@ -7,6 +7,7 @@ from ulid import ULID
 
 from dffmpeg.common.models import (
     AuthenticatedIdentity,
+    CommandResponse,
     JobLogsMessage,
     JobLogsPayload,
     JobLogsResponse,
@@ -139,7 +140,7 @@ async def job_accept(
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
-):
+) -> CommandResponse:
     """
     Endpoint for a worker to accept an assigned job.
 
@@ -150,7 +151,7 @@ async def job_accept(
         job_repo (JobRepository): Job repository.
 
     Returns:
-        dict: Status OK if successful.
+        CommandResponse: Status OK if successful.
 
     Raises:
         HTTPException: If job not found or not assigned to this worker.
@@ -180,7 +181,7 @@ async def job_accept(
         )
     )
 
-    return {"status": "ok"}
+    return CommandResponse(status="ok")
 
 
 @router.post("/jobs/{job_id}/cancel")
@@ -189,7 +190,7 @@ async def job_cancel(
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
-):
+) -> CommandResponse:
     """
     Cancels a job. Can be called by the requester or an admin.
     If the job is assigned, it requests cancellation from the worker first.
@@ -201,7 +202,7 @@ async def job_cancel(
         job_repo (JobRepository): Job repository.
 
     Returns:
-        dict: Status OK if successful.
+        CommandResponse: Status OK if successful.
 
     Raises:
         HTTPException: If job not found or user lacks permission.
@@ -219,7 +220,7 @@ async def job_cancel(
         raise HTTPException(status_code=403, detail="No permission to cancel job")
 
     if job.status in ["completed", "failed", "canceled"]:
-        return {"status": "ok", "detail": "Job already finished"}
+        return CommandResponse(status="ok", detail="Job already finished")
 
     timestamp = datetime.now(timezone.utc)
 
@@ -260,7 +261,7 @@ async def job_cancel(
             )
         )
 
-    return {"status": "ok"}
+    return CommandResponse(status="ok")
 
 
 @router.get("/jobs/{job_id}/status")
@@ -305,7 +306,7 @@ async def job_status_update(
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
-):
+) -> CommandResponse:
     """
     Updates the status of a job (e.g., to completed or failed).
     Called by the assigned worker.
@@ -318,7 +319,7 @@ async def job_status_update(
         job_repo (JobRepository): Job repository.
 
     Returns:
-        dict: Status OK if successful.
+        CommandResponse: Status OK if successful.
 
     Raises:
         HTTPException: If job not found or not assigned to this worker.
@@ -350,7 +351,7 @@ async def job_status_update(
         )
     )
 
-    return {"status": "ok"}
+    return CommandResponse(status="ok")
 
 
 @router.post("/jobs/{job_id}/heartbeat")
@@ -359,7 +360,7 @@ async def job_heartbeat(
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
-):
+) -> CommandResponse:
     """
     Updates the last_update timestamp for a job to indicate the worker is still active.
 
@@ -370,7 +371,7 @@ async def job_heartbeat(
         job_repo (JobRepository): Job repository.
 
     Returns:
-        dict: Status OK if successful.
+        CommandResponse: Status OK if successful.
 
     Raises:
         HTTPException: If job not found or not assigned to this worker.
@@ -400,7 +401,7 @@ async def job_heartbeat(
         )
     )
 
-    return {"status": "ok"}
+    return CommandResponse(status="ok")
 
 
 @router.post("/jobs/{job_id}/logs")
@@ -410,7 +411,7 @@ async def job_logs_submit(
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
-):
+) -> CommandResponse:
     """
     Endpoint for a worker to submit a batch of logs for an assigned job.
     Relays the logs to the job's requester.
@@ -423,7 +424,7 @@ async def job_logs_submit(
         job_repo (JobRepository): Job repository.
 
     Returns:
-        dict: Status OK if successful.
+        CommandResponse: Status OK if successful.
 
     Raises:
         HTTPException: If job not found or not assigned to this worker.
@@ -450,7 +451,7 @@ async def job_logs_submit(
         )
     )
 
-    return {"status": "ok"}
+    return CommandResponse(status="ok")
 
 
 @router.get("/jobs/{job_id}/logs")
