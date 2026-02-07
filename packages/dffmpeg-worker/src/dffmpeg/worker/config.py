@@ -4,9 +4,9 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
-from dffmpeg.common.transports import ClientTransportConfig
+from dffmpeg.common.config_utils import inject_transport_defaults, load_hmac_key
 from dffmpeg.common.models.config import CoordinatorConnectionConfig
-from dffmpeg.common.config_utils import load_hmac_key, inject_transport_defaults
+from dffmpeg.common.transports import ClientTransportConfig
 
 logger = getLogger(__name__)
 

@@ -1,20 +1,20 @@
 import logging
-from typing import AsyncIterator, List, Optional, Tuple, Any, Dict, Union
+from typing import Any, AsyncIterator, Dict, List, Tuple, Union
 
 from ulid import ULID
 
+from dffmpeg.client.config import ClientConfig
 from dffmpeg.common.http_client import AuthenticatedAsyncClient
 from dffmpeg.common.models import (
-    JobLogsMessage, 
-    JobStatusMessage, 
+    JobLogsMessage,
     JobRequest,
+    JobStatusMessage,
     SupportedBinaries,
 )
-from dffmpeg.common.transports import ClientTransportConfig, TransportManager
-
-from dffmpeg.client.config import ClientConfig
+from dffmpeg.common.transports import TransportManager
 
 logger = logging.getLogger(__name__)
+
 
 class DFFmpegClient:
     def __init__(self, config: ClientConfig):
@@ -31,26 +31,23 @@ class DFFmpegClient:
             client_id=config.client_id,
             hmac_key=str(config.hmac_key),
         )
-        
+
         # Setup Transport Manager
         # Transport settings are already injected by load_config helper
         self.transport_manager = TransportManager(config.transports)
         self.active_transport = None
 
     async def submit_job(
-        self, 
-        binary_name: SupportedBinaries, 
-        arguments: List[str], 
-        paths: List[str]
+        self, binary_name: SupportedBinaries, arguments: List[str], paths: List[str]
     ) -> Tuple[str, str, Dict[str, Any]]:
         """
         Submits a job to the coordinator.
-        
+
         Returns:
             Tuple[str, str, Dict]: (job_id, transport_name, transport_metadata)
         """
         path = "/jobs/submit"
-        
+
         # Determine available transports to advertise
         supported_transports = self.transport_manager.transport_names
         if not supported_transports:
@@ -58,20 +55,17 @@ class DFFmpegClient:
             supported_transports = ["http_polling"]
 
         payload = JobRequest(
-            binary_name=binary_name,
-            arguments=arguments,
-            paths=paths,
-            supported_transports=supported_transports
+            binary_name=binary_name, arguments=arguments, paths=paths, supported_transports=supported_transports
         )
-        
+
         resp = await self.client.post(path, json=payload.model_dump(mode="json"))
         resp.raise_for_status()
-        
+
         data = resp.json()
         job_id = data.get("job_id")
         transport = data.get("transport")
         transport_metadata = data.get("transport_metadata", {})
-        
+
         return job_id, transport, transport_metadata
 
     async def get_job_status(self, job_id: str) -> Dict[str, Any]:
@@ -89,10 +83,7 @@ class DFFmpegClient:
         return resp.json()
 
     async def stream_job(
-        self, 
-        job_id: str, 
-        transport_name: str, 
-        transport_metadata: Dict[str, Any]
+        self, job_id: str, transport_name: str, transport_metadata: Dict[str, Any]
     ) -> AsyncIterator[Union[JobStatusMessage, JobLogsMessage]]:
         """
         Connects to the specified transport and yields status and log messages for the job.
@@ -101,25 +92,25 @@ class DFFmpegClient:
             raise ValueError(f"Unsupported transport: {transport_name}")
 
         transport = self.transport_manager[transport_name]
-        
+
         await transport.connect(transport_metadata)
         self.active_transport = transport
-        
+
         try:
             async for message in transport.listen():
                 # Filter for messages related to our job
                 if message.job_id != ULID.from_str(job_id):
                     continue
-                
+
                 if isinstance(message, (JobStatusMessage, JobLogsMessage)):
                     yield message
-                    
+
                     # If job is terminal, we can stop listening
                     if isinstance(message, JobStatusMessage):
                         status = message.payload.status
                         if status in ["completed", "failed", "canceled"]:
                             break
-                            
+
         finally:
             await transport.disconnect()
             self.active_transport = None
@@ -129,7 +120,7 @@ class DFFmpegClient:
         if self.active_transport:
             await self.active_transport.disconnect()
         await self.client.aclose()
-    
+
     async def __aenter__(self):
         return self
 

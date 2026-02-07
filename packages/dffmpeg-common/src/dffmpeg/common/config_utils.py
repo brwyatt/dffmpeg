@@ -1,11 +1,12 @@
 import logging
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
-from dffmpeg.common.transports import ClientTransportConfig
 from dffmpeg.common.models.config import CoordinatorConnectionConfig
+from dffmpeg.common.transports import ClientTransportConfig
 
 logger = logging.getLogger(__name__)
+
 
 def load_hmac_key(data: Dict[str, Any], config_path: Path) -> str:
     """
@@ -43,12 +44,13 @@ def load_hmac_key(data: Dict[str, Any], config_path: Path) -> str:
         raise ValueError("hmac_key must be provided either directly or via hmac_key_file")
     return key
 
+
 def inject_transport_defaults(
-    transports_config: ClientTransportConfig, 
+    transports_config: ClientTransportConfig,
     coordinator_config: CoordinatorConnectionConfig,
     client_id: str,
     hmac_key: str,
-    default_poll_wait: int = 5
+    default_poll_wait: int = 5,
 ):
     """
     Injects default connection settings into transport configurations (specifically http_polling).
@@ -63,7 +65,7 @@ def inject_transport_defaults(
         "client_id": client_id,
         "hmac_key": hmac_key,
         "coordinator_url": base_url,
-        "poll_wait": default_poll_wait
+        "poll_wait": default_poll_wait,
     }
 
     # Helper to inject into specific transport settings
