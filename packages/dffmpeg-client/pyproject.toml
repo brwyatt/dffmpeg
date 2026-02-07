@@ -10,9 +10,9 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
-    "dffmpeg-common",
-    "httpx",
-    "pyyaml",
+    "dffmpeg-common~=0.1.0",
+    "httpx>=0.28.0, <1.0.0",
+    "pyyaml>=6.0.0, <7.0.0",
 ]
 
 [build-system]
@@ -26,16 +26,16 @@ namespaces = true
 
 [project.optional-dependencies]
 test = [
-    "anyio",
-    "black",
-    "flake8",
-    "isort",
-    "pytest",
-    "pytest-asyncio",
+    "anyio>=4.12.0, <5.0.0",
+    "black>=26.1.0, <27.0.0",
+    "flake8>=7.3.0, <8.0.0",
+    "isort>=7.0.0, <8.0.0",
+    "pytest>=9.0.0, <10.0.0",
+    "pytest-asyncio>=1.3.0, <2.0.0",
 ]
 dev = [
     "dffmpeg-client[test]",
-    "ipython",
+    "ipython>=9.10.0, <10.0.0",
 ]
 
 [project.scripts]
