@@ -17,7 +17,7 @@ router = APIRouter()
 
 # Locate the templates directory relative to the package root
 templates_dir = importlib.resources.files("dffmpeg.coordinator") / "templates"
-templates = Jinja2Templates(directory=templates_dir)
+templates = Jinja2Templates(directory=str(templates_dir))
 
 
 @router.get("/status", response_class=HTMLResponse)

@@ -77,9 +77,9 @@ class DFFmpegClient:
         resp.raise_for_status()
         return CommandResponse.model_validate(resp.json())
 
-    async def list_jobs(self, limit: int = 20, since_id: str = None) -> List[JobRecord]:
+    async def list_jobs(self, limit: int = 20, since_id: str | None = None) -> List[JobRecord]:
         """Lists active and recently finished jobs."""
-        params = {"limit": limit}
+        params: Dict[str, Any] = {"limit": limit}
         if since_id:
             params["since_id"] = since_id
 
