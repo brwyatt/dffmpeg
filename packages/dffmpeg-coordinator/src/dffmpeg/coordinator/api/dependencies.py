@@ -1,6 +1,7 @@
 from fastapi import Request
 
 from dffmpeg.coordinator.config import CoordinatorConfig
+from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
@@ -26,6 +27,13 @@ def get_worker_repo(request: Request) -> WorkerRepository:
     Dependency to retrieve the WorkerRepository from the application state.
     """
     return request.app.state.db.workers
+
+
+def get_db(request: Request) -> DB:
+    """
+    Dependency to retrieve the DB manager from the application state.
+    """
+    return request.app.state.db
 
 
 def get_transports(request: Request) -> TransportManager:

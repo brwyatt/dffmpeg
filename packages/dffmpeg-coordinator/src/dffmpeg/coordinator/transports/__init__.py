@@ -1,3 +1,4 @@
+import asyncio
 from importlib.metadata import entry_points
 from logging import getLogger
 from typing import Dict, List, Type
@@ -5,7 +6,7 @@ from typing import Dict, List, Type
 from fastapi import FastAPI
 from pydantic import Field
 
-from dffmpeg.common.models import BaseMessage
+from dffmpeg.common.models import BaseMessage, ComponentHealth
 from dffmpeg.common.models.config import ConfigOptions, DefaultConfig
 from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.transports.base import BaseServerTransport
@@ -36,6 +37,28 @@ class TransportManager:
     async def setup_all(self):
         for key in self.loaded_transports.keys():
             await self[key].setup()
+
+    async def health_check(self) -> Dict[str, ComponentHealth]:
+        """
+        Check the health of all loaded transports.
+
+        Returns:
+            Dict[str, ComponentHealth]: A dictionary mapping transport names to their health status.
+        """
+        names = list(self.loaded_transports.keys())
+        results = await asyncio.gather(
+            *(self[name].health_check() for name in names),
+            return_exceptions=True,
+        )
+
+        health = {}
+        for name, result in zip(names, results):
+            if isinstance(result, Exception):
+                health[name] = ComponentHealth(status="unhealthy", detail=str(result))
+            else:
+                health[name] = result
+
+        return health
 
     async def send_message(self, message: BaseMessage) -> bool:
         db: DB = self.app.state.db

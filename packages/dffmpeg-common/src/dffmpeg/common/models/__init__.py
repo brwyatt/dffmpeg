@@ -272,3 +272,31 @@ class WorkerRegistration(WorkerBase):
     """
 
     supported_transports: List[str] = Field(min_length=1)
+
+
+class ComponentHealth(BaseModel):
+    """
+    Represents the health status of a single component.
+
+    Attributes:
+        status (Literal["online", "unhealthy"]): The status of the component.
+        detail (Optional[str]): Additional details about the status.
+    """
+
+    status: Literal["online", "unhealthy"]
+    detail: Optional[str] = None
+
+
+class HealthResponse(BaseModel):
+    """
+    Standardized response for health check endpoints.
+
+    Attributes:
+        status (Literal["online", "unhealthy"]): Overall status of the service.
+        databases (Optional[Dict[str, ComponentHealth]]): Health status of database repositories.
+        transports (Optional[Dict[str, ComponentHealth]]): Health status of transport implementations.
+    """
+
+    status: Literal["online", "unhealthy"]
+    databases: Optional[Dict[str, ComponentHealth]] = None
+    transports: Optional[Dict[str, ComponentHealth]] = None

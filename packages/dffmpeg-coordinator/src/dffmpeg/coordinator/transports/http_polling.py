@@ -6,7 +6,12 @@ from typing import Any, Dict, Optional, Set
 from fastapi import Depends, FastAPI
 from ulid import ULID
 
-from dffmpeg.common.models import AuthenticatedIdentity, BaseMessage, TransportMetadata
+from dffmpeg.common.models import (
+    AuthenticatedIdentity,
+    BaseMessage,
+    ComponentHealth,
+    TransportMetadata,
+)
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.transports.base import BaseServerTransport
@@ -174,3 +179,10 @@ class HTTPPollingTransport(BaseServerTransport):
         return {
             "path": self.job_path.format(job_id=job_id) if job_id else self.worker_path,
         }
+
+    async def health_check(self) -> ComponentHealth:
+        """
+        Check the health of the HTTP polling transport.
+        For now, this just means the transport is initialized.
+        """
+        return ComponentHealth(status="online")

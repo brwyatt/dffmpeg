@@ -1,8 +1,10 @@
+import asyncio
 from logging import getLogger
 from typing import Dict, Optional
 
 from pydantic import Field
 
+from dffmpeg.common.models import ComponentHealth
 from dffmpeg.common.models.config import ConfigOptions, DefaultConfig
 from dffmpeg.coordinator.db.auth import AuthRepository
 from dffmpeg.coordinator.db.jobs import JobRepository
@@ -67,6 +69,32 @@ class DB:
         await self.jobs.setup()
         await self.messages.setup()
         await self.workers.setup()
+
+    async def health_check(self) -> Dict[str, ComponentHealth]:
+        """
+        Check the health of all database repositories.
+
+        Returns:
+            Dict[str, ComponentHealth]: A dictionary mapping repository names to their health status.
+        """
+        repos = {
+            "auth": self.auth,
+            "jobs": self.jobs,
+            "messages": self.messages,
+            "workers": self.workers,
+        }
+
+        keys = list(repos.keys())
+        results = await asyncio.gather(*(repo.health_check() for repo in repos.values()), return_exceptions=True)
+
+        health = {}
+        for key, result in zip(keys, results):
+            if isinstance(result, Exception):
+                health[key] = ComponentHealth(status="unhealthy", detail=str(result))
+            else:
+                health[key] = result
+
+        return health
 
     @property
     def auth(self) -> AuthRepository:

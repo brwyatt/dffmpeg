@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable, Optional
 import aiosqlite
 from sqlalchemy.dialects import sqlite
 
+from dffmpeg.common.models import ComponentHealth
 from dffmpeg.coordinator.db.engines.sqlalchemy import SQLAlchemyDB
 
 sql_types = str | int | float | datetime | None
@@ -121,3 +122,13 @@ class SQLiteDB(SQLAlchemyDB):
             cursor = await db.execute(query, params)
             await db.commit()
             return cursor.rowcount
+
+    async def health_check(self) -> ComponentHealth:
+        """
+        Check the health of the SQLite database.
+        """
+        try:
+            await self.get_row("SELECT 1")
+            return ComponentHealth(status="online")
+        except Exception as e:
+            return ComponentHealth(status="unhealthy", detail=str(e))

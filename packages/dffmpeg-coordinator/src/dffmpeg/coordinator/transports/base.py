@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 from fastapi import FastAPI
 from ulid import ULID
 
-from dffmpeg.common.models import BaseMessage, TransportMetadata
+from dffmpeg.common.models import BaseMessage, ComponentHealth, TransportMetadata
 
 
 class BaseServerTransport:
@@ -48,5 +48,14 @@ class BaseServerTransport:
 
         Returns:
             Dict[str, Any]: A dictionary of metadata (e.g., {"path": "/poll/..."}).
+        """
+        raise NotImplementedError()
+
+    async def health_check(self) -> ComponentHealth:
+        """
+        Check the health of the transport implementation.
+
+        Returns:
+            ComponentHealth: The health status of the transport.
         """
         raise NotImplementedError()
