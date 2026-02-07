@@ -81,3 +81,12 @@ class JobRepository(BaseDB):
 
     async def get_worker_load(self) -> dict[str, int]:
         raise NotImplementedError()
+
+    async def get_dashboard_jobs(
+        self,
+        requester_id: str,
+        limit: int = 20,
+        since_id: Optional[ULID] = None,
+        recent_window_seconds: int = 3600,
+    ) -> list[JobRecord]:
+        raise NotImplementedError()

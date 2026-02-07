@@ -147,16 +147,27 @@ async def run_status(job_id: str | None, config_file: str | None = None):
     async with DFFmpegClient(config) as client:
         try:
             if not job_id:
-                # TODO: Implement list jobs when API supports it
-                print("Listing jobs is not yet implemented.")
-                return 1
+                jobs = await client.list_jobs(limit=20)
+                if not jobs:
+                    print("No jobs found.")
+                    return 0
+
+                print(f"{'Job ID':<26} {'Status':<12} {'Binary':<10} {'Created'}")
+                print("-" * 70)
+                for job in jobs:
+                    print(f"{job['job_id']:<26} {job['status']:<12} {job['binary_name']:<10} {job['created_at']}")
+                return 0
 
             status = await client.get_job_status(job_id)
             # Pretty print status
             print(f"Job ID: {status['job_id']}")
             print(f"Status: {status['status']}")
             print(f"Worker: {status.get('worker_id', '<Unassigned>')}")
-            # print(status)
+            print(f"Binary: {status['binary_name']}")
+            print(f"Args: {' '.join(status['arguments'])}")
+            print(f"Paths: {status['paths']}")
+            print(f"Created: {status['created_at']}")
+            print(f"Last Update: {status['last_update']}")
             return 0
         except Exception as e:
             logger.error(f"Error getting status: {e}")

@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from logging import getLogger
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from ulid import ULID
@@ -95,6 +95,42 @@ async def job_submit(
     )
 
     return job_record
+
+
+@router.get("/jobs")
+async def job_list(
+    limit: int = 20,
+    since_id: Optional[str] = None,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    job_repo: JobRepository = Depends(get_job_repo),
+):
+    """
+    Lists jobs for the authenticated client.
+    Shows active jobs and recently finished jobs (last 1 hour).
+
+    Args:
+        limit (int): Max number of jobs to return.
+        since_id (Optional[str]): Cursor for pagination (job_id).
+        identity (AuthenticatedIdentity): The authenticated client identity.
+        job_repo (JobRepository): Job repository.
+
+    Returns:
+        List[JobRecord]: List of matching jobs.
+    """
+    s_id = None
+    if since_id:
+        try:
+            s_id = ULID.from_str(since_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid since_id")
+
+    jobs = await job_repo.get_dashboard_jobs(
+        requester_id=identity.client_id,
+        limit=limit,
+        since_id=s_id,
+    )
+
+    return jobs
 
 
 @router.post("/jobs/{job_id}/accept")

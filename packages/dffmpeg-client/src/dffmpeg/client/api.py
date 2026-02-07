@@ -82,6 +82,17 @@ class DFFmpegClient:
         resp.raise_for_status()
         return resp.json()
 
+    async def list_jobs(self, limit: int = 20, since_id: str = None) -> List[Dict[str, Any]]:
+        """Lists active and recently finished jobs."""
+        params = {"limit": limit}
+        if since_id:
+            params["since_id"] = since_id
+
+        path = "/jobs"
+        resp = await self.client.get(path, params=params)
+        resp.raise_for_status()
+        return resp.json()
+
     async def stream_job(
         self, job_id: str, transport_name: str, transport_metadata: Dict[str, Any]
     ) -> AsyncIterator[Union[JobStatusMessage, JobLogsMessage]]:

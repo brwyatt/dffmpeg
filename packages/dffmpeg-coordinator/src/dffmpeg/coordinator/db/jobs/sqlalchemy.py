@@ -1,8 +1,8 @@
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
-from sqlalchemy import ColumnElement, TextClause, and_, func, select, update
+from sqlalchemy import ColumnElement, TextClause, and_, func, or_, select, update
 from ulid import ULID
 
 from dffmpeg.common.models import JobStatus, TransportRecord
@@ -196,3 +196,36 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
         rows = await self.get_rows(sql, params)
 
         return {row["worker_id"]: row["count"] for row in rows}
+
+    async def get_dashboard_jobs(
+        self,
+        requester_id: str,
+        limit: int = 20,
+        since_id: Optional[ULID] = None,
+        recent_window_seconds: int = 3600,
+    ) -> list[JobRecord]:
+        now = datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=recent_window_seconds)
+
+        active_statuses = ["pending", "assigned", "running", "canceling"]
+        finished_statuses = ["completed", "failed", "canceled"]
+
+        conditions = [
+            self.table.c.requester_id == requester_id,
+            or_(
+                self.table.c.status.in_(active_statuses),
+                and_(
+                    self.table.c.status.in_(finished_statuses),
+                    self.table.c.last_update > cutoff,
+                ),
+            ),
+        ]
+
+        if since_id:
+            conditions.append(self.table.c.job_id < str(since_id))
+
+        query = select(self.table).where(and_(*conditions)).order_by(self.table.c.job_id.desc()).limit(limit)
+
+        sql, params = self.compile_query(query)
+        rows = await self.get_rows(sql, params)
+        return [self._row_to_job(row) for row in rows]
