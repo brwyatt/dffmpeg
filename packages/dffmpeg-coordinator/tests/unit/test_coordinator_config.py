@@ -1,12 +1,31 @@
+import pytest
 import yaml
 
 from dffmpeg.coordinator.config import CoordinatorConfig, load_config
 
 
-def test_load_config_default(tmp_path):
-    # If no file exists, should return defaults
-    config = load_config(tmp_path / "nonexistent.yml")
+def test_load_config_default_explicit_missing(tmp_path):
+    # If explicit file path is missing, should raise FileNotFoundError
+    with pytest.raises(FileNotFoundError):
+        load_config(tmp_path / "nonexistent.yml")
+
+
+def test_load_config_none(tmp_path, monkeypatch):
+    # Ensure CWD is clean
+    monkeypatch.chdir(tmp_path)
+    config = load_config(None)
     assert isinstance(config, CoordinatorConfig)
+
+
+def test_load_config_env_var(tmp_path, monkeypatch):
+    config_data = {"database": {"defaults": {"engine": "sqlite", "path": "env.db"}}}
+    config_file = tmp_path / "env_config.yml"
+    with open(config_file, "w") as f:
+        yaml.dump(config_data, f)
+
+    monkeypatch.setenv("DFFMPEG_COORDINATOR_CONFIG", str(config_file))
+    config = load_config()
+    assert config.database.defaults["path"] == "env.db"
 
 
 def test_load_config_basic(tmp_path):

@@ -4,6 +4,7 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
+from dffmpeg.common.config_utils import find_config_file
 from dffmpeg.common.models import default_job_heartbeat_interval
 from dffmpeg.coordinator.db import DBConfig
 from dffmpeg.coordinator.transports import TransportConfig
@@ -22,19 +23,31 @@ class JanitorConfig(BaseModel):
 
 
 class CoordinatorConfig(BaseModel):
+    host: str = "127.0.0.1"
+    port: int = 8000
     database: DBConfig = Field(default_factory=DBConfig)
     transports: TransportConfig = Field(default_factory=TransportConfig)
     janitor: JanitorConfig = Field(default_factory=JanitorConfig)
     job_heartbeat_interval: int = default_job_heartbeat_interval
 
 
-def load_config(path: Path | str = "./config.yaml") -> CoordinatorConfig:
-    path = Path(path)
-    if not path.exists():
-        logger.warning(f"Could not find config file at {str(path)}")
+def load_config(path: Path | str | None = None) -> CoordinatorConfig:
+    config_path = None
+    try:
+        config_path = find_config_file(
+            app_name="coordinator",
+            env_var="DFFMPEG_COORDINATOR_CONFIG",
+            explicit_path=path,
+        )
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        raise
+
+    if not config_path:
+        logger.warning("Could not find coordinator config file.")
         return CoordinatorConfig()
 
-    with open(path, "r") as f:
+    with open(config_path, "r") as f:
         data = yaml.safe_load(f)
 
     # Handle external encryption keys file if referenced in the config
@@ -43,7 +56,7 @@ def load_config(path: Path | str = "./config.yaml") -> CoordinatorConfig:
     if keys_file:
         keys_path = Path(keys_file)
         if not keys_path.is_absolute():
-            keys_path = path.parent / keys_path
+            keys_path = config_path.parent / keys_path
 
         if keys_path.exists():
             with open(keys_path, "r") as f:

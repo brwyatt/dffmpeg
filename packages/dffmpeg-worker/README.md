@@ -4,7 +4,15 @@ The worker agent that runs on encoding nodes. It polls the Coordinator for assig
 
 ## Configuration
 
-Configuration is handled via a YAML file (default: `config.yaml`).
+Configuration is handled via a YAML file (default: `dffmpeg-worker.yaml`).
+
+The worker searches for configuration in the following order:
+1.  CLI Argument (`--config`)
+2.  Environment Variable (`DFFMPEG_WORKER_CONFIG`)
+3.  Current Working Directory (`./dffmpeg-worker.yaml`)
+4.  User Config (`~/.config/dffmpeg/worker.yaml`)
+5.  System Config (`/etc/dffmpeg/worker.yaml`)
+6.  Venv Root (`sys.prefix/dffmpeg-worker.yaml`)
 
 ### Key Settings
 

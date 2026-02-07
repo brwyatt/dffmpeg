@@ -1,6 +1,5 @@
 import logging
 import os
-import sys
 from pathlib import Path
 from typing import Any, Dict, Optional
 from urllib.parse import urlparse
@@ -8,7 +7,11 @@ from urllib.parse import urlparse
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 
-from dffmpeg.common.config_utils import inject_transport_defaults, load_hmac_key
+from dffmpeg.common.config_utils import (
+    find_config_file,
+    inject_transport_defaults,
+    load_hmac_key,
+)
 from dffmpeg.common.models.config import CoordinatorConnectionConfig
 from dffmpeg.common.transports import ClientTransportConfig
 
@@ -28,36 +31,27 @@ def load_config(config_file: Optional[str] = None) -> ClientConfig:
     """
     Loads configuration from file and environment variables.
     """
+    config_path = None
+    try:
+        config_path = find_config_file(
+            app_name="client",
+            env_var="DFFMPEG_CLIENT_CONFIG",
+            explicit_path=config_file,
+        )
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        raise
 
-    # Determine config file path
-    candidates = []
-
-    if config_file:
-        candidates.append(Path(config_file))
-
-    if os.environ.get("DFFMPEG_CLIENT_CONFIG"):
-        candidates.append(Path(os.environ["DFFMPEG_CLIENT_CONFIG"]))
-
-    candidates.append(Path.cwd() / "dffmpeg-client.yaml")
-    candidates.append(Path.home() / ".config" / "dffmpeg" / "client.yaml")
-    candidates.append(Path("/etc/dffmpeg/client.yaml"))
-    candidates.append(Path(sys.prefix) / "dffmpeg-client.yaml")
-
-    selected_config_path = None
     file_data: Dict[str, Any] = {}
 
-    for path in candidates:
-        if path.exists() and path.is_file():
-            selected_config_path = path
-            logger.debug(f"Loading config from {path}")
-            try:
-                with open(path, "r") as f:
-                    file_data = yaml.safe_load(f) or {}
-                break
-            except Exception as e:
-                logger.warning(f"Failed to load config from {path}: {e}")
-
-    if not selected_config_path:
+    if config_path:
+        logger.debug(f"Loading config from {config_path}")
+        try:
+            with open(config_path, "r") as f:
+                file_data = yaml.safe_load(f) or {}
+        except Exception as e:
+            logger.warning(f"Failed to load config from {config_path}: {e}")
+    else:
         logger.debug("No config file found, relying on environment variables.")
 
     # Override with Environment Variables
@@ -79,7 +73,7 @@ def load_config(config_file: Optional[str] = None) -> ClientConfig:
             logger.warning(f"Failed to parse DFFMPEG_COORDINATOR_URL: {e}")
 
     # Load HMAC key (handles file reference)
-    load_hmac_key(file_data, selected_config_path or Path.cwd())
+    load_hmac_key(file_data, config_path or Path.cwd())
 
     try:
         config = ClientConfig.model_validate(file_data)

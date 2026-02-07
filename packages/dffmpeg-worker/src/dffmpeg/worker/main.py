@@ -48,10 +48,17 @@ async def run_worker(config):
 
 def main():
     parser = argparse.ArgumentParser(description="dffmpeg Worker")
-    parser.add_argument("--config", "-c", type=str, default="config.yml", help="Path to config file")
+    parser.add_argument("--config", "-c", type=str, default=None, help="Path to config file")
     args = parser.parse_args()
 
-    config = load_config(args.config)
+    try:
+        config = load_config(args.config)
+    except FileNotFoundError:
+        logger.fatal("Configuration file not found.")
+        return
+    except Exception as e:
+        logger.fatal(f"Failed to load configuration: {e}")
+        return
 
     try:
         asyncio.run(run_worker(config))

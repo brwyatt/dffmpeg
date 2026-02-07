@@ -1,4 +1,6 @@
 import logging
+import os
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -6,6 +8,58 @@ from dffmpeg.common.models.config import CoordinatorConnectionConfig
 from dffmpeg.common.transports import ClientTransportConfig
 
 logger = logging.getLogger(__name__)
+
+
+def find_config_file(app_name: str, env_var: str | None = None, explicit_path: Path | str | None = None) -> Path | None:
+    """
+    Locates the configuration file for the specified application.
+
+    Search order:
+    1. Explicit path (if provided) - Raises FileNotFoundError if missing
+    2. Environment variable path (if provided) - Raises FileNotFoundError if missing
+    3. ./dffmpeg-{app_name}.yaml
+    4. ~/.config/dffmpeg/{app_name}.yaml
+    5. /etc/dffmpeg/{app_name}.yaml
+    6. {sys.prefix}/dffmpeg-{app_name}.yaml
+
+    Args:
+        app_name (str): The application name (e.g., 'coordinator', 'worker', 'client').
+        env_var (str, optional): The name of the environment variable to check for a config path.
+        explicit_path (Path | str, optional): A specific path to check first.
+
+    Returns:
+        Path | None: The path to the configuration file, or None if not found.
+
+    Raises:
+        FileNotFoundError: If an explicit path or environment variable path is provided but does not exist.
+    """
+    if explicit_path:
+        path = Path(explicit_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Configuration file not found at explicit path: {path}")
+        return path
+
+    if env_var and (env_val := os.environ.get(env_var)):
+        path = Path(env_val)
+        if not path.exists():
+            raise FileNotFoundError(f"Configuration file not found at path specified by {env_var}: {path}")
+        return path
+
+    filename = f"dffmpeg-{app_name}.yaml"
+
+    candidates = [
+        Path.cwd() / filename,
+        Path.home() / ".config" / "dffmpeg" / f"{app_name}.yaml",
+        Path("/etc/dffmpeg") / f"{app_name}.yaml",
+        Path(sys.prefix) / filename,
+    ]
+
+    for path in candidates:
+        if path.exists() and path.is_file():
+            logger.debug(f"Found config at {path}")
+            return path
+
+    return None
 
 
 def load_hmac_key(data: Dict[str, Any], config_path: Path) -> str:

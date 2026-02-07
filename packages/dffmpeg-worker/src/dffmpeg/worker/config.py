@@ -4,7 +4,11 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field
 
-from dffmpeg.common.config_utils import inject_transport_defaults, load_hmac_key
+from dffmpeg.common.config_utils import (
+    find_config_file,
+    inject_transport_defaults,
+    load_hmac_key,
+)
 from dffmpeg.common.models.config import CoordinatorConnectionConfig
 from dffmpeg.common.transports import ClientTransportConfig
 
@@ -23,18 +27,23 @@ class WorkerConfig(BaseModel):
     paths: dict[str, str] = Field(default_factory=dict)
 
 
-def load_config(path: Path | str = "./config.yaml") -> WorkerConfig:
-    path = Path(path)
-    if not path.exists():
-        logger.warning(f"Could not find config file at {str(path)}")
+def load_config(path: Path | str | None = None) -> WorkerConfig:
+    config_path = None
+    try:
+        config_path = find_config_file(app_name="worker", env_var="DFFMPEG_WORKER_CONFIG", explicit_path=path)
+    except FileNotFoundError as e:
+        logger.error(str(e))
+        raise
 
     data = {}
-    if path.exists():
-        with open(path, "r") as f:
+    if config_path:
+        with open(config_path, "r") as f:
             data = yaml.safe_load(f) or {}
+    else:
+        logger.warning("Could not find worker config file.")
 
     # Handle HMAC key file
-    load_hmac_key(data, path)
+    load_hmac_key(data, config_path or Path.cwd())
 
     config = WorkerConfig.model_validate(data)
 

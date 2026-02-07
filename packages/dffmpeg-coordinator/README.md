@@ -9,7 +9,15 @@ The central server component of DFFmpeg. It manages:
 
 ## Configuration
 
-Configuration is handled via a YAML file (default: `config.yaml`).
+Configuration is handled via a YAML file (default: `dffmpeg-coordinator.yaml`).
+
+The coordinator searches for configuration in the following order:
+1.  CLI Argument (`--config`)
+2.  Environment Variable (`DFFMPEG_COORDINATOR_CONFIG`)
+3.  Current Working Directory (`./dffmpeg-coordinator.yaml`)
+4.  User Config (`~/.config/dffmpeg/coordinator.yaml`)
+5.  System Config (`/etc/dffmpeg/coordinator.yaml`)
+6.  Venv Root (`sys.prefix/dffmpeg-coordinator.yaml`)
 
 ### Key Sections
 
@@ -25,12 +33,22 @@ Configuration is handled via a YAML file (default: `config.yaml`).
     *   `worker_threshold_factor`: Multiplier for determining when a worker is considered stale.
     *   `job_assignment_timeout`: Max time (seconds) a job can stay in "assigned" state before retry.
 
-## Running (Development)
+## Running
 
-The coordinator is a FastAPI application.
+The coordinator runs via the `dffmpeg-coordinator` CLI.
 
 ```bash
-uvicorn dffmpeg.coordinator.api.main:app --reload
+dffmpeg-coordinator
+```
+
+For development (auto-reload):
+```bash
+dffmpeg-coordinator --dev
+```
+
+You can also override the host and port:
+```bash
+dffmpeg-coordinator --host 0.0.0.0 --port 9000
 ```
 
 ## API Documentation

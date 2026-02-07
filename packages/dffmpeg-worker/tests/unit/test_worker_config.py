@@ -6,10 +6,9 @@ from dffmpeg.worker.config import load_config
 
 
 def test_load_config_nonexistent(tmp_path):
-    # If file missing or empty, should fail due to missing hmac_key (checked before pydantic validation)
-    with pytest.raises(ValueError) as excinfo:
+    # If explicit file path is missing, should raise FileNotFoundError
+    with pytest.raises(FileNotFoundError):
         load_config(tmp_path / "nonexistent.yml")
-    assert "hmac_key must be provided" in str(excinfo.value)
 
 
 def test_load_config_missing_client_id(tmp_path):
