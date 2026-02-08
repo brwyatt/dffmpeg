@@ -8,7 +8,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 - [ ] **MariaDB/MySQL Support**: Implement MariaDB/MySQL database backend via the DAO pattern.
 - [ ] **MQTT Transport**: Implement MQTT transport for worker-coordinator communication.
 - [x] **Worker Status Code Reporting**: Relay process exit codes from worker to coordinator and client.
-- [ ] **Admin Management CLI (`dffmpeg-admin`)**: Create a tool for direct database management (e.g., bootstrapping users).
+- [x] **Admin Management CLI (`dffmpeg-admin`)**: Create a tool for direct database management (e.g., bootstrapping users).
 - [ ] **Mount Point Monitoring**: Verify worker path mappings are mounted before registration.
 
 ## Phase 2: Version 1.0 (Production Ready)

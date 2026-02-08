@@ -1,4 +1,4 @@
-from typing import Dict, Optional, Tuple
+from typing import Dict, Iterable, Optional, Tuple
 
 from sqlalchemy import TIMESTAMP, Column, MetaData, String, Table, func
 
@@ -37,6 +37,12 @@ class AuthRepository(BaseDB):
         raise NotImplementedError()
 
     async def add_identity(self, identity: AuthenticatedIdentity) -> None:
+        raise NotImplementedError()
+
+    async def list_identities(self, include_hmac_key: bool = False) -> Iterable[AuthenticatedIdentity]:
+        raise NotImplementedError()
+
+    async def delete_identity(self, client_id: str) -> bool:
         raise NotImplementedError()
 
     def _encrypt(self, hmac_key: str, key_id: Optional[str] = None) -> Tuple[str, str]:
