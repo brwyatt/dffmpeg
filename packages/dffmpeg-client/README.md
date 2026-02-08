@@ -38,7 +38,24 @@ coordinator:
 paths:
   Movies: "/mnt/media/movies"
   TV: "/mnt/media/tv"
+
+transports:
+  enabled_transports:
+    - "mqtt"
+    - "http_polling"
+  transport_settings:
+    mqtt:
+      host: "mqtt.example.com"
+      port: 1883
+      use_tls: false
 ```
+
+### Transports & Prioritization
+
+The client supports multiple transport mechanisms for receiving real-time updates from the Coordinator.
+*   **`enabled_transports`**: A list of transports to use, in order of preference. The Coordinator will respect this order when negotiating the best available transport.
+*   **`http_polling`**: Always available as a fallback.
+*   **`mqtt`**: Provides low-latency, real-time push notifications. Requires a separate MQTT broker.
 
 ## Path Mapping
 

@@ -67,7 +67,8 @@ async def job_submit(
         HTTPException: If no supported transports are available.
     """
     try:
-        negotiated_transport = get_negotiated_transport(payload.supported_transports, transports.transport_names)
+        healthy_transports = await transports.get_healthy_transports()
+        negotiated_transport = get_negotiated_transport(payload.supported_transports, healthy_transports)
     except ValueError:
         raise HTTPException(status_code=400, detail="No supported transports")
 

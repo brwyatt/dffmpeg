@@ -34,15 +34,24 @@ class TransportManager:
         return list(self.loaded_transports.keys())
 
     def load_transports(self) -> Dict[str, Type[BaseClientTransport]]:
-        available_entrypoints = entry_points(group="dffmpeg.transports.client")
+        available_entrypoints = {x.name: x for x in entry_points(group="dffmpeg.transports.client")}
         enabled_transports = self.config.enabled_transports
-        available_names = [x.name for x in available_entrypoints]
+
+        # If no transports are explicitly enabled, default to http_polling
+        if not enabled_transports:
+            enabled_transports = ["http_polling"]
+
         logger.info(f"Requested transports: {', '.join(enabled_transports)}")
-        logger.info(f"Available transports: {', '.join(available_names)}")
+        logger.info(f"Available transports: {', '.join(available_entrypoints.keys())}")
 
-        matching = [x for x in available_entrypoints if len(enabled_transports) == 0 or x.name in enabled_transports]
+        matching = []
+        for name in enabled_transports:
+            if name in available_entrypoints:
+                matching.append(available_entrypoints[name])
+            else:
+                logger.warning(f"Requested transport '{name}' not found in available transports.")
 
-        not_found = list(set(enabled_transports) - set(available_names))
+        not_found = list(set(enabled_transports) - set(available_entrypoints.keys()))
         if len(not_found) >= 1:
             logger.warning(
                 f"Could not find some requested transports, they will not be enabled: {', '.join(not_found)}"

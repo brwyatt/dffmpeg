@@ -23,8 +23,14 @@ The worker searches for configuration in the following order:
     *   `port`: Coordinator port (default: 8000).
     *   `scheme`: Protocol (`http` or `https`).
 *   **`transports`**: Client transport configuration.
-    *   `enabled_transports`: List of active transports (e.g., `["http_polling"]`).
-    *   `transport_settings`: Specific settings (e.g., polling intervals).
+    *   `enabled_transports`: List of active transports (e.g., `["mqtt", "http_polling"]`). If empty, defaults to `["http_polling"]`. The order of this list defines the worker's preference during negotiation with the Coordinator.
+    *   `transport_settings`: Specific settings for each transport type.
+        *   **`mqtt`**:
+            *   `host`: MQTT broker hostname.
+            *   `port`: MQTT broker port (default: 1883).
+            *   `username`: (Optional) Auth username.
+            *   `password`: (Optional) Auth password.
+            *   `use_tls`: Use TLS for the connection (default: false).
 *   **`binaries`**: Mapping of logical binary names to local file paths.
     *   Example: `ffmpeg: /usr/bin/ffmpeg`
 *   **`paths`**: Path mappings to translate Coordinator (source) paths to Worker (local) paths.

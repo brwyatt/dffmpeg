@@ -26,8 +26,15 @@ The coordinator searches for configuration in the following order:
         *   `auth`: Can include `encryption_keys_file` or `encryption_keys` for credential storage.
     *   `engine_defaults`: Default settings for database engines (e.g., SQLite path).
 *   **`transports`**: Transport settings.
-    *   `enabled_transports`: List of active transport mechanisms (e.g., `["http_polling"]`).
+    *   `enabled_transports`: List of active transport mechanisms (e.g., `["mqtt", "http_polling"]`). If empty, defaults to `["http_polling"]`. Note that the final transport selection is prioritized based on the order provided by the client or worker during registration/submission.
     *   `transport_settings`: Specific settings for each transport type.
+        *   **`mqtt`**:
+            *   `host`: MQTT broker hostname.
+            *   `port`: MQTT broker port (default: 1883).
+            *   `username`: (Optional) Auth username.
+            *   `password`: (Optional) Auth password.
+            *   `use_tls`: Use TLS for the connection (default: false).
+            *   `topic_prefix`: Prefix for all DFFmpeg topics (default: "dffmpeg").
 *   **`janitor`**: Background task settings.
     *   `interval`: How often the janitor runs (in seconds).
     *   `worker_threshold_factor`: Multiplier for determining when a worker is considered stale.

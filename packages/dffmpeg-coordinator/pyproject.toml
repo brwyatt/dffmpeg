@@ -10,15 +10,16 @@ classifiers = [
     "Programming Language :: Python :: 3",
 ]
 dependencies = [
+    "aiomqtt>=2.5.0, <3.0.0",
     "aiosqlite>=0.22.0, <1.0.0",
     "dffmpeg-common~=0.1.0",
     "fastapi>=0.128.0, <1.0.0",
+    "jinja2>=3.1.0, <4.0.0",
     "pydantic>=2.12.0, <3.0.0",
     "python-ulid[pydantic]>=3.1.0, <4.0.0",
     "pyyaml>=6.0.0, <7.0.0",
-    "uvicorn>=0.40.0, <1.0.0",
     "sqlalchemy>=2.0.0, <3.0.0",
-    "jinja2>=3.1.0, <4.0.0",
+    "uvicorn>=0.40.0, <1.0.0",
 ]
 
 [build-system]
@@ -66,3 +67,4 @@ sqlite = "dffmpeg.coordinator.db.workers.sqlite:SQLiteWorkerRepository"
 
 [project.entry-points."dffmpeg.transports.server"]
 http_polling = "dffmpeg.coordinator.transports.http_polling:HTTPPollingTransport"
+mqtt = "dffmpeg.coordinator.transports.mqtt:MQTTServerTransport"

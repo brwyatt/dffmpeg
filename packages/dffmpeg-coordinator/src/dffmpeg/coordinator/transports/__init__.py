@@ -38,6 +38,13 @@ class TransportManager:
         for key in self.loaded_transports.keys():
             await self[key].setup()
 
+    async def get_healthy_transports(self) -> List[str]:
+        """
+        Get a list of currently healthy transport names by leveraging the existing health check.
+        """
+        health_results = await self.health_check()
+        return [name for name, health in health_results.items() if health.status == "online"]
+
     async def health_check(self) -> Dict[str, ComponentHealth]:
         """
         Check the health of all loaded transports.
@@ -65,14 +72,18 @@ class TransportManager:
 
         await db.messages.add_message(message)
 
-        if message.job_id:
+        # 1. Try Worker-specific transport first (direct recipient)
+        transport = await db.workers.get_transport(message.recipient_id)
+
+        # 2. If not a direct worker, and there's a job_id, try Job transport (client/requester)
+        if transport is None and message.job_id:
             transport = await db.jobs.get_transport(message.job_id)
-        else:
-            transport = await db.workers.get_transport(message.recipient_id)
 
         if transport is None:
+            logger.warning(f"No transport record found for recipient {message.recipient_id} (job: {message.job_id})")
             return False
 
+        logger.info(f"Delivering message {message.message_id} to {message.recipient_id} via {transport.transport}")
         return await self[transport.transport].send_message(message, transport_metadata=transport.transport_metadata)
 
     @property
@@ -80,18 +91,27 @@ class TransportManager:
         return list(self.loaded_transports.keys())
 
     def load_transports(self) -> Dict[str, Type[BaseServerTransport]]:
-        available_entrypoints = entry_points(group="dffmpeg.transports.server")
+        available_entrypoints = {x.name: x for x in entry_points(group="dffmpeg.transports.server")}
         enabled_transports = self.config.enabled_transports
-        available_names = [x.name for x in available_entrypoints]
+
+        # If no transports are explicitly enabled, default to http_polling
+        if not enabled_transports:
+            enabled_transports = ["http_polling"]
+
         logger.info(f"Requested transports: {', '.join(enabled_transports)}")
-        logger.info(f"Available transports: {', '.join(available_names)}")
+        logger.info(f"Available transports: {', '.join(available_entrypoints.keys())}")
 
-        matching = [x for x in available_entrypoints if len(enabled_transports) == 0 or x.name in enabled_transports]
+        matching = []
+        for name in enabled_transports:
+            if name in available_entrypoints:
+                matching.append(available_entrypoints[name])
+            else:
+                logger.warning(f"Requested transport '{name}' not found in available transports.")
 
-        if len(matching) < 1:
-            ValueError(f"No transports matched requested transports: {', '.join(enabled_transports)}")
+        if not matching:
+            raise ValueError(f"No transports matched requested transports: {', '.join(enabled_transports)}")
 
-        not_found = list(set(enabled_transports) - set(available_names))
+        not_found = list(set(enabled_transports) - set(available_entrypoints.keys()))
         if len(not_found) >= 1:
             logger.warning(
                 f"Could not find some requested transports, they will not be enabled: {', '.join(not_found)}"

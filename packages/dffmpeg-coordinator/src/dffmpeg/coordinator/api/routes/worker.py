@@ -45,7 +45,8 @@ async def worker_register(
         raise HTTPException(status_code=403, detail="WorkerID does not match authenticated ClientID")
 
     try:
-        negotiated_transport = get_negotiated_transport(payload.supported_transports, transports.transport_names)
+        healthy_transports = await transports.get_healthy_transports()
+        negotiated_transport = get_negotiated_transport(payload.supported_transports, healthy_transports)
     except ValueError:
         logger.error(f"Client requested unsupported transports: {', '.join(payload.supported_transports)}")
         raise HTTPException(
