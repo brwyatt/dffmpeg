@@ -27,6 +27,7 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             arguments=safe_job["arguments"],  # SQLAlchemy handles JSON serialization
             paths=safe_job["paths"],  # SQLAlchemy handles JSON serialization
             status=job.status,
+            exit_code=job.exit_code,
             worker_id=job.worker_id,
             created_at=job.created_at,
             last_update=job.last_update,
@@ -53,6 +54,7 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             arguments=parse_json(row["arguments"]),
             paths=parse_json(row["paths"]),
             status=row["status"],
+            exit_code=row["exit_code"],
             worker_id=row["worker_id"],
             created_at=row["created_at"],
             last_update=row["last_update"],
@@ -131,6 +133,7 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
         self,
         job_id: ULID,
         status: JobStatus,
+        exit_code: Optional[int] = None,
         worker_id: Optional[str] = None,
         timestamp: Optional[datetime] = None,
         previous_status: Optional[JobStatus] = None,
@@ -139,6 +142,8 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             timestamp = datetime.now(timezone.utc)
 
         values = {"status": status, "last_update": timestamp}
+        if exit_code is not None:
+            values["exit_code"] = exit_code
         if worker_id:
             values["worker_id"] = worker_id
 

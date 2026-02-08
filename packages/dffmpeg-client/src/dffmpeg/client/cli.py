@@ -38,10 +38,10 @@ async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, me
             elif isinstance(message, JobStatusMessage):
                 status = message.payload.status
                 if status == "completed":
-                    exit_code = 0
+                    exit_code = message.payload.exit_code if message.payload.exit_code is not None else 0
                     break
                 elif status == "failed":
-                    exit_code = 1
+                    exit_code = message.payload.exit_code if message.payload.exit_code is not None else 1
                     break
                 elif status == "canceled":
                     exit_code = 130  # Standard SIGINT exit code
@@ -152,16 +152,20 @@ async def run_status(job_id: str | None, config_file: str | None = None):
                     print("No jobs found.")
                     return 0
 
-                print(f"{'Job ID':<26} {'Status':<12} {'Binary':<10} {'Created'}")
-                print("-" * 70)
+                print(f"{'Job ID':<26} {'Status':<20} {'Binary':<10} {'Created'}")
+                print("-" * 80)
                 for job in jobs:
-                    print(f"{str(job.job_id):<26} {job.status:<12} {job.binary_name:<10} {job.created_at}")
+                    status_str = f"{job.status}{f' ({job.exit_code})' if job.exit_code not in (None, 0) else ''}"
+                    print(f"{str(job.job_id):<26} {status_str:<20} {job.binary_name:<10} {job.created_at}")
                 return 0
 
             status = await client.get_job_status(job_id)
             # Pretty print status
             print(f"Job ID: {status.job_id}")
-            print(f"Status: {status.status}")
+            status_str = f"{status.status}{f' ({status.exit_code})' if status.exit_code not in (None, 0) else ''}"
+            print(f"Status: {status_str}")
+            if status.exit_code is not None:
+                print(f"Exit Code: {status.exit_code}")
             print(f"Worker: {status.worker_id or '<Unassigned>'}")
             print(f"Binary: {status.binary_name}")
             print(f"Args: {' '.join(status.arguments)}")

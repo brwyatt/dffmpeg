@@ -75,6 +75,7 @@ class Job(BaseModel):
     arguments: List[str] = Field(default_factory=list)
     paths: List[str] = Field(default_factory=list)
     status: JobStatus
+    exit_code: Optional[int] = None
     worker_id: str | None = OptionalClientId
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_update: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
@@ -132,6 +133,7 @@ class JobStatusPayload(BaseModel):
     """
 
     status: JobStatus
+    exit_code: Optional[int] = None
     last_update: Optional[datetime] = None
 
 
@@ -156,6 +158,7 @@ class JobStatusUpdate(BaseModel):
     """
 
     status: JobStatusUpdateStatus
+    exit_code: Optional[int] = None
 
 
 class LogEntry(BaseModel):

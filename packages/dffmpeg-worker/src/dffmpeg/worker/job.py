@@ -124,14 +124,15 @@ class JobRunner:
         except Exception as e:
             logger.warning(f"Failed to send logs: {e}. Buffered {len(self._log_buffer)} entries.")
 
-    async def _do_work(self):
+    async def _do_work(self) -> int:
         """
         Executes the actual job work.
         """
-        await self.executor.execute(self._send_log)
+        return await self.executor.execute(self._send_log)
 
     async def _run(self):
         """Main execution flow for the job."""
+        exit_code = None
         try:
             # 1. Accept the job
             logger.info(f"[{self.client_id}] Accepting job {self.job_id}")
@@ -142,11 +143,15 @@ class JobRunner:
             self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
 
             # 3. Execute
-            await self._do_work()
+            exit_code = await self._do_work()
 
-            # 4. Report Success
-            logger.info(f"[{self.client_id}] Job {self.job_id} completed successfully")
-            await self._report_status("completed")
+            # 4. Report Success/Failure based on exit code
+            if exit_code == 0:
+                logger.info(f"[{self.client_id}] Job {self.job_id} completed successfully")
+                await self._report_status("completed", exit_code=exit_code)
+            else:
+                logger.error(f"[{self.client_id}] Job {self.job_id} failed with exit code {exit_code}")
+                await self._report_status("failed", exit_code=exit_code)
 
         except asyncio.CancelledError:
             logger.info(f"[{self.client_id}] Job {self.job_id} execution canceled")
@@ -156,7 +161,7 @@ class JobRunner:
 
         except Exception as e:
             logger.error(f"[{self.client_id}] Job {self.job_id} failed: {e}", exc_info=True)
-            await self._report_status("failed")
+            await self._report_status("failed", exit_code=exit_code)
 
         finally:
             if self._heartbeat_task:
@@ -164,15 +169,16 @@ class JobRunner:
             # client is owned by Worker, do not close here
             self.cleanup_callback(self.job_id)
 
-    async def _report_status(self, status: JobStatusUpdateStatus):
+    async def _report_status(self, status: JobStatusUpdateStatus, exit_code: Optional[int] = None):
         """
         Reports final status to coordinator.
 
         Args:
             status (str): The final status of the job (e.g., "completed", "failed", "canceled").
+            exit_code (Optional[int]): The process exit code, if applicable.
         """
         self._last_status = status
-        payload_model = JobStatusUpdate(status=status)
+        payload_model = JobStatusUpdate(status=status, exit_code=exit_code)
         path = self.coordinator_paths["status"]
         body = payload_model.model_dump(mode="json")
 

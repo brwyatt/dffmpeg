@@ -11,7 +11,7 @@ While `rffmpeg` excels at simple, direct remote execution (SSH into a worker and
 
 *   **Centralized State:** Instead of clients "blindly" picking a worker, they submit jobs to a Coordinator. The Coordinator manages the state of the cluster, handling queueing, assignment, and retries.
 *   **Path Independence ("Path-Blind"):** In `dffmpeg`, the Coordinator never deals with absolute paths. It uses variables (e.g., `$Source/video.mkv`). Path translation happens only at the edges (Client and Worker), allowing each node to have different mount points or storage configurations.
-*   **Resilience:** Jobs are durable. If a worker crashes or a node goes offline, the Coordinator detects the failure (via heartbeat monitoring). Assignments that haven't started are re-queued to active workers, while interrupted running jobs are marked as failed to notify the client, preventing "zombie" jobs from hanging indefinitely.
+*   **Resilience:** Jobs are durable. If a worker crashes or a node goes offline, the Coordinator detects the failure (via heartbeat monitoring). Assignments that haven't started are re-queued to active workers, while interrupted running jobs are marked as failed to notify the client, preventing "zombie" jobs from hanging indefinitely. When a job fails, the worker reports the process exit code back to the coordinator and client for easier troubleshooting.
 
 ## Core Architecture
 

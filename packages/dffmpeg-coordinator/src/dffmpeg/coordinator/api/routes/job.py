@@ -170,7 +170,7 @@ async def job_accept(
 
     timestamp = datetime.now(timezone.utc)
 
-    await job_repo.update_status(j_id, "running", identity.client_id, timestamp=timestamp)
+    await job_repo.update_status(j_id, "running", worker_id=identity.client_id, timestamp=timestamp)
 
     await transports.send_message(
         JobStatusMessage(
@@ -226,7 +226,7 @@ async def job_cancel(
 
     if job.worker_id is not None:
         # Update status to canceling
-        await job_repo.update_status(j_id, "canceling", job.worker_id, timestamp=timestamp)
+        await job_repo.update_status(j_id, "canceling", worker_id=job.worker_id, timestamp=timestamp)
 
         # Tell the client
         await transports.send_message(
@@ -340,14 +340,16 @@ async def job_status_update(
 
     # Update status
     # We pass worker_id to ensure we are the owner (already checked above, but good for consistency)
-    await job_repo.update_status(j_id, payload.status, identity.client_id, timestamp=timestamp)
+    await job_repo.update_status(
+        j_id, payload.status, exit_code=payload.exit_code, worker_id=identity.client_id, timestamp=timestamp
+    )
 
     await transports.send_message(
         JobStatusMessage(
             recipient_id=job.requester_id,
             job_id=j_id,
             sender_id=identity.client_id,
-            payload=JobStatusPayload(status=payload.status, last_update=timestamp),
+            payload=JobStatusPayload(status=payload.status, exit_code=payload.exit_code, last_update=timestamp),
         )
     )
 

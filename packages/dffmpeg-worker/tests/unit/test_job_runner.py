@@ -24,6 +24,7 @@ async def test_job_runner_success():
     mock_cleanup = MagicMock()
     mock_client = AsyncMock(spec=AuthenticatedAsyncClient)
     mock_executor = AsyncMock(spec=JobExecutor)
+    mock_executor.execute.return_value = 0
 
     config = WorkerConfig(client_id="test-worker", hmac_key="dummy-key")
 
@@ -57,6 +58,7 @@ async def test_job_runner_success():
     assert len(status_calls) == 1
     kwargs = status_calls[0][1]
     assert kwargs["json"]["status"] == "completed"
+    assert kwargs["json"]["exit_code"] == 0
 
     # Verify cleanup
     mock_cleanup.assert_called_with(job_id)
@@ -98,6 +100,7 @@ async def test_job_runner_failure():
     assert len(status_calls) == 1
     kwargs = status_calls[0][1]
     assert kwargs["json"]["status"] == "failed"
+    assert kwargs["json"]["exit_code"] is None
 
     mock_cleanup.assert_called_with(job_id)
 

@@ -16,7 +16,7 @@ class JobExecutor(Protocol):
     async def execute(
         self,
         log_callback: Callable[[LogEntry], Awaitable[None]],
-    ) -> None:
+    ) -> int:
         """
         Executes a job.
 
@@ -80,7 +80,7 @@ class SubprocessJobExecutor:
     async def execute(
         self,
         log_callback: Callable[[LogEntry], Awaitable[None]],
-    ) -> None:
+    ) -> int:
         """
         Executes the subprocess.
         """
@@ -116,8 +116,7 @@ class SubprocessJobExecutor:
 
             return_code = await process.wait()
 
-            if return_code != 0:
-                raise Exception(f"Process failed with return code {return_code}")
+            return return_code
 
         except asyncio.CancelledError:
             logger.warning(f"Job {self.job_id} canceled, terminating subprocess...")

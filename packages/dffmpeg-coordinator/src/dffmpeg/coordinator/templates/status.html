@@ -37,7 +37,7 @@
             {% for worker in workers %}
             <tr>
                 <td>{{ worker.worker_id }}</td>
-                <td class="status-{{ worker.status }}">{{ worker.status }}</td>
+                <td><span class="status-{{ worker.status }}">{{ worker.status }}</span></td>
                 <td>{{ worker.last_seen.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
                 <td>{{ worker_load.get(worker.worker_id, 0) }}</td>
                 <td>{{ worker.binaries | join(', ') }}</td>
@@ -65,7 +65,9 @@
             {% for job in jobs %}
             <tr>
                 <td>{{ job.job_id }}</td>
-                <td class="status-{{ job.status }}">{{ job.status }}</td>
+                <td>
+                    <span class="status-{{ job.status }}">{{ job.status }}</span>{% if job.exit_code is not none and job.exit_code != 0 %} ({{ job.exit_code }}){% endif %}
+                </td>
                 <td>{{ job.binary_name }}</td>
                 <td>{{ job.requester_id }}</td>
                 <td>{{ job.worker_id or '-' }}</td>

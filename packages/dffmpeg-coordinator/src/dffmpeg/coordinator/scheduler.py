@@ -70,7 +70,7 @@ async def process_job_assignment(
         timestamp = datetime.now(timezone.utc)
 
         # Assign
-        await job_repo.update_status(job_id, "assigned", selected_worker.worker_id, timestamp=timestamp)
+        await job_repo.update_status(job_id, "assigned", worker_id=selected_worker.worker_id, timestamp=timestamp)
 
         # Notify Worker
         await transports.send_message(
