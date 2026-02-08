@@ -19,6 +19,7 @@ from dffmpeg.common.models import (
 from dffmpeg.worker.config import WorkerConfig
 from dffmpeg.worker.executor import SubprocessJobExecutor
 from dffmpeg.worker.job import JobRunner
+from dffmpeg.worker.mounts import MountManager
 from dffmpeg.worker.transport import WorkerTransportManager
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class Worker:
             http_client_cls=http_client_cls,
         )
         self.transport_manager = WorkerTransportManager(config.transports)
+        self.mount_manager = MountManager(config.mount_management)
 
         logger.info(f"ClientID: {config.client_id} HMAC: {config.hmac_key}")
 
@@ -108,12 +110,18 @@ class Worker:
         jitter_bound = min(0.5 * self.config.registration_interval, self.config.jitter)
         while self._running:
             try:
+                # Check and recover mounts
+                await self.mount_manager.refresh_and_recover()
+
+                # Filter paths based on mount status
+                healthy_paths = self.mount_manager.get_healthy_paths(self.config.paths)
+
                 # Prepare payload
                 payload_model = WorkerRegistration(
                     worker_id=self.client_id,
                     capabilities=[],  # TODO: Retrieve actual capabilities dynamically
                     binaries=[cast(SupportedBinaries, x) for x in self.config.binaries.keys()],
-                    paths=list(self.config.paths.keys()),
+                    paths=list(healthy_paths.keys()),
                     supported_transports=self.transport_manager.transport_names,
                     registration_interval=self.config.registration_interval,
                 )

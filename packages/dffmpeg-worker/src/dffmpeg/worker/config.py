@@ -15,6 +15,17 @@ from dffmpeg.common.transports import ClientTransportConfig
 logger = getLogger(__name__)
 
 
+class MountConfig(BaseModel):
+    path: str
+    dependencies: list[str] = Field(default_factory=list)
+
+
+class MountManagementConfig(BaseModel):
+    recovery: bool = True
+    sudo: bool = False
+    mounts: list[str | MountConfig] = Field(default_factory=list)
+
+
 class WorkerConfig(BaseModel):
     client_id: str
     hmac_key: str | None = None
@@ -25,6 +36,7 @@ class WorkerConfig(BaseModel):
     transports: ClientTransportConfig = Field(default_factory=ClientTransportConfig)
     binaries: dict[str, str] = Field(default_factory=dict)
     paths: dict[str, str] = Field(default_factory=dict)
+    mount_management: MountManagementConfig = Field(default_factory=MountManagementConfig)
 
 
 def load_config(path: Path | str | None = None) -> WorkerConfig:

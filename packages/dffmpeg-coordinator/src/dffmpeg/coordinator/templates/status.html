@@ -31,6 +31,7 @@
                 <th>Last Seen</th>
                 <th>Load</th>
                 <th>Binaries</th>
+                <th>Paths</th>
             </tr>
         </thead>
         <tbody>
@@ -41,9 +42,10 @@
                 <td>{{ worker.last_seen.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
                 <td>{{ worker_load.get(worker.worker_id, 0) }}</td>
                 <td>{{ worker.binaries | join(', ') }}</td>
+                <td>{{ worker.paths | join(', ') }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="5">No workers found.</td></tr>
+            <tr><td colspan="6">No workers found.</td></tr>
             {% endfor %}
         </tbody>
     </table>
