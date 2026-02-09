@@ -35,6 +35,17 @@ The coordinator searches for configuration in the following order:
             *   `password`: (Optional) Auth password.
             *   `use_tls`: Use TLS for the connection (default: false).
             *   `topic_prefix`: Prefix for all DFFmpeg topics (default: "dffmpeg").
+        *   **`rabbitmq`**:
+            *   `host`: RabbitMQ hostname.
+            *   `port`: RabbitMQ port (default: 5672, or 5671 for TLS).
+            *   `username`: (Optional) Auth username.
+            *   `password`: (Optional) Auth password.
+            *   `vhost`: Virtual host (default: "/").
+            *   `use_tls`: Use TLS for the connection (default: false).
+            *   `verify_ssl`: Verify SSL certificates (default: true).
+            *   `use_srv`: Use SRV records for discovery (default: false).
+            *   `workers_exchange`: Exchange for worker commands (default: "dffmpeg.workers").
+            *   `jobs_exchange`: Exchange for job updates (default: "dffmpeg.jobs").
 *   **`janitor`**: Background task settings.
     *   `interval`: How often the janitor runs (in seconds).
     *   `worker_threshold_factor`: Multiplier for determining when a worker is considered stale.

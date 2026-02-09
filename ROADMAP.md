@@ -23,7 +23,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 *Goal: Expanded compatibility and features.*
 
 - [ ] **PostgreSQL Support**: Implement PostgreSQL database backend.
-- [ ] **RabbitMQ Transport**: Implement RabbitMQ transport.
+- [x] **RabbitMQ Transport**: Implement RabbitMQ transport.
 - [ ] **Worker Capabilities**: Dynamic detection of FFmpeg features (codecs, formats).
 
 ## Phase 4: Post-1.0

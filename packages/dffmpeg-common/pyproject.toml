@@ -11,6 +11,8 @@ classifiers = [
 ]
 dependencies = [
     "aiomqtt>=2.5.0, <3.0.0",
+    "aio-pika>=9.5.0, <10.0.0",
+    "dnspython>=2.6.0, <3.0.0",
     "cryptography>=46.0.0, <47.0.0",
     "httpx>=0.28.0, <1.0.0",
     "pydantic>=2.12.0, <3.0.0",
@@ -24,6 +26,7 @@ fernet = "dffmpeg.common.crypto.fernet:FernetEncryption"
 [project.entry-points."dffmpeg.transports.client"]
 http_polling = "dffmpeg.common.transports.http_polling:HTTPPollingClientTransport"
 mqtt = "dffmpeg.common.transports.mqtt:MQTTClientTransport"
+rabbitmq = "dffmpeg.common.transports.rabbitmq:RabbitMQClientTransport"
 
 [build-system]
 requires = ["setuptools", "wheel"]
