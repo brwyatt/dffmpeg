@@ -1,5 +1,7 @@
+import asyncio
 import logging
-from typing import Any, AsyncIterator, Dict, List, Union
+import random
+from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from ulid import ULID
 
@@ -38,8 +40,16 @@ class DFFmpegClient:
         # Transport settings are already injected by load_config helper
         self.transport_manager = TransportManager(config.transports)
         self.active_transport = None
+        self._heartbeat_task: Optional[asyncio.Task] = None
 
-    async def submit_job(self, binary_name: SupportedBinaries, arguments: List[str], paths: List[str]) -> JobRecord:
+    async def submit_job(
+        self,
+        binary_name: SupportedBinaries,
+        arguments: List[str],
+        paths: List[str],
+        monitor: bool = False,
+        heartbeat_interval: Optional[int] = None,
+    ) -> JobRecord:
         """
         Submits a job to the coordinator.
 
@@ -55,7 +65,12 @@ class DFFmpegClient:
             supported_transports = ["http_polling"]
 
         payload = JobRequest(
-            binary_name=binary_name, arguments=arguments, paths=paths, supported_transports=supported_transports
+            binary_name=binary_name,
+            arguments=arguments,
+            paths=paths,
+            supported_transports=supported_transports,
+            monitor=monitor,
+            heartbeat_interval=heartbeat_interval,
         )
 
         resp = await self.client.post(path, json=payload.model_dump(mode="json"))
@@ -87,6 +102,56 @@ class DFFmpegClient:
         resp = await self.client.get(path, params=params)
         resp.raise_for_status()
         return [JobRecord.model_validate(j) for j in resp.json()]
+
+    async def start_monitoring(self, job_id: str, monitor: bool = True):
+        """
+        Updates the monitoring status of a job and starts the heartbeat loop if needed.
+        """
+        path = f"/jobs/{job_id}/client_heartbeat"
+        params = {"monitor": monitor}
+        resp = await self.client.post(path, params=params)
+        resp.raise_for_status()
+
+        if monitor:
+            # Fetch the job to get the negotiated heartbeat interval
+            job = await self.get_job_status(job_id)
+            await self._start_heartbeat_loop(job_id, job.heartbeat_interval)
+        else:
+            await self._stop_heartbeat_loop()
+
+    async def _start_heartbeat_loop(self, job_id: str, interval: int):
+        """Starts the background heartbeat loop."""
+        await self._stop_heartbeat_loop()
+        self._heartbeat_task = asyncio.create_task(self._heartbeat_loop(job_id, interval))
+
+    async def _stop_heartbeat_loop(self):
+        """Stops the background heartbeat loop."""
+        if self._heartbeat_task:
+            self._heartbeat_task.cancel()
+            try:
+                await self._heartbeat_task
+            except asyncio.CancelledError:
+                pass
+            self._heartbeat_task = None
+
+    async def _heartbeat_loop(self, job_id: str, interval: int):
+        """Periodically sends client heartbeats to the coordinator."""
+        # Use jitter logic similar to worker
+        jitter_bound = min(0.5 * interval, 0.5)  # Max 0.5s jitter for client
+        while True:
+            try:
+                path = f"/jobs/{job_id}/client_heartbeat"
+                resp = await self.client.post(path)
+                if resp.status_code != 200:
+                    logger.warning(f"Client heartbeat failed: {resp.status_code} - {resp.text}")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Error in client heartbeat loop: {e}")
+
+            # Sleep with jitter
+            jitter = random.uniform(-jitter_bound, jitter_bound)
+            await asyncio.sleep(max(1, interval + jitter))
 
     async def stream_job(
         self, job_id: str, transport_name: str, transport_metadata: Dict[str, Any]
@@ -123,6 +188,7 @@ class DFFmpegClient:
 
     async def close(self):
         """Closes the client and any active transports."""
+        await self._stop_heartbeat_loop()
         if self.active_transport:
             await self.active_transport.disconnect()
         await self.client.aclose()

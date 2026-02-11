@@ -36,7 +36,7 @@ The project is a monorepo containing:
 
 *   **Coordinator**: Functional (API, DB, Scheduling, Janitor, Dashboard, Admin CLI).
 *   **Worker**: Functional (Polling, Execution, Mount Monitoring). Note: Capabilities detection is currently a stub.
-*   **Client**: Functional (CLI, Library, Proxy).
+*   **Client**: Functional (CLI, Library, Proxy). Supports active monitoring and background/detached job submission.
 
 ## Getting Started (Development)
 

@@ -10,6 +10,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 - [x] **Worker Status Code Reporting**: Relay process exit codes from worker to coordinator and client.
 - [x] **Admin Management CLI (`dffmpeg-admin`)**: Create a tool for direct database management (e.g., bootstrapping users).
 - [x] **Mount Point Monitoring**: Verify worker path mappings are mounted before registration.
+- [x] **Active/Background Modes**: Client supports submitting jobs in active (monitored) or background (detached) modes, with heartbeat support.
 
 ## Phase 2: Version 1.0 (Production Ready)
 *Goal: A stable, well-tested, and documented release.*

@@ -45,7 +45,7 @@ class JobRunner:
         self._heartbeat_task: Optional[asyncio.Task] = None
 
         self.coordinator_paths = {
-            "heartbeat": f"/jobs/{self.job_id}/heartbeat",
+            "heartbeat": f"/jobs/{self.job_id}/worker_heartbeat",
             "accept": f"/jobs/{self.job_id}/accept",
             "logs": f"/jobs/{self.job_id}/logs",
             "status": f"/jobs/{self.job_id}/status",

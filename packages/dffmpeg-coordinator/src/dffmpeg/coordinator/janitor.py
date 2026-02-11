@@ -40,6 +40,7 @@ class Janitor:
                 await self.reap_running_jobs()
                 await self.reap_assigned_jobs()
                 await self.reap_pending_jobs()
+                await self.reap_abandoned_monitored_jobs()
             except asyncio.CancelledError:
                 logger.info("Janitor service cancelled.")
                 self.running = False
@@ -169,3 +170,39 @@ class Janitor:
                     payload=JobStatusPayload(status="failed", last_update=timestamp),
                 )
                 await self.transports.send_message(msg)
+
+    async def reap_abandoned_monitored_jobs(self):
+        """
+        Finds monitored jobs whose client has stopped heartbeating and cancels them.
+        """
+        abandoned_jobs = await self.job_repo.get_stale_monitored_jobs(
+            threshold_factor=self.config.job_heartbeat_threshold_factor
+        )
+        for job in abandoned_jobs:
+            logger.warning(f"Job {job.job_id} client heartbeat timeout. Canceling.")
+            timestamp = datetime.now(timezone.utc)
+
+            # Mark as canceled (Terminal state)
+            success = await self.job_repo.update_status(
+                job.job_id,
+                "canceling",
+                timestamp=timestamp,
+            )
+
+            if success:
+                # Notify Client (they might be gone, but good for logs/transports)
+                msg_client = JobStatusMessage(
+                    recipient_id=job.requester_id,
+                    job_id=job.job_id,
+                    payload=JobStatusPayload(status="canceling", last_update=timestamp),
+                )
+                await self.transports.send_message(msg_client)
+
+                # Notify Worker to stop
+                if job.worker_id:
+                    msg_worker = JobStatusMessage(
+                        recipient_id=job.worker_id,
+                        job_id=job.job_id,
+                        payload=JobStatusPayload(status="canceling", last_update=timestamp),
+                    )
+                    await self.transports.send_message(msg_worker)

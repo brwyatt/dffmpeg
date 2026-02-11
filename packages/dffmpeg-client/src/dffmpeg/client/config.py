@@ -22,6 +22,7 @@ class ClientConfig(BaseModel):
     client_id: str
     hmac_key: str | None = None
     hmac_key_file: str | None = None
+    job_heartbeat_interval: Optional[int] = None
     coordinator: CoordinatorConnectionConfig = Field(default_factory=CoordinatorConnectionConfig)
     transports: ClientTransportConfig = Field(default_factory=ClientTransportConfig)
     paths: Dict[str, str] = Field(default_factory=dict)

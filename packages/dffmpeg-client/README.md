@@ -79,14 +79,22 @@ This allows you to use standard absolute paths in your commands.
 
 ### CLI
 
-Submit a job:
+Submit a job (Active Mode):
+By default, the client submits the job, starts a heartbeat loop to monitor it, and streams logs until completion. If the client disconnects, the job will be canceled by the coordinator.
 ```bash
 dffmpeg-client submit -b ffmpeg -i /mnt/media/movies/input.mkv output.mp4
 ```
 
-Submit and wait for completion (streaming logs):
+Submit a job (Background/Detached Mode):
+Use the `--detach` (or `-D`) flag to submit a job and exit immediately. The job will continue running on the worker independently.
 ```bash
-dffmpeg-client submit --wait -b ffmpeg -i /mnt/media/movies/input.mkv output.mp4
+dffmpeg-client submit --detach -b ffmpeg -i /mnt/media/movies/input.mkv output.mp4
+```
+
+Attach to a running job:
+You can resume monitoring a detached job (or a job started by another client instance) using the `attach` command. This starts the heartbeat loop and log streaming.
+```bash
+dffmpeg-client attach <job_id>
 ```
 
 Check status:

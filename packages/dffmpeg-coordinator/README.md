@@ -50,6 +50,7 @@ The coordinator searches for configuration in the following order:
     *   `interval`: How often the janitor runs (in seconds).
     *   `worker_threshold_factor`: Multiplier for determining when a worker is considered stale.
     *   `job_assignment_timeout`: Max time (seconds) a job can stay in "assigned" state before retry.
+*   **`default_job_heartbeat_interval`**: The default time (in seconds) between heartbeats for jobs if not specified by the client.
 
 ## Running
 

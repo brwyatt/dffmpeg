@@ -110,26 +110,39 @@ def process_arguments(raw_args: List[str], path_map: Dict[str, str]) -> Tuple[Li
     return processed_args, list(used_paths)
 
 
-async def run_submit(binary_name: SupportedBinaries, raw_args: List[str], wait: bool, config_file: str | None = None):
+async def run_submit(
+    binary_name: SupportedBinaries,
+    raw_args: List[str],
+    monitor: bool,
+    config_file: str | None = None,
+    heartbeat_interval: int | None = None,
+) -> int:
     try:
         config = load_config(config_file)
     except Exception as e:
         logger.error(f"Configuration error: {e}")
         return 1
 
+    if heartbeat_interval is None:
+        heartbeat_interval = config.job_heartbeat_interval
+
     # Process arguments to handle path mapping
     job_args, paths = process_arguments(raw_args, config.paths)
 
     async with DFFmpegClient(config) as client:
         try:
-            job = await client.submit_job(binary_name, job_args, paths)
+            job = await client.submit_job(
+                binary_name, job_args, paths, monitor=monitor, heartbeat_interval=heartbeat_interval
+            )
 
-            if not wait:
+            if not monitor:
                 print("Job submitted successfully.")
                 print(f"Job ID: {str(job.job_id)}")
                 return 0
 
-            # Wait mode
+            # Wait/Monitor mode
+            await client._start_heartbeat_loop(str(job.job_id), job.heartbeat_interval)
+
             return await stream_and_wait(client, str(job.job_id), job.transport, job.transport_metadata)
 
         except Exception as e:
@@ -137,7 +150,7 @@ async def run_submit(binary_name: SupportedBinaries, raw_args: List[str], wait: 
             return 1
 
 
-async def run_status(job_id: str | None, config_file: str | None = None):
+async def run_status(job_id: str | None, config_file: str | None = None) -> int:
     try:
         config = load_config(config_file)
     except Exception as e:
@@ -178,7 +191,31 @@ async def run_status(job_id: str | None, config_file: str | None = None):
             return 1
 
 
-async def run_cancel(job_id: str, config_file: str | None = None):
+async def run_attach(job_id: str, config_file: str | None = None) -> int:
+    try:
+        config = load_config(config_file)
+    except Exception as e:
+        logger.error(f"Configuration error: {e}")
+        return 1
+
+    async with DFFmpegClient(config) as client:
+        try:
+            # Enable monitoring and start heartbeats
+            await client.start_monitoring(job_id, monitor=True)
+
+            # Get transport info to start streaming
+            job = await client.get_job_status(job_id)
+            if job.status in ["completed", "failed", "canceled"]:
+                print(f"Job {job_id} already finished.")
+                return 0
+
+            return await stream_and_wait(client, job_id, job.transport, job.transport_metadata)
+        except Exception as e:
+            logger.error(f"Error attaching to job: {e}")
+            return 1
+
+
+async def run_cancel(job_id: str, config_file: str | None = None) -> int:
     try:
         config = load_config(config_file)
     except Exception as e:
@@ -204,8 +241,17 @@ def main():
     # Submit
     submit_parser = subparsers.add_parser("submit", help="Submit a job")
     submit_parser.add_argument("--binary", "-b", default="ffmpeg", help="Binary name (default: ffmpeg)")
-    submit_parser.add_argument("--wait", "-w", action="store_true", help="Wait for job completion and stream logs")
+    submit_parser.add_argument(
+        "--detach", "-D", action="store_true", help="Submit job in background and exit immediately"
+    )
+    submit_parser.add_argument(
+        "--heartbeat-interval", type=int, help="Override heartbeat interval (seconds) for this job"
+    )
     submit_parser.add_argument("arguments", nargs=argparse.REMAINDER, help="Arguments for the binary")
+
+    # Attach
+    attach_parser = subparsers.add_parser("attach", help="Attach to an existing job to monitor it")
+    attach_parser.add_argument("job_id", help="Job ID")
 
     # Status
     status_parser = subparsers.add_parser("status", help="Get job status")
@@ -224,7 +270,18 @@ def main():
             if job_args and job_args[0] == "--":
                 job_args = job_args[1:]
 
-            sys.exit(asyncio.run(run_submit(args.binary, job_args, args.wait, args.config)))
+            # Default: active (monitor=True)
+            # --detach: inactive (monitor=False)
+            monitor = not args.detach
+
+            sys.exit(
+                asyncio.run(
+                    run_submit(args.binary, job_args, monitor, args.config, heartbeat_interval=args.heartbeat_interval)
+                )
+            )
+
+        elif args.command == "attach":
+            sys.exit(asyncio.run(run_attach(args.job_id, args.config)))
 
         elif args.command == "status":
             sys.exit(asyncio.run(run_status(args.job_id, args.config)))
@@ -239,13 +296,13 @@ def main():
 def proxy_main():
     """
     Entry point for proxy scripts (e.g. 'ffmpeg').
-    Behaves as if 'submit --wait' was called with the script name as binary.
+    Behaves as if 'submit' was called with the script name as binary.
     """
     binary_name: SupportedBinaries = cast(SupportedBinaries, os.path.basename(sys.argv[0]))
     job_args = sys.argv[1:]
 
     try:
-        sys.exit(asyncio.run(run_submit(binary_name, job_args, wait=True)))
+        sys.exit(asyncio.run(run_submit(binary_name, job_args, monitor=True)))
     except KeyboardInterrupt:
         sys.exit(130)
 

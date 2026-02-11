@@ -19,25 +19,25 @@ async def job_repo(tmp_path):
 async def test_get_stale_running_jobs(job_repo):
     now = datetime.now(timezone.utc)
 
-    # Job 1: Running, Stale (last_update 20s ago, interval 10s, threshold 1.5 -> cutoff 15s)
+    # Job 1: Running, Stale (worker_last_seen 20s ago, interval 10s, threshold 1.5 -> cutoff 15s)
     job1 = JobRecord(
         job_id=ULID(),
         requester_id="client1",
         binary_name="ffmpeg",
         status="running",
-        last_update=now - timedelta(seconds=20),
+        worker_last_seen=now - timedelta(seconds=20),
         heartbeat_interval=10,
         transport="http",
         transport_metadata={},
     )
 
-    # Job 2: Running, Active (last_update 10s ago)
+    # Job 2: Running, Active (worker_last_seen 10s ago)
     job2 = JobRecord(
         job_id=ULID(),
         requester_id="client1",
         binary_name="ffmpeg",
         status="running",
-        last_update=now - timedelta(seconds=10),
+        worker_last_seen=now - timedelta(seconds=10),
         heartbeat_interval=10,
         transport="http",
         transport_metadata={},
@@ -49,7 +49,7 @@ async def test_get_stale_running_jobs(job_repo):
         requester_id="client1",
         binary_name="ffmpeg",
         status="pending",
-        last_update=now - timedelta(seconds=100),
+        worker_last_seen=now - timedelta(seconds=100),
         heartbeat_interval=10,
         transport="http",
         transport_metadata={},
@@ -80,7 +80,7 @@ async def test_get_stale_assigned_jobs(job_repo):
         transport_metadata={},
     )
 
-    # Job 2: Assigned, Active (last_update 10s ago)
+    # Job 2: Assigned, Recent (last_update 10s ago)
     job2 = JobRecord(
         job_id=ULID(),
         requester_id="client1",
@@ -177,3 +177,93 @@ async def test_update_status_conditional(job_repo):
 
     updated = await job_repo.get_job(job.job_id)
     assert updated.status == "failed"  # Unchanged
+
+
+@pytest.mark.anyio
+async def test_get_stale_monitored_jobs(job_repo):
+    now = datetime.now(timezone.utc)
+
+    # Job 1: Monitored, Stale (client_last_seen 20s ago, interval 10s, threshold 1.5 -> cutoff 15s)
+    job1 = JobRecord(
+        job_id=ULID(),
+        requester_id="client1",
+        binary_name="ffmpeg",
+        status="running",
+        monitor=True,
+        client_last_seen=now - timedelta(seconds=20),
+        heartbeat_interval=10,
+        transport="http",
+        transport_metadata={},
+    )
+
+    # Job 2: Monitored, Active (client_last_seen 10s ago)
+    job2 = JobRecord(
+        job_id=ULID(),
+        requester_id="client1",
+        binary_name="ffmpeg",
+        status="running",
+        monitor=True,
+        client_last_seen=now - timedelta(seconds=10),
+        heartbeat_interval=10,
+        transport="http",
+        transport_metadata={},
+    )
+
+    # Job 3: NOT Monitored, Old (should be ignored)
+    job3 = JobRecord(
+        job_id=ULID(),
+        requester_id="client1",
+        binary_name="ffmpeg",
+        status="running",
+        monitor=False,
+        client_last_seen=now - timedelta(seconds=100),
+        heartbeat_interval=10,
+        transport="http",
+        transport_metadata={},
+    )
+
+    # Job 4: Monitored, Finished (should be ignored)
+    job4 = JobRecord(
+        job_id=ULID(),
+        requester_id="client1",
+        binary_name="ffmpeg",
+        status="completed",
+        monitor=True,
+        client_last_seen=now - timedelta(seconds=100),
+        heartbeat_interval=10,
+        transport="http",
+        transport_metadata={},
+    )
+
+    await job_repo.create_job(job1)
+    await job_repo.create_job(job2)
+    await job_repo.create_job(job3)
+    await job_repo.create_job(job4)
+
+    stale = await job_repo.get_stale_monitored_jobs(threshold_factor=1.5, timestamp=now)
+    assert len(stale) == 1
+    assert stale[0].job_id == job1.job_id
+
+
+@pytest.mark.anyio
+async def test_update_client_heartbeat(job_repo):
+    job = JobRecord(
+        job_id=ULID(),
+        requester_id="client1",
+        binary_name="ffmpeg",
+        status="pending",
+        monitor=False,
+        transport="http",
+        transport_metadata={},
+    )
+    await job_repo.create_job(job)
+
+    now = datetime.now(timezone.utc)
+    success = await job_repo.update_client_heartbeat(job.job_id, timestamp=now, monitor=True)
+    assert success is True
+
+    updated = await job_repo.get_job(job.job_id)
+    assert updated.monitor is True
+    # SQLite might lose some precision on timestamps during storage/retrieval,
+    # but they should be effectively equal or very close.
+    assert updated.client_last_seen is not None

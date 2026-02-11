@@ -1,4 +1,11 @@
-from dffmpeg.client.cli import process_arguments
+from unittest.mock import ANY, patch
+
+import pytest
+from ulid import ULID
+
+from dffmpeg.client.cli import process_arguments, run_submit
+from dffmpeg.client.config import ClientConfig
+from dffmpeg.common.models import JobRecord
 
 
 def test_process_arguments_basic():
@@ -46,3 +53,73 @@ def test_process_arguments_exact():
 
     assert processed == ["$Movies"]
     assert used == ["Movies"]
+
+
+@pytest.mark.anyio
+async def test_run_submit_defaults():
+    # Test that run_submit defaults to monitor=True
+    job_id = ULID()
+    mock_job = JobRecord(
+        job_id=job_id,
+        requester_id="client1",
+        binary_name="ffmpeg",
+        arguments=["-i", "in.mp4", "out.mp4"],
+        status="pending",
+        transport="http",
+        transport_metadata={},
+        heartbeat_interval=5,
+        monitor=True,
+    )
+    mock_config = ClientConfig(
+        client_id="client1",
+    )
+
+    with (
+        patch("dffmpeg.client.cli.load_config") as mock_load_config,
+        patch("dffmpeg.client.cli.DFFmpegClient") as mock_client_cls,
+        patch("dffmpeg.client.cli.stream_and_wait") as mock_stream,
+    ):
+        mock_load_config.return_value = mock_config
+        mock_client = mock_client_cls.return_value.__aenter__.return_value
+        mock_client.submit_job.return_value = mock_job
+        mock_stream.return_value = 0
+
+        result = await run_submit("ffmpeg", ["-i", "in.mp4", "out.mp4"], monitor=True)
+
+        assert result == 0
+        mock_client.submit_job.assert_called_once_with("ffmpeg", ANY, ANY, monitor=True, heartbeat_interval=None)
+        mock_client._start_heartbeat_loop.assert_called_once_with(str(job_id), 5)
+
+
+@pytest.mark.anyio
+async def test_run_submit_background():
+    # Test that background mode sets monitor=False
+    job_id = ULID()
+    mock_job = JobRecord(
+        job_id=job_id,
+        requester_id="client1",
+        binary_name="ffmpeg",
+        arguments=["-i", "in.mp4"],
+        status="pending",
+        transport="http",
+        transport_metadata={},
+        heartbeat_interval=5,
+        monitor=False,
+    )
+    mock_config = ClientConfig(
+        client_id="client1",
+    )
+
+    with (
+        patch("dffmpeg.client.cli.load_config") as mock_load_config,
+        patch("dffmpeg.client.cli.DFFmpegClient") as mock_client_cls,
+    ):
+        mock_load_config.return_value = mock_config
+        mock_client = mock_client_cls.return_value.__aenter__.return_value
+        mock_client.submit_job.return_value = mock_job
+
+        result = await run_submit("ffmpeg", ["-i", "in.mp4"], monitor=False)
+
+        assert result == 0
+        mock_client.submit_job.assert_called_once_with("ffmpeg", ANY, ANY, monitor=False, heartbeat_interval=None)
+        mock_client._start_heartbeat_loop.assert_not_called()

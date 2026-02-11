@@ -73,6 +73,7 @@ async def job_submit(
         raise HTTPException(status_code=400, detail="No supported transports")
 
     job_id = ULID()
+    now = datetime.now(timezone.utc)
     job_record = JobRecord(
         job_id=job_id,
         requester_id=identity.client_id,
@@ -82,7 +83,9 @@ async def job_submit(
         status="pending",
         transport=negotiated_transport,
         transport_metadata=transports[negotiated_transport].get_metadata(identity.client_id, job_id),
-        heartbeat_interval=config.job_heartbeat_interval,
+        heartbeat_interval=payload.heartbeat_interval or config.default_job_heartbeat_interval,
+        monitor=payload.monitor,
+        client_last_seen=now if payload.monitor else None,
     )
 
     await job_repo.create_job(job_record)
@@ -357,15 +360,15 @@ async def job_status_update(
     return CommandResponse(status="ok")
 
 
-@router.post("/jobs/{job_id}/heartbeat")
-async def job_heartbeat(
+@router.post("/jobs/{job_id}/worker_heartbeat")
+async def job_worker_heartbeat(
     job_id: str,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
 ) -> CommandResponse:
     """
-    Updates the last_update timestamp for a job to indicate the worker is still active.
+    Updates the worker_last_seen timestamp for a job to indicate the worker is still active.
 
     Args:
         job_id (str): The ID of the job.
@@ -393,7 +396,7 @@ async def job_heartbeat(
 
     timestamp = datetime.now(timezone.utc)
 
-    await job_repo.update_heartbeat(j_id, timestamp=timestamp)
+    await job_repo.update_worker_heartbeat(j_id, timestamp=timestamp)
 
     await transports.send_message(
         JobStatusMessage(
@@ -403,6 +406,51 @@ async def job_heartbeat(
             payload=JobStatusPayload(status="running", last_update=timestamp),
         )
     )
+
+    return CommandResponse(status="ok")
+
+
+@router.post("/jobs/{job_id}/client_heartbeat")
+async def job_client_heartbeat(
+    job_id: str,
+    monitor: Optional[bool] = None,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    job_repo: JobRepository = Depends(get_job_repo),
+) -> CommandResponse:
+    """
+    Updates the client_last_seen timestamp for a job to indicate the requester is still monitoring.
+
+    Args:
+        job_id (str): The ID of the job.
+        monitor (Optional[bool]): Optionally update the monitor flag (e.g., when attaching).
+        identity (AuthenticatedIdentity): The authenticated requester identity.
+        job_repo (JobRepository): Job repository.
+
+    Returns:
+        CommandResponse: Status OK if successful.
+
+    Raises:
+        HTTPException: If job not found or user lacks permission.
+    """
+    try:
+        j_id = ULID.from_str(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    job = await job_repo.get_job(j_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.requester_id != identity.client_id and identity.role != "admin":
+        raise HTTPException(status_code=403, detail="No permission to heartbeat for this job")
+
+    # If job is already terminal, just return OK (no need to update DB)
+    if job.status in ["completed", "failed", "canceled"]:
+        return CommandResponse(status="ok", detail="Job already finished")
+
+    timestamp = datetime.now(timezone.utc)
+
+    await job_repo.update_client_heartbeat(j_id, timestamp=timestamp, monitor=monitor)
 
     return CommandResponse(status="ok")
 

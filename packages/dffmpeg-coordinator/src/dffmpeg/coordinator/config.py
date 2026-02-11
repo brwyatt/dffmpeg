@@ -29,7 +29,7 @@ class CoordinatorConfig(BaseModel):
     database: DBConfig = Field(default_factory=DBConfig)
     transports: TransportConfig = Field(default_factory=TransportConfig)
     janitor: JanitorConfig = Field(default_factory=JanitorConfig)
-    job_heartbeat_interval: int = default_job_heartbeat_interval
+    default_job_heartbeat_interval: int = default_job_heartbeat_interval
     web_dashboard_enabled: bool = True
     dev_mode: bool = False
 

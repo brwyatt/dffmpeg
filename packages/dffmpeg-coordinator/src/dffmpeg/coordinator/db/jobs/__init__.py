@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import JSON, TIMESTAMP, Column, ForeignKey, Integer, MetaData, String, Table, func
+from sqlalchemy import JSON, TIMESTAMP, Boolean, Column, ForeignKey, Integer, MetaData, String, Table, func
 from ulid import ULID
 
 from dffmpeg.common.models import JobRecord, JobStatus, TransportRecord
@@ -28,9 +28,12 @@ class JobRepository(BaseDB):
         Column("worker_id", String, ForeignKey("auth.client_id"), nullable=True),
         Column("created_at", TIMESTAMP, server_default=func.current_timestamp()),
         Column("last_update", TIMESTAMP, server_default=func.current_timestamp()),
+        Column("client_last_seen", TIMESTAMP, nullable=True, index=True),
+        Column("worker_last_seen", TIMESTAMP, nullable=True, index=True),
         Column("callback_transport", String, nullable=False),
         Column("callback_transport_metadata", JSON, nullable=False),
         Column("heartbeat_interval", Integer, nullable=False),
+        Column("monitor", Boolean, nullable=False, default=False, index=True),
     )
 
     def __new__(cls, *args, engine: str, **kwargs):
@@ -71,7 +74,17 @@ class JobRepository(BaseDB):
     ) -> bool:
         raise NotImplementedError()
 
-    async def update_heartbeat(self, job_id: ULID, timestamp: Optional[datetime] = None) -> None:
+    async def update_worker_heartbeat(self, job_id: ULID, timestamp: Optional[datetime] = None) -> None:
+        raise NotImplementedError()
+
+    async def update_client_heartbeat(
+        self, job_id: ULID, timestamp: Optional[datetime] = None, monitor: Optional[bool] = None
+    ) -> bool:
+        raise NotImplementedError()
+
+    async def get_stale_monitored_jobs(
+        self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None
+    ) -> list[JobRecord]:
         raise NotImplementedError()
 
     async def get_transport(self, job_id: ULID) -> Optional[TransportRecord]:

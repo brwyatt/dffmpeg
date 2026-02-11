@@ -261,14 +261,15 @@ async def test_job_heartbeat_interaction(
         transport = ASGITransport(app=test_app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             # Action: Worker sends heartbeat
-            path = f"/jobs/{job_id}/heartbeat"
+            path = f"/jobs/{job_id}/worker_heartbeat"
             headers = await sign_request(worker_signer, worker_id, "POST", path)
+
             resp = await client.post(path, headers=headers)
             assert resp.status_code == 200
 
             # Verify: DB Updated
             job = await test_app.state.db.jobs.get_job(job_id)
-            assert job.last_update > original_update
+            assert job.worker_last_seen > original_update
 
 
 @pytest.mark.anyio

@@ -65,8 +65,11 @@ class Job(BaseModel):
         status (Literal): Current status of the job.
         worker_id (Optional[str]): The worker assigned to the job, if any.
         created_at (datetime): Timestamp of creation.
-        last_update (datetime): Timestamp of last update.
-        heartbeat_interval (int): Number of seconds between worker heartbeats
+        last_update (datetime): Timestamp of last record modification.
+        worker_last_seen (datetime): Timestamp of last worker heartbeat.
+        client_last_seen (Optional[datetime]): Timestamp of last client heartbeat.
+        heartbeat_interval (int): Number of seconds between heartbeats (worker and client).
+        monitor (bool): Whether the job is actively monitored by the client.
     """
 
     job_id: ULID = Field(default_factory=ULID)
@@ -79,7 +82,10 @@ class Job(BaseModel):
     worker_id: str | None = OptionalClientId
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     last_update: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    worker_last_seen: Optional[datetime] = None
+    client_last_seen: Optional[datetime] = None
     heartbeat_interval: int = default_job_heartbeat_interval
+    monitor: bool = False
 
 
 class JobRequest(BaseModel):
@@ -91,12 +97,16 @@ class JobRequest(BaseModel):
         arguments (List[str]): List of arguments to pass to the binary.
         paths (List[str]): List of path variables required by the job.
         supported_transports (List[str]): List of transports supported by the client for updates.
+        monitor (bool): Whether to enable active client monitoring.
+        heartbeat_interval (Optional[int]): Requested heartbeat interval.
     """
 
     binary_name: SupportedBinaries
     arguments: List[str] = Field(default_factory=list)
     paths: List[str] = Field(default_factory=list)
     supported_transports: List[str] = Field(min_length=1)
+    monitor: bool = False
+    heartbeat_interval: Optional[int] = None
 
 
 class JobRecord(Job, TransportRecord):

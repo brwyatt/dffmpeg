@@ -157,3 +157,30 @@ async def test_reap_pending_jobs(janitor, job_repo, transports):
         # Verify notification for job2
         assert transports.send_message.call_count == 1
         assert transports.send_message.call_args[0][0].job_id == job2.job_id
+
+
+@pytest.mark.anyio
+async def test_reap_abandoned_monitored_jobs(janitor, job_repo, transports):
+    job = JobRecord(
+        job_id=ULID(),
+        requester_id="client1",
+        worker_id="worker1",
+        binary_name="ffmpeg",
+        status="running",
+        monitor=True,
+        transport="http",
+        transport_metadata={},
+    )
+    job_repo.get_stale_monitored_jobs.return_value = [job]
+    job_repo.update_status.return_value = True
+
+    await janitor.reap_abandoned_monitored_jobs()
+
+    job_repo.update_status.assert_called_once_with(job.job_id, "canceling", timestamp=ANY)
+
+    # Check notifications: 1 to client, 1 to worker
+    assert transports.send_message.call_count == 2
+    # Verify both recipients got a message
+    recipients = [call.args[0].recipient_id for call in transports.send_message.call_args_list]
+    assert "client1" in recipients
+    assert "worker1" in recipients

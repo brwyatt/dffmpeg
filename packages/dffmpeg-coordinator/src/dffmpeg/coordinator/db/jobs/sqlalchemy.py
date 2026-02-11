@@ -31,9 +31,12 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             worker_id=job.worker_id,
             created_at=job.created_at,
             last_update=job.last_update,
+            worker_last_seen=job.worker_last_seen,
             callback_transport=job.transport,
             callback_transport_metadata=safe_job["transport_metadata"],  # JSON serialization
             heartbeat_interval=job.heartbeat_interval,
+            monitor=job.monitor,
+            client_last_seen=job.client_last_seen,
         )
         sql, params = self.compile_query(query)
         await self.execute(sql, params)
@@ -58,9 +61,12 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             worker_id=row["worker_id"],
             created_at=row["created_at"],
             last_update=row["last_update"],
+            worker_last_seen=row["worker_last_seen"],
             transport=row["callback_transport"],
             transport_metadata=parse_json(row["callback_transport_metadata"]),
             heartbeat_interval=row["heartbeat_interval"],
+            monitor=bool(row["monitor"]),
+            client_last_seen=row["client_last_seen"],
         )
 
     async def get_job(self, job_id: ULID) -> Optional[JobRecord]:
@@ -146,6 +152,8 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             values["exit_code"] = exit_code
         if worker_id:
             values["worker_id"] = worker_id
+            # Also update worker_last_seen if a worker is initiating this update
+            values["worker_last_seen"] = timestamp
 
         where_clause = [self.table.c.job_id == str(job_id)]
         if previous_status:
@@ -158,13 +166,48 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
         rowcount = await self.execute_and_return_rowcount(sql, params)
         return rowcount > 0
 
-    async def update_heartbeat(self, job_id: ULID, timestamp: Optional[datetime] = None):
+    async def update_worker_heartbeat(self, job_id: ULID, timestamp: Optional[datetime] = None):
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
 
-        query = update(self.table).where(self.table.c.job_id == str(job_id)).values(last_update=timestamp)
+        query = update(self.table).where(self.table.c.job_id == str(job_id)).values(worker_last_seen=timestamp)
         sql, params = self.compile_query(query)
         await self.execute(sql, params)
+
+    async def update_client_heartbeat(
+        self, job_id: ULID, timestamp: Optional[datetime] = None, monitor: Optional[bool] = None
+    ) -> bool:
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+
+        values: dict[str, Any] = {"client_last_seen": timestamp}
+        if monitor is not None:
+            values["monitor"] = monitor
+
+        query = update(self.table).where(self.table.c.job_id == str(job_id)).values(**values)
+        sql, params = self.compile_query(query)
+        rowcount = await self.execute_and_return_rowcount(sql, params)
+        return rowcount > 0
+
+    def _get_stale_monitored_clause(self, threshold_factor: float, timestamp: datetime) -> TextClause:
+        raise NotImplementedError("Subclasses must implement _get_stale_monitored_clause")
+
+    async def get_stale_monitored_jobs(
+        self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None
+    ) -> list[JobRecord]:
+        if timestamp is None:
+            timestamp = datetime.now(timezone.utc)
+
+        condition = self._get_stale_monitored_clause(threshold_factor, timestamp)
+
+        active_statuses = ["pending", "assigned", "running", "canceling"]
+        query = select(self.table).where(
+            and_(self.table.c.status.in_(active_statuses), self.table.c.monitor == 1, condition)
+        )
+
+        sql, params = self.compile_query(query)
+        rows = await self.get_rows(sql, params)
+        return [self._row_to_job(row) for row in rows]
 
     async def get_transport(self, job_id: ULID) -> Optional[TransportRecord]:
         query = select(self.table.c.callback_transport, self.table.c.callback_transport_metadata).where(
