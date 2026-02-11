@@ -66,6 +66,8 @@ The client supports multiple transport mechanisms for receiving real-time update
 *   **`mqtt`**: Provides low-latency, real-time push notifications. Requires a separate MQTT broker.
 *   **`rabbitmq`**: Provides durable messaging and granular permissions. Requires a RabbitMQ broker.
 
+For detailed configuration options, see [Transport Configuration](../../../docs/transports.md).
+
 ## Path Mapping
 
 The client automatically maps local paths to path variables required by the Coordinator.

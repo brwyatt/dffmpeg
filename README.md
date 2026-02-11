@@ -4,24 +4,15 @@
 
 This project is heavily inspired by [joshuaboniface/rffmpeg](https://github.com/joshuaboniface/rffmpeg), but re-imagined for distributed environments where clients and workers are decoupled.
 
-## Design Philosophy
+## Overview
 
-### Why dffmpeg?
-While `rffmpeg` excels at simple, direct remote execution (SSH into a worker and run a command), it can struggle in complex or high-load environments. `dffmpeg` introduces a **central coordinator** to address these challenges:
+`dffmpeg` introduces a **central coordinator** to manage job distribution, state tracking, and failure recovery. It features:
 
-*   **Centralized State:** Instead of clients "blindly" picking a worker, they submit jobs to a Coordinator. The Coordinator manages the state of the cluster, handling queueing, assignment, and retries.
-*   **Path Independence ("Path-Blind"):** In `dffmpeg`, the Coordinator never deals with absolute paths. It uses variables (e.g., `$Source/video.mkv`). Path translation happens only at the edges (Client and Worker), allowing each node to have different mount points or storage configurations.
-*   **Resilience:** Jobs are durable. If a worker crashes or a node goes offline, the Coordinator detects the failure (via heartbeat monitoring). Assignments that haven't started are re-queued to active workers, while interrupted running jobs are marked as failed to notify the client, preventing "zombie" jobs from hanging indefinitely. When a job fails, the worker reports the process exit code back to the coordinator and client for easier troubleshooting.
+*   **Centralized State & Resilience**: Durable job queues and heartbeat monitoring.
+*   **Path Independence**: Uses logical path variables instead of absolute paths, allowing flexible mount points.
+*   **Secure & Pluggable**: HMAC-signed communication and support for multiple backends (RabbitMQ, MQTT, SQLite, etc.).
 
-## Core Architecture
-
-`dffmpeg` is built on a few key technical principles:
-
-*   **ULIDs:** We use [ULIDs](https://github.com/ulid/spec) (Universally Unique Lexicographically Sortable Identifiers) for all IDs. They provide collision-free generation without central coordination and are sortable by time.
-*   **HMAC Security:** All internal communication (Client <-> Coordinator <-> Worker) is signed using HMAC-SHA256. This ensures message integrity and authenticity without the overhead of full mTLS for every connection.
-*   **Pluggability:**
-    *   **Transports:** The system supports multiple communication backends. While HTTP Polling is the default, it is designed to support RabbitMQ, MQTT, or other message queues.
-    *   **Databases:** The storage layer is modular. Currently using SQLite, but adaptable to PostgreSQL or other engines via the DAO pattern.
+For a deep dive into the system design, see [Architecture](docs/architecture.md).
 
 ## Project Structure
 
@@ -38,12 +29,21 @@ The project is a monorepo containing:
 *   **Worker**: Functional (Polling, Execution, Mount Monitoring). Note: Capabilities detection is currently a stub.
 *   **Client**: Functional (CLI, Library, Proxy). Supports active monitoring and background/detached job submission.
 
-## Getting Started (Development)
+## Development Setup
 
 This project is currently in active development.
 
 ### Configuration
 Configuration is handled via YAML files within each package. Please refer to the specific package documentation for detailed configuration options.
+
+For details on configuring Transports (RabbitMQ, MQTT) and required permissions, see [Transport Configuration](docs/transports.md).
+
+## Documentation
+
+*   [Getting Started](docs/getting-started.md): Step-by-step guide to setting up a cluster.
+*   [Architecture](docs/architecture.md): System design, components, and scenarios (Development vs. Production).
+*   [Security Model](docs/security-model.md): Authentication and key management.
+*   [Transport Configuration](docs/transports.md): RabbitMQ and MQTT setup details.
 
 ### Running Tests
 Tests are run using `pytest`. Ensure your python environment is set up.

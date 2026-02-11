@@ -24,21 +24,7 @@ The worker searches for configuration in the following order:
     *   `scheme`: Protocol (`http` or `https`).
 *   **`transports`**: Client transport configuration.
     *   `enabled_transports`: List of active transports (e.g., `["mqtt", "http_polling"]`). If empty, defaults to `["http_polling"]`. The order of this list defines the worker's preference during negotiation with the Coordinator.
-    *   `transport_settings`: Specific settings for each transport type.
-        *   **`mqtt`**:
-            *   `host`: MQTT broker hostname.
-            *   `port`: MQTT broker port (default: 1883).
-            *   `username`: (Optional) Auth username.
-            *   `password`: (Optional) Auth password.
-            *   `use_tls`: Use TLS for the connection (default: false).
-        *   **`rabbitmq`**:
-            *   `host`: RabbitMQ hostname.
-            *   `port`: RabbitMQ port (default: 5672, or 5671 for TLS).
-            *   `username`: (Optional) Auth username.
-            *   `password`: (Optional) Auth password.
-            *   `use_tls`: Use TLS for the connection (default: false).
-            *   `verify_ssl`: Verify SSL certificates (default: true).
-            *   `use_srv`: Use SRV records for discovery (default: false).
+    *   `transport_settings`: Specific settings for each transport type. See [Transport Configuration](../../../docs/transports.md) for detailed options.
 *   **`binaries`**: Mapping of logical binary names to local file paths.
     *   Example: `ffmpeg: /usr/bin/ffmpeg`
 *   **`paths`**: Path mappings to translate Coordinator (source) paths to Worker (local) paths.

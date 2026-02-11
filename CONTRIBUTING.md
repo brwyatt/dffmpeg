@@ -57,12 +57,16 @@ The database layer follows a hierarchical DAO pattern to support multiple engine
 
 ## Tips & Tricks
 
-### Generating HMAC Keys
+### Managing Users & Keys
 
-Since we use HMAC-SHA256 for authentication, you will need to generate shared secret keys for your workers and clients. You can use the built-in helper method:
+Use the `dffmpeg-admin` tool provided by the coordinator package to manage users and generate HMAC keys:
 
 ```bash
-python3 -c "from dffmpeg.common.auth.request_signer import RequestSigner; print(RequestSigner.generate_key())"
+# Add a new client
+dffmpeg-admin user add my-client --role client
+
+# Add a new worker
+dffmpeg-admin user add worker01 --role worker
 ```
 
-Currently, these will need to be added to the auth database table manually, along with the `client_id` (a string identifier) and a `role` ("admin", "client", "worker").
+See [Security Model](docs/security-model.md) for more details on authentication.

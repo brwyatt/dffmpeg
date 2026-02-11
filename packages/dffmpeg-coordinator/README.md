@@ -27,25 +27,7 @@ The coordinator searches for configuration in the following order:
     *   `engine_defaults`: Default settings for database engines (e.g., SQLite path).
 *   **`transports`**: Transport settings.
     *   `enabled_transports`: List of active transport mechanisms (e.g., `["mqtt", "http_polling"]`). If empty, defaults to `["http_polling"]`. Note that the final transport selection is prioritized based on the order provided by the client or worker during registration/submission.
-    *   `transport_settings`: Specific settings for each transport type.
-        *   **`mqtt`**:
-            *   `host`: MQTT broker hostname.
-            *   `port`: MQTT broker port (default: 1883).
-            *   `username`: (Optional) Auth username.
-            *   `password`: (Optional) Auth password.
-            *   `use_tls`: Use TLS for the connection (default: false).
-            *   `topic_prefix`: Prefix for all DFFmpeg topics (default: "dffmpeg").
-        *   **`rabbitmq`**:
-            *   `host`: RabbitMQ hostname.
-            *   `port`: RabbitMQ port (default: 5672, or 5671 for TLS).
-            *   `username`: (Optional) Auth username.
-            *   `password`: (Optional) Auth password.
-            *   `vhost`: Virtual host (default: "/").
-            *   `use_tls`: Use TLS for the connection (default: false).
-            *   `verify_ssl`: Verify SSL certificates (default: true).
-            *   `use_srv`: Use SRV records for discovery (default: false).
-            *   `workers_exchange`: Exchange for worker commands (default: "dffmpeg.workers").
-            *   `jobs_exchange`: Exchange for job updates (default: "dffmpeg.jobs").
+    *   `transport_settings`: Specific settings for each transport type. See [Transport Configuration](../../../docs/transports.md) for detailed options.
 *   **`janitor`**: Background task settings.
     *   `interval`: How often the janitor runs (in seconds).
     *   `worker_threshold_factor`: Multiplier for determining when a worker is considered stale.

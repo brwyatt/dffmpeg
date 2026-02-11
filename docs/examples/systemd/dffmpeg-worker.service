@@ -1,0 +1,17 @@
+[Unit]
+Description=DFFmpeg Worker Service
+After=network.target
+
+[Service]
+Type=simple
+User=dffmpeg
+Group=dffmpeg
+# Adjust this path if you installed elsewhere
+WorkingDirectory=/opt/dffmpeg/worker
+Environment="PATH=/opt/dffmpeg/worker/venv/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/dffmpeg/worker/venv/bin/dffmpeg-worker
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
