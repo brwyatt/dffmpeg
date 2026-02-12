@@ -54,16 +54,18 @@ class JobRunner:
         self._log_buffer: list[LogEntry] = []
         self._last_status: Optional[str] = None
         self._silent_cancellation: bool = False
+        self._fast_shutdown: bool = False
 
     async def start(self):
         """Starts the job execution."""
         logger.info(f"[{self.client_id}] Starting job {self.job_id}")
         self._main_task = asyncio.create_task(self._run())
 
-    async def cancel(self):
+    async def cancel(self, fast_shutdown: bool = False):
         """Cancels the job execution."""
-        logger.info(f"[{self.client_id}] Canceling job {self.job_id}")
+        logger.info(f"[{self.client_id}] Canceling job {self.job_id} (fast_shutdown={fast_shutdown})")
         self._silent_cancellation = False
+        self._fast_shutdown = fast_shutdown
         if self._main_task and not self._main_task.done():
             self._main_task.cancel()
             try:
@@ -156,7 +158,8 @@ class JobRunner:
         except asyncio.CancelledError:
             logger.info(f"[{self.client_id}] Job {self.job_id} execution canceled")
             if not self._silent_cancellation:
-                await self._report_status("canceled")
+                retries = 0 if self._fast_shutdown else 5
+                await self._report_status("canceled", retries=retries)
             raise
 
         except Exception as e:
@@ -169,28 +172,41 @@ class JobRunner:
             # client is owned by Worker, do not close here
             self.cleanup_callback(self.job_id)
 
-    async def _report_status(self, status: JobStatusUpdateStatus, exit_code: Optional[int] = None):
+    async def _report_status(
+        self,
+        status: JobStatusUpdateStatus,
+        exit_code: Optional[int] = None,
+        retries: int = 5,
+    ):
         """
         Reports final status to coordinator.
 
         Args:
             status (str): The final status of the job (e.g., "completed", "failed", "canceled").
             exit_code (Optional[int]): The process exit code, if applicable.
+            retries (int): Number of retry attempts.
         """
         self._last_status = status
         payload_model = JobStatusUpdate(status=status, exit_code=exit_code)
         path = self.coordinator_paths["status"]
         body = payload_model.model_dump(mode="json")
 
-        for i in range(5):
+        # Try at least once, plus retries
+        attempts = max(1, retries + 1)
+
+        for i in range(attempts):
             try:
                 await self.client.post(path, json=body)
                 return
             except Exception as e:
+                # If this was the last attempt, log and break
+                if i == attempts - 1:
+                    break
+
                 wait_time = min(30, 2**i)
                 logger.error(
                     f"[{self.client_id}] Failed to report status {status} for {self.job_id}: {e}. "
-                    f"Retrying in {wait_time}s ({i + 1}/5)..."
+                    f"Retrying in {wait_time}s ({i + 1}/{attempts})..."
                 )
                 await asyncio.sleep(wait_time)
 

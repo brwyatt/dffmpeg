@@ -89,8 +89,9 @@ class Worker:
         await self._stop_transport()
 
         # Cancel all jobs
-        for job_runner in list(self._active_jobs.values()):
-            await job_runner.cancel()
+        tasks = [job_runner.cancel(fast_shutdown=True) for job_runner in list(self._active_jobs.values())]
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
         # De-register
         try:
