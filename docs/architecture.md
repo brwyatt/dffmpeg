@@ -138,3 +138,41 @@ graph TD
 ### Client
 *   **Submission**: Parses local paths, converts them to variables, and submits the job.
 *   **Monitor**: Polls (or listens via MQTT/AMQP) for job status and logs.
+
+## State Diagrams
+
+### Worker Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Offline
+    Offline --> Online: Register
+    Online --> Offline: Deregister
+    Online --> Offline: Timeout (Janitor)
+    Online --> Online: Heartbeat / Activity
+```
+
+### Job Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending
+
+    Pending --> Assigned: Scheduler Assigns
+    Pending --> Failed: Timeout (Stale)
+    Pending --> Canceled: User Cancel
+
+    Assigned --> Running: Worker Accepts
+    Assigned --> Pending: Timeout (Retry)
+    Assigned --> Canceled: User Cancel
+
+    Running --> Completed: Success
+    Running --> Failed: Failure / Timeout
+    Running --> Canceling: User Cancel / Monitor Timeout
+
+    Canceling --> Canceled: Worker Confirms / Forced
+
+    Completed --> [*]
+    Failed --> [*]
+    Canceled --> [*]
+```
