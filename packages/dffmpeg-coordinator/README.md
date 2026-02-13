@@ -24,7 +24,7 @@ The coordinator searches for configuration in the following order:
 *   **`database`**: Database connection settings.
     *   `repositories`: Configuration for individual repositories (auth, jobs, messages, workers).
         *   `auth`: Can include `encryption_keys_file` or `encryption_keys` for credential storage.
-    *   `engine_defaults`: Default settings for database engines (e.g., SQLite path).
+    *   `engine_defaults`: Default settings for database engines (e.g., SQLite path, MySQL host/user).
 *   **`transports`**: Transport settings.
     *   `enabled_transports`: List of active transport mechanisms (e.g., `["mqtt", "http_polling"]`). If empty, defaults to `["http_polling"]`. Note that the final transport selection is prioritized based on the order provided by the client or worker during registration/submission.
     *   `transport_settings`: Specific settings for each transport type. See [Transport Configuration](../../../docs/transports.md) for detailed options.

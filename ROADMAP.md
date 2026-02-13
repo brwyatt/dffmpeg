@@ -5,7 +5,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 ## Phase 1: Beta (Functional & Usable)
 *Goal: A functional system suitable for home production environments.*
 
-- [ ] **MariaDB/MySQL Support**: Implement MariaDB/MySQL database backend via the DAO pattern.
+- [x] **MariaDB/MySQL Support**: Implement MariaDB/MySQL database backend via the DAO pattern.
 - [x] **MQTT Transport**: Implement MQTT transport for worker-coordinator communication.
 - [x] **Worker Status Code Reporting**: Relay process exit codes from worker to coordinator and client.
 - [x] **Admin Management CLI (`dffmpeg-admin`)**: Create a tool for direct database management (e.g., bootstrapping users).

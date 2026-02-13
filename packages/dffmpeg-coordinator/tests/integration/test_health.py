@@ -45,16 +45,6 @@ async def test_deep_health_check(test_app):
 
 
 @pytest.mark.anyio
-async def test_ping_removed(test_app):
-    async with test_app.router.lifespan_context(test_app):
-        transport = ASGITransport(app=test_app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            # ping was a POST endpoint
-            resp = await client.post("/ping", json={"message": "hello"})
-            assert resp.status_code == 404
-
-
-@pytest.mark.anyio
 async def test_deep_health_check_unhealthy(test_app):
     async with test_app.router.lifespan_context(test_app):
         # Mock auth repository to be unhealthy

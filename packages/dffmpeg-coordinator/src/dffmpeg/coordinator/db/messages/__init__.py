@@ -19,12 +19,12 @@ class MessageRepository(BaseDB):
     table = Table(
         "messages",
         metadata,
-        Column("message_id", String, primary_key=True),
-        Column("sender_id", String, ForeignKey("auth.client_id"), nullable=True),
-        Column("recipient_id", String, ForeignKey("auth.client_id"), nullable=False),
-        Column("job_id", String, ForeignKey("jobs.job_id"), nullable=True),
+        Column("message_id", String(26), primary_key=True),
+        Column("sender_id", String(255), ForeignKey("auth.client_id"), nullable=True),
+        Column("recipient_id", String(255), ForeignKey("auth.client_id"), nullable=False),
+        Column("job_id", String(26), ForeignKey("jobs.job_id"), nullable=True),
         Column("timestamp", TIMESTAMP, server_default=func.current_timestamp()),
-        Column("message_type", String, nullable=False),
+        Column("message_type", String(100), nullable=False),
         Column("payload", JSON, nullable=False),
         Column("sent_at", TIMESTAMP, nullable=True),
     )

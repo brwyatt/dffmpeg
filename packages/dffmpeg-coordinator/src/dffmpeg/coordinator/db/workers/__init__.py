@@ -21,13 +21,13 @@ class WorkerRepository(BaseDB):
     table = Table(
         "workers",
         metadata,
-        Column("worker_id", String, ForeignKey("auth.client_id"), primary_key=True),
-        Column("status", String, server_default="offline"),
+        Column("worker_id", String(255), ForeignKey("auth.client_id"), primary_key=True),
+        Column("status", String(50), server_default="offline"),
         Column("last_seen", TIMESTAMP, server_default=func.current_timestamp()),
         Column("capabilities", JSON, nullable=True),
         Column("binaries", JSON, nullable=True),
         Column("paths", JSON, nullable=True),
-        Column("transport", String, nullable=False),
+        Column("transport", String(50), nullable=False),
         Column("transport_metadata", JSON, nullable=False),
         Column("registration_interval", Integer, nullable=False),
     )

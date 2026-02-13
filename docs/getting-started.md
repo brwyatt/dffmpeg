@@ -44,10 +44,16 @@ The Coordinator manages the cluster state.
     ```yaml
     database:
       defaults:
-        engine: "sqlite"
+        engine: "sqlite" # or "mysql"
       engine_defaults:
         sqlite:
           path: "/opt/dffmpeg/coordinator/dffmpeg.db"
+        mysql:
+          host: "127.0.0.1"
+          user: "dffmpeg"
+          password: "yourpassword"
+          database: "dffmpeg"
+          use_ssl: true # Recommended
     
     # Enable web dashboard
     web_dashboard_enabled: true

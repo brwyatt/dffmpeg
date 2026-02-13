@@ -34,7 +34,7 @@ graph TD
 
     subgraph "Coordinator Node"
         Coord[Coordinator API]
-        DB[(SQLite)]
+        DB[(SQLite or MySQL)]
     end
 
     C -- HTTP POST (Submit) --> Coord

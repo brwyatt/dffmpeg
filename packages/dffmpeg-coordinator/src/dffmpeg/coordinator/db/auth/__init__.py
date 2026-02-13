@@ -13,10 +13,10 @@ class AuthRepository(BaseDB):
     table = Table(
         "auth",
         metadata,
-        Column("client_id", String, primary_key=True),
-        Column("role", String, nullable=False),
-        Column("hmac_key", String, nullable=False),
-        Column("key_id", String, nullable=True),
+        Column("client_id", String(255), primary_key=True),
+        Column("role", String(50), nullable=False),
+        Column("hmac_key", String(255), nullable=False),
+        Column("key_id", String(255), nullable=True),
         Column("created_at", TIMESTAMP, server_default=func.current_timestamp()),
     )
 
