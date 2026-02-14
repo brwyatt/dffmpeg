@@ -51,3 +51,6 @@ class WorkerRepository(BaseDB):
         self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None
     ) -> list[WorkerRecord]:
         raise NotImplementedError()
+
+    async def get_worker(self, worker_id: str) -> Optional[WorkerRecord]:
+        raise NotImplementedError()
