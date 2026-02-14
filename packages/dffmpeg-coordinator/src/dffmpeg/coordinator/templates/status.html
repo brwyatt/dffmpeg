@@ -21,6 +21,9 @@
         .controls a:hover { background-color: #f0f0f0; }
         .controls .active { background-color: #0066cc; color: white; border-color: #0066cc; }
         
+        .help-tip { cursor: help; border-bottom: 1px dotted #666; position: relative; display: inline-block; margin-left: 4px; font-size: 0.8em; color: #666; }
+        .help-tip:hover:after { content: attr(data-title); position: absolute; left: 0; top: 100%; margin-top: 5px; background: #333; color: #fff; padding: 5px 10px; border-radius: 4px; white-space: nowrap; z-index: 100; font-weight: normal; font-size: 0.9em; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+
         #progress-bar-container { position: fixed; top: 0; left: 0; width: 100%; height: 3px; background-color: transparent; z-index: 1000; }
         #progress-bar { width: 0%; height: 100%; background-color: #0066cc; transition: width 0.1s linear; }
         #progress-bar.paused { background-color: #999; }
@@ -47,23 +50,38 @@
     <h1>DFFmpeg Status</h1>
 
     <div class="global-controls">
-        <div class="control-group">
-            <span class="control-label">Refresh:</span>
-            <button id="toggle-refresh" onclick="toggleAutoRefresh()">Pause</button>
-            <button onclick="manualRefresh()">Refresh Now</button>
-        </div>
-        <div class="control-group">
-            <span class="control-label">Interval:</span>
-            <div class="controls" id="refresh-interval-controls">
-                <a href="javascript:void(0)" onclick="setRefreshInterval(5000)" id="re-5000">5s</a>
-                <a href="javascript:void(0)" onclick="setRefreshInterval(15000)" id="re-15000">15s</a>
-                <a href="javascript:void(0)" onclick="setRefreshInterval(30000)" id="re-30000">30s</a>
-                <a href="javascript:void(0)" onclick="setRefreshInterval(60000)" id="re-60000">1m</a>
-                <a href="javascript:void(0)" onclick="setRefreshInterval(300000)" id="re-300000">5m</a>
+        <div style="display: flex; gap: 15px; width: 100%; align-items: center; flex-wrap: wrap;">
+            <div class="control-group">
+                <span class="control-label">Refresh:</span>
+                <button id="toggle-refresh" onclick="toggleAutoRefresh()">Pause</button>
+                <button onclick="manualRefresh()">Refresh Now</button>
+            </div>
+            <div class="control-group">
+                <span class="control-label">Interval:</span>
+                <div class="controls" id="refresh-interval-controls" style="margin-bottom: 0;">
+                    <a href="javascript:void(0)" onclick="setRefreshInterval(5000)" id="re-5000">5s</a>
+                    <a href="javascript:void(0)" onclick="setRefreshInterval(15000)" id="re-15000">15s</a>
+                    <a href="javascript:void(0)" onclick="setRefreshInterval(30000)" id="re-30000">30s</a>
+                    <a href="javascript:void(0)" onclick="setRefreshInterval(60000)" id="re-60000">1m</a>
+                    <a href="javascript:void(0)" onclick="setRefreshInterval(300000)" id="re-300000">5m</a>
+                </div>
+            </div>
+            <div class="last-updated">
+                Last Updated: <span id="last-updated-time">-</span>
             </div>
         </div>
-        <div class="last-updated">
-            Last Updated: <span id="last-updated-time">-</span>
+        <div style="display: flex; gap: 15px; width: 100%; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0; align-items: center;">
+            <div class="control-group">
+                <span class="control-label">Window<span class="help-tip" data-title="Time window for including recently offline workers and completed jobs">(?)</span>:</span>
+                <div class="controls" style="margin-bottom: 0;">
+                    <a href="javascript:void(0)" onclick="setTimeWindow(3600)" id="win-3600">1h</a>
+                    <a href="javascript:void(0)" onclick="setTimeWindow(21600)" id="win-21600">6h</a>
+                    <a href="javascript:void(0)" onclick="setTimeWindow(43200)" id="win-43200">12h</a>
+                    <a href="javascript:void(0)" onclick="setTimeWindow(86400)" id="win-86400">1d</a>
+                    <a href="javascript:void(0)" onclick="setTimeWindow(259200)" id="win-259200">3d</a>
+                    <a href="javascript:void(0)" onclick="setTimeWindow(604800)" id="win-604800">1w</a>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -85,15 +103,6 @@
     </table>
 
     <h2>Recent Jobs</h2>
-    <div class="controls">
-        <span class="control-label">Window:</span>
-        <a href="javascript:void(0)" onclick="setTimeWindow(3600)" id="win-3600">1h</a>
-        <a href="javascript:void(0)" onclick="setTimeWindow(21600)" id="win-21600">6h</a>
-        <a href="javascript:void(0)" onclick="setTimeWindow(43200)" id="win-43200">12h</a>
-        <a href="javascript:void(0)" onclick="setTimeWindow(86400)" id="win-86400">1d</a>
-        <a href="javascript:void(0)" onclick="setTimeWindow(259200)" id="win-259200">3d</a>
-        <a href="javascript:void(0)" onclick="setTimeWindow(604800)" id="win-604800">1w</a>
-    </div>
     <table id="jobs-table">
         <thead>
             <tr>
