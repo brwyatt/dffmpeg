@@ -37,6 +37,7 @@
         .global-controls { background-color: #f8f9fa; padding: 10px; border-radius: 4px; margin-bottom: 20px; border: 1px solid #eee; display: flex; align-items: center; flex-wrap: wrap; gap: 15px; }
         .control-group { display: flex; align-items: center; gap: 8px; }
         .control-label { font-weight: bold; font-size: 0.9em; color: #555; }
+        .last-updated { font-size: 0.85em; color: #666; margin-left: auto; }
     </style>
 </head>
 <body>
@@ -60,6 +61,9 @@
                 <a href="javascript:void(0)" onclick="setRefreshInterval(60000)" id="re-60000">1m</a>
                 <a href="javascript:void(0)" onclick="setRefreshInterval(300000)" id="re-300000">5m</a>
             </div>
+        </div>
+        <div class="last-updated">
+            Last Updated: <span id="last-updated-time">-</span>
         </div>
     </div>
 
@@ -220,6 +224,10 @@
                     jobBody.appendChild(row);
                 });
             }
+            
+            // Update Last Updated time
+            const now = new Date();
+            document.getElementById('last-updated-time').textContent = now.toISOString().replace('T', ' ').substring(11, 19) + ' UTC';
         }
 
         function refreshDashboard() {
