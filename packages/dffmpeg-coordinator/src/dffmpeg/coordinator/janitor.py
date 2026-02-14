@@ -65,6 +65,13 @@ class Janitor:
         for worker in stale_workers:
             logger.warning(f"Worker {worker.worker_id} is stale. Marking as offline.")
             worker.status = "offline"
+            # Clear capabilities and transport info, similar to deregister
+            worker.capabilities = []
+            worker.binaries = []
+            worker.paths = []
+            worker.transport = "none"
+            worker.transport_metadata = {}
+            worker.registration_interval = 0
             await self.worker_repo.add_or_update(worker)
 
     async def reap_running_jobs(self):

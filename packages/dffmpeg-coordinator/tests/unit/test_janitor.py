@@ -39,12 +39,25 @@ async def test_reap_workers(janitor, worker_repo):
     worker = WorkerRecord(
         worker_id="w1", status="online", registration_interval=10, transport="http", transport_metadata={}
     )
+    # Populate fields that should be cleared
+    worker.capabilities = ["h264"]
+    worker.binaries = ["ffmpeg"]
+    worker.paths = ["/tmp"]
+
     worker_repo.get_stale_workers.return_value = [worker]
 
     await janitor.reap_workers()
 
     # Check if worker status was updated to offline
     assert worker.status == "offline"
+    # Check if fields were cleared
+    assert worker.capabilities == []
+    assert worker.binaries == []
+    assert worker.paths == []
+    assert worker.transport == "none"
+    assert worker.transport_metadata == {}
+    assert worker.registration_interval == 0
+
     worker_repo.add_or_update.assert_called_once_with(worker)
 
 
