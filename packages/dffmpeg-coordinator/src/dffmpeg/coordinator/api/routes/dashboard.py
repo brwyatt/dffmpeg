@@ -1,4 +1,6 @@
 import importlib.resources
+from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
@@ -18,6 +20,18 @@ router = APIRouter()
 # Locate the templates directory relative to the package root
 templates_dir = importlib.resources.files("dffmpeg.coordinator") / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
+
+
+def format_utc(dt: Optional[datetime]) -> Optional[str]:
+    """
+    Format a datetime object as an ISO 8601 string with UTC timezone.
+    If the datetime is naive, it is assumed to be UTC.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 
 async def get_status_data(window: int, job_repo: JobRepository, worker_repo: WorkerRepository):
@@ -40,7 +54,7 @@ async def get_status_data(window: int, job_repo: JobRepository, worker_repo: Wor
             {
                 "worker_id": w.worker_id,
                 "status": w.status,
-                "last_seen": w.last_seen.isoformat() if w.last_seen else None,
+                "last_seen": format_utc(w.last_seen),
                 "binaries": w.binaries,
                 "paths": w.paths,
             }
@@ -55,8 +69,8 @@ async def get_status_data(window: int, job_repo: JobRepository, worker_repo: Wor
                 "binary_name": j.binary_name,
                 "requester_id": j.requester_id,
                 "worker_id": j.worker_id,
-                "created_at": j.created_at.isoformat() if j.created_at else None,
-                "last_update": j.last_update.isoformat() if j.last_update else None,
+                "created_at": format_utc(j.created_at),
+                "last_update": format_utc(j.last_update),
             }
             for j in jobs
         ],
