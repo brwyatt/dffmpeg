@@ -4,6 +4,8 @@ This document outlines the configuration and permission requirements for the sup
 
 Transports are used for asynchronous communication between the Coordinator and Workers/Clients.
 
+For a full list of configuration options, see the [Configuration Reference](configuration.md).
+
 ## RabbitMQ
 
 RabbitMQ is a supported transport backend. It uses AMQP 0-9-1.
@@ -19,14 +21,13 @@ transports:
   transport_settings:
     rabbitmq:
       host: "rabbitmq.example.com"
-      port: 5672  # Optional, defaults to 5672 (or 5671 for TLS)
+      port: 5672  # Optional, defaults to 5672
       use_tls: true
-      use_srv: false # Set to true to use SRV records for discovery
+      verify_ssl: true # Verify server certificate
+      use_srv: false # Set to true to use SRV records for discovery (Basic support)
       username: "dffmpeg-user"
       password: "your-password"
-      vhost: "dffmpeg" # Virtual host, defaults to "/"
-      workers_exchange: "dffmpeg.workers" # Optional, defaults to "dffmpeg.workers"
-      jobs_exchange: "dffmpeg.jobs" # Optional, defaults to "dffmpeg.jobs"
+      vhost: "/" # Virtual host, defaults to "/"
 ```
 
 ### Permissions

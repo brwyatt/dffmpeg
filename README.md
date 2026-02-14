@@ -34,13 +34,14 @@ The project is a monorepo containing:
 This project is currently in active development.
 
 ### Configuration
-Configuration is handled via YAML files within each package. Please refer to the specific package documentation for detailed configuration options.
+Configuration is handled via YAML files. For a complete reference, see [Configuration Reference](docs/configuration.md).
 
 For details on configuring Transports (RabbitMQ, MQTT) and required permissions, see [Transport Configuration](docs/transports.md).
 
 ## Documentation
 
 *   [Getting Started](docs/getting-started.md): Step-by-step guide to setting up a cluster.
+*   [Configuration Reference](docs/configuration.md): Detailed configuration options for all components.
 *   [Architecture](docs/architecture.md): System design, components, and scenarios (Development vs. Production).
 *   [Security Model](docs/security-model.md): Authentication and key management.
 *   [Transport Configuration](docs/transports.md): RabbitMQ and MQTT setup details.

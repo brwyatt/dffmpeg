@@ -9,30 +9,9 @@ The central server component of DFFmpeg. It manages:
 
 ## Configuration
 
+For detailed configuration options, see the [Configuration Reference](../../../docs/configuration.md).
+
 Configuration is handled via a YAML file (default: `dffmpeg-coordinator.yaml`).
-
-The coordinator searches for configuration in the following order:
-1.  CLI Argument (`--config`)
-2.  Environment Variable (`DFFMPEG_COORDINATOR_CONFIG`)
-3.  Current Working Directory (`./dffmpeg-coordinator.yaml`)
-4.  User Config (`~/.config/dffmpeg/coordinator.yaml`)
-5.  System Config (`/etc/dffmpeg/coordinator.yaml`)
-6.  Venv Root (`sys.prefix/dffmpeg-coordinator.yaml`)
-
-### Key Sections
-
-*   **`database`**: Database connection settings.
-    *   `repositories`: Configuration for individual repositories (auth, jobs, messages, workers).
-        *   `auth`: Can include `encryption_keys_file` or `encryption_keys` for credential storage.
-    *   `engine_defaults`: Default settings for database engines (e.g., SQLite path, MySQL host/user).
-*   **`transports`**: Transport settings.
-    *   `enabled_transports`: List of active transport mechanisms (e.g., `["mqtt", "http_polling"]`). If empty, defaults to `["http_polling"]`. Note that the final transport selection is prioritized based on the order provided by the client or worker during registration/submission.
-    *   `transport_settings`: Specific settings for each transport type. See [Transport Configuration](../../../docs/transports.md) for detailed options.
-*   **`janitor`**: Background task settings.
-    *   `interval`: How often the janitor runs (in seconds).
-    *   `worker_threshold_factor`: Multiplier for determining when a worker is considered stale.
-    *   `job_assignment_timeout`: Max time (seconds) a job can stay in "assigned" state before retry.
-*   **`default_job_heartbeat_interval`**: The default time (in seconds) between heartbeats for jobs if not specified by the client.
 
 ## Running
 

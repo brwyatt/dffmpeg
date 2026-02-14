@@ -39,12 +39,12 @@ The Coordinator manages the cluster state.
 
 ### Configuration
 
+For a full list of configuration options, including detailed database settings, see the [Configuration Reference](configuration.md).
+
 1.  **Create a configuration file** (`/opt/dffmpeg/coordinator/dffmpeg-coordinator.yaml`):
 
     ```yaml
     database:
-      defaults:
-        engine: "sqlite" # or "mysql"
       engine_defaults:
         sqlite:
           path: "/opt/dffmpeg/coordinator/dffmpeg.db"
@@ -54,13 +54,19 @@ The Coordinator manages the cluster state.
           password: "yourpassword"
           database: "dffmpeg"
           use_ssl: true # Recommended
+
+      # By default, all repositories use the 'sqlite' engine.
+      # You can override specific repositories to use 'mysql':
+      # repositories:
+      #   jobs:
+      #     engine: mysql
     
     # Enable web dashboard
     web_dashboard_enabled: true
     ```
 
 2.  **Initialize the Admin User**:
-    You need to create a user for the client and the worker.
+    You need to create a user for the client and the worker. For more details on user management, see [Administration Guide](administration.md).
 
     ```bash
     # Create an admin/client user

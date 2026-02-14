@@ -16,7 +16,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 *Goal: A stable, well-tested, and documented release.*
 
 - [ ] **Client Full Status**: CLI command (something like `dffmpeg-client status --all`) for viewing complete cluster status (similar to the web dashboard).
-- [ ] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
+- [x] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
 - [ ] **Automated End-to-End Testing**: Robust `pytest` suite covering the full job lifecycle (submission, assignment, execution, completion).
 - [ ] **Security Audit**: Final review of HMAC implementation and path signing.
 
