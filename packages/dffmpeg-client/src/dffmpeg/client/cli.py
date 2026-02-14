@@ -239,6 +239,87 @@ async def run_cancel(job_id: str, config_file: str | None = None) -> int:
             return 1
 
 
+async def run_args(job_id: str, config_file: str | None = None) -> int:
+    try:
+        config = load_config(config_file)
+    except Exception as e:
+        logger.error(f"Configuration error: {e}")
+        return 1
+
+    async with DFFmpegClient(config) as client:
+        try:
+            status = await client.get_job_status(job_id)
+            print(f"{status.binary_name} {' '.join(status.arguments)}")
+            return 0
+        except Exception as e:
+            logger.error(f"Error getting job args: {e}")
+            return 1
+
+
+async def run_logs(job_id: str, tail: int | None, follow: bool, config_file: str | None = None) -> int:
+    try:
+        config = load_config(config_file)
+    except Exception as e:
+        logger.error(f"Configuration error: {e}")
+        return 1
+
+    async with DFFmpegClient(config) as client:
+        try:
+            last_msg_id = None
+            is_first_fetch = True
+
+            while True:
+                # Fetch logs
+                # If first fetch and tail is set, use limit=tail
+                limit = tail if (is_first_fetch and tail) else None
+                resp = await client.get_job_logs(
+                    job_id, since_message_id=str(last_msg_id) if last_msg_id else None, limit=limit
+                )
+
+                # Sort logs by timestamp just in case
+                # LogEntry has timestamp field
+                logs = sorted(resp.logs, key=lambda log: (log.timestamp if log.timestamp else 0))
+
+                for log in logs:
+                    stream = sys.stdout if log.stream == "stdout" else sys.stderr
+                    print(log.content, file=stream)
+                    stream.flush()
+
+                if resp.last_message_id:
+                    last_msg_id = resp.last_message_id
+
+                is_first_fetch = False
+
+                if not follow:
+                    # If not following, we exit if we got no logs this time
+                    # OR if we specified tail, we only do one fetch (historical tail)
+                    if not resp.logs or tail:
+                        break
+                    continue
+
+                # Following mode
+                job = await client.get_job_status(job_id)
+                if job.status in ["completed", "failed", "canceled"]:
+                    break
+
+                # If we got no logs this poll, wait a bit
+                if not resp.logs:
+                    await asyncio.sleep(2)
+
+            # Final check for logs after loop exit (works for follow and non-follow)
+            resp = await client.get_job_logs(job_id, since_message_id=str(last_msg_id) if last_msg_id else None)
+            logs = sorted(resp.logs, key=lambda log: (log.timestamp if log.timestamp else 0))
+            for log in logs:
+                stream = sys.stdout if log.stream == "stdout" else sys.stderr
+                print(log.content, file=stream)
+                stream.flush()
+
+            return 0
+        except Exception as e:
+            logger.error(f"Error fetching logs: {e}")
+            return 1
+
+
 def main():
     parser = argparse.ArgumentParser(description="dffmpeg client CLI")
     parser.add_argument("--config", "-c", help="Path to config file")
@@ -268,6 +349,16 @@ def main():
     cancel_parser = subparsers.add_parser("cancel", help="Cancel a job")
     cancel_parser.add_argument("job_id", help="Job ID")
 
+    # Logs
+    logs_parser = subparsers.add_parser("logs", help="Fetch job logs")
+    logs_parser.add_argument("job_id", help="Job ID")
+    logs_parser.add_argument("--tail", "-n", type=int, help="Number of lines to show (from end)")
+    logs_parser.add_argument("--follow", "-f", action="store_true", help="Follow log output")
+
+    # Args
+    args_parser = subparsers.add_parser("args", help="Get full arguments for a job")
+    args_parser.add_argument("job_id", help="Job ID")
+
     args = parser.parse_args()
 
     try:
@@ -295,6 +386,12 @@ def main():
 
         elif args.command == "cancel":
             sys.exit(asyncio.run(run_cancel(args.job_id, args.config)))
+
+        elif args.command == "logs":
+            sys.exit(asyncio.run(run_logs(args.job_id, args.tail, args.follow, args.config)))
+
+        elif args.command == "args":
+            sys.exit(asyncio.run(run_args(args.job_id, args.config)))
 
     except KeyboardInterrupt:
         sys.exit(130)

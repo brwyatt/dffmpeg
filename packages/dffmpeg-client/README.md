@@ -60,6 +60,30 @@ Cancel a job:
 dffmpeg-client cancel <job_id>
 ```
 
+View job logs:
+Fetch historical logs for a job.
+```bash
+dffmpeg-client logs <job_id>
+```
+
+Follow job logs:
+Fetch historical logs and continue polling for new logs.
+```bash
+dffmpeg-client logs --follow <job_id>
+```
+
+Tail job logs:
+Fetch only the last $N$ lines of logs.
+```bash
+dffmpeg-client logs --tail 50 <job_id>
+```
+
+Get job arguments:
+Retrieve the full command line used for a job.
+```bash
+dffmpeg-client args <job_id>
+```
+
 ### Transparent Proxy
 
 You can create a symlink to the proxy entry point to use dffmpeg as a drop-in replacement for ffmpeg.

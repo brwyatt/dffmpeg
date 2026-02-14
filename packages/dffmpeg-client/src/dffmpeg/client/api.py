@@ -10,6 +10,7 @@ from dffmpeg.common.http_client import AuthenticatedAsyncClient
 from dffmpeg.common.models import (
     CommandResponse,
     JobLogsMessage,
+    JobLogsResponse,
     JobRecord,
     JobRequest,
     JobStatusMessage,
@@ -102,6 +103,21 @@ class DFFmpegClient:
         resp = await self.client.get(path, params=params)
         resp.raise_for_status()
         return [JobRecord.model_validate(j) for j in resp.json()]
+
+    async def get_job_logs(
+        self, job_id: str, since_message_id: str | None = None, limit: int | None = None
+    ) -> JobLogsResponse:
+        """Retrieves logs for a job."""
+        params: Dict[str, Any] = {}
+        if since_message_id:
+            params["since_message_id"] = since_message_id
+        if limit:
+            params["limit"] = limit
+
+        path = f"/jobs/{job_id}/logs"
+        resp = await self.client.get(path, params=params)
+        resp.raise_for_status()
+        return JobLogsResponse.model_validate(resp.json())
 
     async def start_monitoring(self, job_id: str, monitor: bool = True):
         """
