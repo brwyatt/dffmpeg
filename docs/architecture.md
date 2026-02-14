@@ -15,8 +15,8 @@ DFFmpeg is designed to coordinate distributed FFmpeg encoding jobs. It separates
 
 ## Scenarios
 
-### 1. Basic / Development Setup
-In the simplest deployment, all components can run on a single machine or a small LAN.
+### 1. Simple Architecture (Development / Small Scale)
+This is the default configuration and is ideal for development, testing, or small single-server deployments.
 
 *   **Database**: SQLite (local file).
 *   **Transport**: HTTP Polling (no external broker required).
@@ -34,7 +34,7 @@ graph TD
 
     subgraph "Coordinator Node"
         Coord[Coordinator API]
-        DB[(SQLite or MySQL)]
+        DB[(SQLite)]
     end
 
     C -- HTTP POST (Submit) --> Coord
@@ -43,51 +43,71 @@ graph TD
     W -- Exec --> FF
 ```
 
-### 2. Production with RabbitMQ
-For production environments, RabbitMQ provides durable messaging and lower latency than polling.
+### 2. High Availability (HA) Reference Architecture
+This setup represents a proven production-grade environment, designed for resilience and horizontal scalability.
 
-*   **Database**: MariaDB/MySQL (possibly Galera cluster for HA).
-*   **Transport**: RabbitMQ (AMQP).
-*   **High Availability**: Multiple Coordinators behind a Load Balancer (VIP).
+*   **Load Balancing**: Redundant HAProxy pairs (Active/Passive via Keepalived) providing Virtual IPs (VIPs) for each service tier.
+*   **Message Broker**: 3x RabbitMQ hosts (Clustered) behind an HAProxy VIP.
+*   **Database**: 3x MariaDB/Galera Cluster hosts behind an HAProxy VIP.
+*   **Coordinator**: 2x `dffmpeg-coordinator` instances (Active/Active) behind an HAProxy VIP.
+*   **Transport**: RabbitMQ (AMQP) for low latency and durability.
 
 ```mermaid
 graph TD
-    subgraph "Infrastructure"
-        MQ[RabbitMQ Cluster]
-        DB[(MariaDB Cluster)]
-        LB[Load Balancer / VIP]
+    subgraph "Clients"
+        Client1[Client CLI]
+        Client2[Client CLI]
     end
 
-    subgraph "Coordinator Cluster"
+    subgraph "Workers"
+        Worker1[Worker Agent]
+        Worker2[Worker Agent]
+        Worker3[Worker Agent]
+        Worker4[Worker Agent]
+    end
+
+    subgraph "Coordinator HAProxy Pair"
+        APP_VIP("Coordinator VIP (Active)")
+        APP_VIP_stby("Coordinator VIP (Standby)")
+    end
+    subgraph "MQ HAProxy Pair"
+        MQ_VIP("MQ VIP (Active)")
+        MQ_VIP_stby("MQ VIP (Standby)")
+    end
+    subgraph "DB HAProxy Pair"
+        DB_VIP("DB VIP (Active)")
+        DB_VIP_stby("DB VIP (Standby)")
+    end
+
+    subgraph "Coordinators"
         C1[Coordinator 1]
         C2[Coordinator 2]
     end
 
-    subgraph "Workers"
-        W1[Worker 1]
-        W2[Worker 2]
+    subgraph "Transport Layer"
+        MQ1[RabbitMQ 1]
+        MQ2[RabbitMQ 2]
+        MQ3[RabbitMQ 3]
     end
 
-    subgraph "Clients"
-        Client[Client CLI]
+    subgraph "Database Layer"
+        DB1[(MariaDB Galera 1)]
+        DB2[(MariaDB Galera 2)]
+        DB3[(MariaDB Galera 3)]
     end
 
-    Client -- HTTP --> LB
-    W1 -- HTTP --> LB
-    W2 -- HTTP --> LB
-    
-    LB --> C1
-    LB --> C2
-    
-    C1 -- SQL --> DB
-    C2 -- SQL --> DB
-    
-    C1 -- Publish --> MQ
-    C2 -- Publish --> MQ
-    
-    MQ -- Consume (Commands) --> W1
-    MQ -- Consume (Commands) --> W2
-    MQ -- Consume (Updates) --> Client
+    %% External Traffic
+    Client1 & Client2 & Worker1 & Worker2 & Worker3 & Worker4 -- HTTP --> APP_VIP
+    APP_VIP --> C1 & C2
+
+    Client1 & Client2 & Worker1 & Worker2 & Worker3 & Worker4 -- AMQP --> MQ_VIP
+    MQ_VIP --> MQ1 & MQ2 & MQ3
+
+    %% Internal Traffic
+    C1 & C2 -- SQL --> DB_VIP
+    DB_VIP --> DB1 & DB2 & DB3
+
+    C1 & C2 -- AMQP --> MQ_VIP
 ```
 
 ### 3. Real-Time Updates with MQTT
