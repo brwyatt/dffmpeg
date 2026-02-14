@@ -212,6 +212,7 @@ class JobRunner:
 
         except asyncio.CancelledError:
             logger.info(f"[{self.client_id}] Job {self.job_id} execution canceled")
+            await self._flush_logs()
             if not self._silent_cancellation:
                 retries = 0 if self._fast_shutdown else 5
                 await self._report_status("canceled", retries=retries)
