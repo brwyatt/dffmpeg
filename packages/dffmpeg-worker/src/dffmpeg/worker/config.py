@@ -32,6 +32,8 @@ class WorkerConfig(BaseModel):
     hmac_key_file: str | None = None
     registration_interval: int = 15
     jitter: float = 0.5
+    log_batch_size: int = 100
+    log_batch_delay: float = 0.25
     coordinator: CoordinatorConnectionConfig = Field(default_factory=CoordinatorConnectionConfig)
     transports: ClientTransportConfig = Field(default_factory=ClientTransportConfig)
     binaries: dict[str, str] = Field(default_factory=dict)
