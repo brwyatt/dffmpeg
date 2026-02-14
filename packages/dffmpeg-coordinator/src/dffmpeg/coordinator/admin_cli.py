@@ -76,6 +76,39 @@ async def user_rotate_key(db: DB, args: argparse.Namespace):
     print(f"New HMAC Key: {hmac_key}")
 
 
+async def worker_list(db: DB, args: argparse.Namespace):
+    online = await db.workers.get_workers_by_status("online")
+    offline = await db.workers.get_workers_by_status("offline", since_seconds=3600 * 24)
+    workers = online + offline
+
+    # Sort: Online first, then by last seen (descending), then ID (ascending)
+    workers.sort(key=lambda w: (w.status != "online", -(w.last_seen.timestamp() if w.last_seen else 0), w.worker_id))
+
+    print(f"{'Worker ID':<20} {'Status':<10} {'Last Seen':<20}")
+    print("-" * 52)
+    for w in workers:
+        last_seen_str = w.last_seen.strftime("%Y-%m-%d %H:%M:%S") if w.last_seen else "-"
+        print(f"{w.worker_id:<20} {w.status:<10} {last_seen_str}")
+
+
+async def worker_show(db: DB, args: argparse.Namespace):
+    worker_id = args.worker_id
+    worker = await db.workers.get_worker(worker_id)
+    if not worker:
+        print(f"Worker '{worker_id}' not found.")
+        sys.exit(1)
+
+    last_seen_str = worker.last_seen.strftime("%Y-%m-%d %H:%M:%S") if worker.last_seen else "-"
+    print(f"Worker ID:    {worker.worker_id}")
+    print(f"Status:       {worker.status}")
+    print(f"Last Seen:    {last_seen_str}")
+    print(f"Binaries:     {', '.join(worker.binaries)}")
+    print(f"Capabilities: {', '.join(worker.capabilities)}")
+    print(f"Paths:        {', '.join(worker.paths)}")
+    print(f"Interval:     {worker.registration_interval}s")
+    print(f"Transport:    {worker.transport}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="dffmpeg Administrative CLI")
     parser.add_argument("--config", "-c", type=str, help="Path to coordinator config file")
@@ -114,6 +147,19 @@ def main():
     rotate_parser = user_subparsers.add_parser("rotate-key", help="Rotate a user's HMAC key")
     rotate_parser.add_argument("client_id", help="Client ID of the user")
     rotate_parser.set_defaults(func=user_rotate_key)
+
+    # Worker subcommands
+    worker_parser = subparsers.add_parser("worker", help="Worker management")
+    worker_subparsers = worker_parser.add_subparsers(dest="subcommand", required=True)
+
+    # worker list
+    w_list_parser = worker_subparsers.add_parser("list", help="List workers")
+    w_list_parser.set_defaults(func=worker_list)
+
+    # worker show
+    w_show_parser = worker_subparsers.add_parser("show", help="Show worker details")
+    w_show_parser.add_argument("worker_id", help="Worker ID")
+    w_show_parser.set_defaults(func=worker_show)
 
     args = parser.parse_args()
 

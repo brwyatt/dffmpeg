@@ -69,5 +69,7 @@ dffmpeg-admin [global options] <command> [subcommand] [options]
     *   `--role`: One of `client`, `worker`, `admin` (default: `client`).
 *   **`user rotate-key <client_id>`**: Generate a new HMAC key for an existing user.
 *   **`user delete <client_id>`**: Remove a user from the database.
+*   **`worker list`**: List all known workers and their status.
+*   **`worker show <worker_id>`**: Display detailed status, binaries, and capabilities for a specific worker.
 
 > **Note:** The `add` and `rotate-key` commands will display the newly generated HMAC key. This key must be securely provided to the client or worker.
