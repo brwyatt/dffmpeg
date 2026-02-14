@@ -3,10 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="refresh" content="5">
     <title>DFFmpeg Status</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; padding-top: 5px; }
         h1, h2 { color: #333; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
@@ -17,13 +16,55 @@
         .status-running { color: blue; }
         .status-completed { color: green; }
         .status-failed { color: red; }
+        .controls { margin-bottom: 15px; }
+        .controls a { margin-right: 5px; color: #0066cc; text-decoration: none; border: 1px solid #ccc; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; }
+        .controls a:hover { background-color: #f0f0f0; }
+        .controls .active { background-color: #0066cc; color: white; border-color: #0066cc; }
+        
+        #progress-bar-container { position: fixed; top: 0; left: 0; width: 100%; height: 3px; background-color: transparent; z-index: 1000; }
+        #progress-bar { width: 0%; height: 100%; background-color: #0066cc; transition: width 0.1s linear; }
+        #progress-bar.paused { background-color: #999; }
+        
+        #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1001; }
+        .toast { background-color: #333; color: white; padding: 12px 24px; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); margin-top: 10px; opacity: 0; transition: opacity 0.3s ease-in-out; }
+        .toast.show { opacity: 1; }
+        .toast.error { background-color: #d32f2f; }
+        
+        button { cursor: pointer; padding: 4px 12px; border: 1px solid #ccc; border-radius: 4px; background-color: #fff; font-size: 0.9em; }
+        button:hover { background-color: #f0f0f0; }
+        button#toggle-refresh.paused { color: #d32f2f; }
+        
+        .global-controls { background-color: #f8f9fa; padding: 10px; border-radius: 4px; margin-bottom: 20px; border: 1px solid #eee; display: flex; align-items: center; flex-wrap: wrap; gap: 15px; }
+        .control-group { display: flex; align-items: center; gap: 8px; }
+        .control-label { font-weight: bold; font-size: 0.9em; color: #555; }
     </style>
 </head>
 <body>
+    <div id="progress-bar-container"><div id="progress-bar"></div></div>
+    <div id="toast-container"></div>
+
     <h1>DFFmpeg Status</h1>
 
+    <div class="global-controls">
+        <div class="control-group">
+            <span class="control-label">Refresh:</span>
+            <button id="toggle-refresh" onclick="toggleAutoRefresh()">Pause</button>
+            <button onclick="manualRefresh()">Refresh Now</button>
+        </div>
+        <div class="control-group">
+            <span class="control-label">Interval:</span>
+            <div class="controls" id="refresh-interval-controls">
+                <a href="javascript:void(0)" onclick="setRefreshInterval(5000)" id="re-5000">5s</a>
+                <a href="javascript:void(0)" onclick="setRefreshInterval(15000)" id="re-15000">15s</a>
+                <a href="javascript:void(0)" onclick="setRefreshInterval(30000)" id="re-30000">30s</a>
+                <a href="javascript:void(0)" onclick="setRefreshInterval(60000)" id="re-60000">1m</a>
+                <a href="javascript:void(0)" onclick="setRefreshInterval(300000)" id="re-300000">5m</a>
+            </div>
+        </div>
+    </div>
+
     <h2>Workers</h2>
-    <table>
+    <table id="workers-table">
         <thead>
             <tr>
                 <th>Worker ID</th>
@@ -35,23 +76,21 @@
             </tr>
         </thead>
         <tbody>
-            {% for worker in workers %}
-            <tr>
-                <td>{{ worker.worker_id }}</td>
-                <td><span class="status-{{ worker.status }}">{{ worker.status }}</span></td>
-                <td>{{ worker.last_seen.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
-                <td>{{ worker_load.get(worker.worker_id, 0) }}</td>
-                <td>{{ worker.binaries | join(', ') }}</td>
-                <td>{{ worker.paths | join(', ') }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="6">No workers found.</td></tr>
-            {% endfor %}
+            <tr><td colspan="6">Loading workers...</td></tr>
         </tbody>
     </table>
 
     <h2>Recent Jobs</h2>
-    <table>
+    <div class="controls">
+        <span class="control-label">Window:</span>
+        <a href="javascript:void(0)" onclick="setTimeWindow(3600)" id="win-3600">1h</a>
+        <a href="javascript:void(0)" onclick="setTimeWindow(21600)" id="win-21600">6h</a>
+        <a href="javascript:void(0)" onclick="setTimeWindow(43200)" id="win-43200">12h</a>
+        <a href="javascript:void(0)" onclick="setTimeWindow(86400)" id="win-86400">1d</a>
+        <a href="javascript:void(0)" onclick="setTimeWindow(259200)" id="win-259200">3d</a>
+        <a href="javascript:void(0)" onclick="setTimeWindow(604800)" id="win-604800">1w</a>
+    </div>
+    <table id="jobs-table">
         <thead>
             <tr>
                 <th>Job ID</th>
@@ -64,22 +103,194 @@
             </tr>
         </thead>
         <tbody>
-            {% for job in jobs %}
-            <tr>
-                <td>{{ job.job_id }}</td>
-                <td>
-                    <span class="status-{{ job.status }}">{{ job.status }}</span>{% if job.exit_code is not none and job.exit_code != 0 %} ({{ job.exit_code }}){% endif %}
-                </td>
-                <td>{{ job.binary_name }}</td>
-                <td>{{ job.requester_id }}</td>
-                <td>{{ job.worker_id or '-' }}</td>
-                <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
-                <td>{{ job.last_update.strftime('%Y-%m-%d %H:%M:%S UTC') }}</td>
-            </tr>
-            {% else %}
-            <tr><td colspan="7">No recent jobs.</td></tr>
-            {% endfor %}
+            <tr><td colspan="7">Loading jobs...</td></tr>
         </tbody>
     </table>
+
+    <script>
+        // State management
+        const DEFAULT_STATE = {
+            window: 3600,
+            refresh: 5000,
+            paused: false
+        };
+
+        function getParamsFromHash() {
+            const hash = window.location.hash.substring(1);
+            const params = new URLSearchParams(hash);
+            return {
+                window: parseInt(params.get('window')) || DEFAULT_STATE.window,
+                refresh: parseInt(params.get('refresh')) || DEFAULT_STATE.refresh,
+                paused: params.get('paused') === 'true'
+            };
+        }
+
+        function updateHash(updates) {
+            const current = getParamsFromHash();
+            const next = { ...current, ...updates };
+            const params = new URLSearchParams();
+            if (next.window !== DEFAULT_STATE.window) params.set('window', next.window);
+            if (next.refresh !== DEFAULT_STATE.refresh) params.set('refresh', next.refresh);
+            if (next.paused) params.set('paused', 'true');
+            
+            const newHash = params.toString();
+            window.location.hash = newHash ? '#' + newHash : '';
+        }
+
+        let lastRefreshTime = Date.now();
+        let refreshTimeout = null;
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => toast.classList.add('show'), 10);
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        function formatDate(isoString) {
+            if (!isoString) return '-';
+            const date = new Date(isoString);
+            return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
+        }
+
+        function renderDashboard(data) {
+            const state = getParamsFromHash();
+            
+            // Update active links
+            document.querySelectorAll('.controls a').forEach(a => a.classList.remove('active'));
+            const winLink = document.getElementById('win-' + state.window);
+            if (winLink) winLink.classList.add('active');
+            const refLink = document.getElementById('re-' + state.refresh);
+            if (refLink) refLink.classList.add('active');
+            
+            // Update button state
+            const btn = document.getElementById('toggle-refresh');
+            if (state.paused) {
+                btn.textContent = 'Resume Refresh';
+                btn.classList.add('paused');
+            } else {
+                btn.textContent = 'Pause Refresh';
+                btn.classList.remove('paused');
+            }
+
+            // Render Workers
+            const workerBody = document.querySelector('#workers-table tbody');
+            workerBody.innerHTML = '';
+            if (data.workers.length === 0) {
+                workerBody.innerHTML = '<tr><td colspan="6">No workers found.</td></tr>';
+            } else {
+                data.workers.forEach(w => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${w.worker_id}</td>
+                        <td><span class="status-${w.status}">${w.status}</span></td>
+                        <td>${formatDate(w.last_seen)}</td>
+                        <td>${data.worker_load[w.worker_id] || 0}</td>
+                        <td>${(w.binaries || []).join(', ')}</td>
+                        <td>${(w.paths || []).join(', ')}</td>
+                    `;
+                    workerBody.appendChild(row);
+                });
+            }
+
+            // Render Jobs
+            const jobBody = document.querySelector('#jobs-table tbody');
+            jobBody.innerHTML = '';
+            if (data.jobs.length === 0) {
+                jobBody.innerHTML = '<tr><td colspan="7">No recent jobs.</td></tr>';
+            } else {
+                data.jobs.forEach(j => {
+                    const row = document.createElement('tr');
+                    const exitCode = (j.exit_code !== null && j.exit_code !== 0) ? ` (${j.exit_code})` : '';
+                    row.innerHTML = `
+                        <td>${j.job_id}</td>
+                        <td><span class="status-${j.status}">${j.status}</span>${exitCode}</td>
+                        <td>${j.binary_name}</td>
+                        <td>${j.requester_id}</td>
+                        <td>${j.worker_id || '-'}</td>
+                        <td>${formatDate(j.created_at)}</td>
+                        <td>${formatDate(j.last_update)}</td>
+                    `;
+                    jobBody.appendChild(row);
+                });
+            }
+        }
+
+        function refreshDashboard() {
+            const state = getParamsFromHash();
+            if (refreshTimeout) {
+                clearTimeout(refreshTimeout);
+                refreshTimeout = null;
+            }
+
+            fetch(`/status/data?window=${state.window}`)
+            .then(response => {
+                if (!response.ok) throw new Error('Refresh failed');
+                return response.json();
+            })
+            .then(data => {
+                renderDashboard(data);
+                lastRefreshTime = Date.now();
+                if (!state.paused) {
+                    refreshTimeout = setTimeout(refreshDashboard, state.refresh);
+                }
+            })
+            .catch(error => {
+                console.error('Error refreshing dashboard:', error);
+                showToast('Failed to refresh dashboard data', 'error');
+                lastRefreshTime = Date.now();
+                if (!state.paused) {
+                    refreshTimeout = setTimeout(refreshDashboard, state.refresh);
+                }
+            });
+        }
+
+        function updateProgressBar() {
+            const state = getParamsFromHash();
+            const bar = document.getElementById('progress-bar');
+            if (state.paused) {
+                bar.style.width = '100%';
+                bar.classList.add('paused');
+                return;
+            }
+            bar.classList.remove('paused');
+            const elapsed = Date.now() - lastRefreshTime;
+            const progress = Math.min((elapsed / state.refresh) * 100, 100);
+            bar.style.width = progress + '%';
+        }
+
+        function toggleAutoRefresh() {
+            const state = getParamsFromHash();
+            updateHash({ paused: !state.paused });
+        }
+
+        function setRefreshInterval(ms) {
+            updateHash({ refresh: ms, paused: false });
+        }
+
+        function setTimeWindow(seconds) {
+            updateHash({ window: seconds });
+        }
+
+        function manualRefresh() {
+            refreshDashboard();
+        }
+
+        window.addEventListener('hashchange', () => {
+            refreshDashboard();
+        });
+        
+        // Initial load
+        refreshDashboard();
+        
+        // Timer for progress bar animation
+        setInterval(updateProgressBar, 100);
+    </script>
 </body>
 </html>

@@ -20,9 +20,67 @@ templates_dir = importlib.resources.files("dffmpeg.coordinator") / "templates"
 templates = Jinja2Templates(directory=str(templates_dir))
 
 
+async def get_status_data(window: int, job_repo: JobRepository, worker_repo: WorkerRepository):
+    # Use the same window for offline workers as for recent jobs
+    online_workers = await worker_repo.get_workers_by_status("online")
+    offline_workers = await worker_repo.get_workers_by_status("offline", since_seconds=window)
+    workers = online_workers + offline_workers
+
+    # Sort workers: Online first, then by last seen (desc), then by ID (asc)
+    # Using python sort for simplicity in the route
+    workers.sort(key=lambda w: (w.status != "online", -(w.last_seen.timestamp() if w.last_seen else 0), w.worker_id))
+
+    worker_load = await job_repo.get_worker_load()
+
+    # Get recent jobs (limit 50)
+    jobs = await job_repo.get_dashboard_jobs(limit=50, recent_window_seconds=window)
+
+    return {
+        "workers": [
+            {
+                "worker_id": w.worker_id,
+                "status": w.status,
+                "last_seen": w.last_seen.isoformat() if w.last_seen else None,
+                "binaries": w.binaries,
+                "paths": w.paths,
+            }
+            for w in workers
+        ],
+        "worker_load": worker_load,
+        "jobs": [
+            {
+                "job_id": str(j.job_id),
+                "status": j.status,
+                "exit_code": j.exit_code,
+                "binary_name": j.binary_name,
+                "requester_id": j.requester_id,
+                "worker_id": j.worker_id,
+                "created_at": j.created_at.isoformat() if j.created_at else None,
+                "last_update": j.last_update.isoformat() if j.last_update else None,
+            }
+            for j in jobs
+        ],
+    }
+
+
 @router.get("/status", response_class=HTMLResponse)
 async def dashboard(
     request: Request,
+    config: CoordinatorConfig = Depends(get_config),
+):
+    if not config.web_dashboard_enabled:
+        raise HTTPException(status_code=404, detail="Dashboard disabled")
+
+    return templates.TemplateResponse(
+        request=request,
+        name="status.html",
+        context={},
+    )
+
+
+@router.get("/status/data")
+async def dashboard_data(
+    window: int = 3600,
     config: CoordinatorConfig = Depends(get_config),
     job_repo: JobRepository = Depends(get_job_repo),
     worker_repo: WorkerRepository = Depends(get_worker_repo),
@@ -30,24 +88,4 @@ async def dashboard(
     if not config.web_dashboard_enabled:
         raise HTTPException(status_code=404, detail="Dashboard disabled")
 
-    online_workers = await worker_repo.get_workers_by_status("online")
-    offline_workers = await worker_repo.get_workers_by_status("offline", since_seconds=3600)
-    workers = online_workers + offline_workers
-
-    # Sort workers: Online first, then by last seen
-    workers.sort(key=lambda w: (w.status != "online", w.last_seen), reverse=True)
-
-    worker_load = await job_repo.get_worker_load()
-
-    # Get recent jobs (limit 50, window 1 hour default)
-    jobs = await job_repo.get_dashboard_jobs(limit=50)
-
-    return templates.TemplateResponse(
-        request=request,
-        name="status.html",
-        context={
-            "workers": workers,
-            "worker_load": worker_load,
-            "jobs": jobs,
-        },
-    )
+    return await get_status_data(window, job_repo, worker_repo)
