@@ -174,6 +174,7 @@ class JobRunner:
                 await self._flush_logs()
 
             except asyncio.CancelledError:
+                await self._flush_logs()
                 break
             except Exception as e:
                 logger.error(f"Log flusher error for job {self.job_id}: {e}", exc_info=True)
@@ -201,6 +202,7 @@ class JobRunner:
             exit_code = await self._do_work()
 
             # 4. Report Success/Failure based on exit code
+            await self._flush_logs()
             if exit_code == 0:
                 logger.info(f"[{self.client_id}] Job {self.job_id} completed successfully")
                 await self._report_status("completed", exit_code=exit_code)
