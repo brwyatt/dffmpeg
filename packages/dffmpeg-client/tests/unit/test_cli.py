@@ -55,6 +55,16 @@ def test_process_arguments_exact():
     assert used == ["Movies"]
 
 
+def test_process_arguments_file_prefix():
+    path_map = {"Movies": "/mnt/media/movies"}
+    raw_args = ["-i", "file:/mnt/media/movies/input.mkv", "file:/mnt/media/movies"]
+
+    processed, used = process_arguments(raw_args, path_map)
+
+    assert processed == ["-i", "file:$Movies/input.mkv", "file:$Movies"]
+    assert set(used) == {"Movies"}
+
+
 @pytest.mark.anyio
 async def test_run_submit_defaults():
     # Test that run_submit defaults to monitor=True

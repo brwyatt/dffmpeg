@@ -50,10 +50,16 @@ class SubprocessJobExecutor:
         """
         resolved = []
         for arg in self.raw_arguments:
-            if arg.startswith("$"):
+            prefix = ""
+            var_part = arg
+            if arg.startswith("file:$"):
+                prefix = "file:"
+                var_part = arg[5:]
+
+            if var_part.startswith("$"):
                 # Extract variable name (up to first / or end of string)
                 # Example: $Movies/file.mkv -> variable=Movies, suffix=/file.mkv
-                parts = arg.split("/", 1)
+                parts = var_part.split("/", 1)
                 variable_with_prefix = parts[0]
                 variable = variable_with_prefix[1:]  # Strip $
 
@@ -65,7 +71,7 @@ class SubprocessJobExecutor:
                         resolved_arg = base_path + suffix[1:]
                     else:
                         resolved_arg = base_path + suffix
-                    resolved.append(resolved_arg)
+                    resolved.append(f"{prefix}{resolved_arg}")
                     continue
                 else:
                     # If variable not found, leave as is

@@ -40,6 +40,12 @@ from dffmpeg.worker.executor import SubprocessJobExecutor
             {"NoSlash": "/path/to", "WithSlash": "/path/to/"},
             ["/path/to/file", "/path/to/file"],
         ),
+        # file: prefix support
+        (
+            ["-i", "file:$Movies/Avatar.mkv", "file:$Movies"],
+            {"Movies": "/mnt/media/movies"},
+            ["-i", "file:/mnt/media/movies/Avatar.mkv", "file:/mnt/media/movies"],
+        ),
     ],
 )
 def test_executor_resolve_arguments(arguments, path_map, expected_resolved):

@@ -72,9 +72,16 @@ def process_arguments(raw_args: List[str], path_map: Dict[str, str]) -> Tuple[Li
     sorted_paths = sorted(path_map.items(), key=lambda x: len(x[1]), reverse=True)
 
     for arg in raw_args:
+        # Check for "file:" prefix
+        prefix = ""
+        path_to_process = arg
+        if arg.startswith("file:"):
+            prefix = "file:"
+            path_to_process = arg[5:]
+
         # Only process absolute paths (start with /).
         # Skip flags and relative paths.
-        if not arg.startswith("/"):
+        if not path_to_process.startswith("/"):
             processed_args.append(arg)
             continue
 
@@ -83,22 +90,22 @@ def process_arguments(raw_args: List[str], path_map: Dict[str, str]) -> Tuple[Li
             # We use abspath to avoid resolving symlinks unless necessary?
             # User config likely uses physical paths.
             # resolve() handles symlinks and '..'
-            abs_arg = str(Path(arg).resolve())
+            abs_path = str(Path(path_to_process).resolve())
         except Exception:
-            abs_arg = str(Path(arg).absolute())
+            abs_path = str(Path(path_to_process).absolute())
 
         replaced = False
         for var_name, local_path in sorted_paths:
-            # Check if abs_arg starts with local_path
-            if abs_arg.startswith(local_path):
+            # Check if abs_path starts with local_path
+            if abs_path.startswith(local_path):
                 # Boundary check: ensure match is on directory boundary
                 # either exact match, or next char is separator
-                remainder = abs_arg[len(local_path) :]
+                remainder = abs_path[len(local_path) :]
                 if not remainder or remainder.startswith(os.sep):
                     # Match!
                     # Replace prefix with $Var
                     # Note: We must return the remainder with the variable
-                    new_arg = f"${var_name}{remainder}"
+                    new_arg = f"{prefix}${var_name}{remainder}"
                     processed_args.append(new_arg)
                     used_paths.add(var_name)
                     replaced = True
