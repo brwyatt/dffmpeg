@@ -22,7 +22,7 @@ async def process_job_assignment(
     job_repo: JobRepository,
     worker_repo: WorkerRepository,
     transports: TransportManager,
-):
+) -> None:
     """
     Background task to find a suitable worker for a pending job and assign it.
 
