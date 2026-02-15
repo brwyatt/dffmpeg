@@ -27,7 +27,7 @@ class SQLAlchemyAuthRepository(AuthRepository, SQLAlchemyDB):
             authenticated=False,
         )
 
-    async def _upsert_identity(self, identity: AuthenticatedIdentity, encrypted_key: str, key_id: str):
+    async def _upsert_identity(self, identity: AuthenticatedIdentity, encrypted_key: str, key_id: Optional[str]):
         # Portable implementation: SELECT then UPDATE/INSERT
         query = select(self.table.c.client_id).where(self.table.c.client_id == identity.client_id)
         sql, params = self.compile_query(query)

@@ -45,7 +45,7 @@ class AuthRepository(BaseDB):
     async def delete_identity(self, client_id: str) -> bool:
         raise NotImplementedError()
 
-    def _encrypt(self, hmac_key: str, key_id: Optional[str] = None) -> Tuple[str, str]:
+    def _encrypt(self, hmac_key: str, key_id: Optional[str] = None) -> Tuple[str, Optional[str]]:
         """
         Encrypts an HMAC key using the specified or default encryption key.
         Returns (encrypted_b64, key_id).
@@ -53,7 +53,7 @@ class AuthRepository(BaseDB):
         key_id = key_id or self._default_key_id
         if not key_id:
             # If no encryption configured, return as is (plain)
-            return hmac_key, ""
+            return hmac_key, None
 
         return self._crypto.encrypt(hmac_key, key_id), key_id
 

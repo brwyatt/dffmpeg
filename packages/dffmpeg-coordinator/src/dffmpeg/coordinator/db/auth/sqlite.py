@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlalchemy.dialects.sqlite import insert
 
 from dffmpeg.common.models import AuthenticatedIdentity
@@ -12,7 +14,7 @@ class SQLiteAuthRepository(SQLAlchemyAuthRepository, SQLiteDB):
         # Initialize engine (SQLiteDB)
         SQLiteDB.__init__(self, path=path, tablename=tablename)
 
-    async def _upsert_identity(self, identity: AuthenticatedIdentity, encrypted_key: str, key_id: str):
+    async def _upsert_identity(self, identity: AuthenticatedIdentity, encrypted_key: str, key_id: Optional[str]):
         stmt = (
             insert(self.table)
             .values(client_id=identity.client_id, role=identity.role, hmac_key=encrypted_key, key_id=key_id)
