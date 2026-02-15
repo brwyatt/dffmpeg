@@ -55,11 +55,11 @@ dffmpeg-admin user list [--show-key]
 ```bash
 dffmpeg-admin user list
 # Output:
-# Client ID           Role                Created At
-# --------------------------------------------------
-# worker01            worker              2023-10-27T10:00:00
-# my-client           client              2023-10-27T10:05:00
-```
+    # Client ID           Role                Created At
+    # --------------------------------------------------
+    # worker01            worker              2023-10-27T10:00:00
+    # my-client           client              2023-10-27T10:05:00
+    ```
 
 #### Show User Details
 
@@ -103,6 +103,93 @@ dffmpeg-admin user delete <client_id>
 dffmpeg-admin user delete old-worker
 # Output: Deleted user old-worker
 ```
+
+## Security Management
+
+The `security` command group allows you to manage encryption keys and perform security-related maintenance.
+
+### Commands
+
+#### Re-encrypt Stored HMAC Keys
+
+Re-encrypt stored HMAC keys with a new encryption key, or remove encryption entirely. This is useful for rotating the server-side encryption keys.
+
+```bash
+dffmpeg-admin security re-encrypt [options]
+```
+
+**Options:**
+*   **`--client-id <id>`**: Target a specific client ID.
+*   **`--key-id <id>`**: The ID of the encryption key to use (as defined in `encryption_keys_file`). Defaults to the configured default key.
+*   **`--decrypt`**: Remove encryption and store the HMAC key as plain text.
+*   **`--limit <int>`**: Maximum number of records to process in batch mode (default: all).
+*   **`--batch-size <int>`**: Number of records to process per batch (default: 100).
+
+**Examples:**
+
+1.  **Re-encrypt a single user:**
+    ```bash
+    dffmpeg-admin security re-encrypt --client-id worker01 --key-id new-key-2024
+    ```
+
+2.  **Remove encryption for a user:**
+    ```bash
+    dffmpeg-admin security re-encrypt --client-id worker01 --decrypt
+    ```
+
+3.  **Batch re-encrypt all users to the default key:**
+    ```bash
+    dffmpeg-admin security re-encrypt
+    ```
+
+4.  **Batch migrate users from an old key to a new key:**
+    ```bash
+    dffmpeg-admin security re-encrypt --key-id new-key-2024 --limit 1000
+    ```
+
+#### Generate Encryption Key
+
+Generate a new random key for a specific encryption algorithm.
+
+```bash
+dffmpeg-admin security generate-key <algorithm>
+```
+
+*   **`<algorithm>`**: The encryption algorithm to use (e.g., `fernet`).
+
+**Example:**
+```bash
+dffmpeg-admin security generate-key fernet
+# Output: fernet:<YOUR_GENERATED_KEY>
+```
+
+### Encryption Keys Configuration
+
+The Coordinator can encrypt stored HMAC keys using encryption keys defined in a configuration file.
+
+NOTE: Key IDs MUST be strings, as must the value for `default_encryption_key_id`. If using numeric values, ensure they are quoted!
+
+**Configuration (`dffmpeg-coordinator.yaml`):**
+
+```yaml
+database:
+  repositories:
+    auth:
+      engine: sqlite
+      encryption_keys_file: "/etc/dffmpeg/keys.yaml"
+      default_encryption_key_id: "key-2023"
+```
+
+**Keys File (`keys.yaml`):**
+
+The keys file maps Key IDs to Key Strings. The format for a key string is `algorithm:base64_encoded_key`.
+
+```yaml
+key-2023: "fernet:..."
+key-2024: "fernet:..."
+```
+
+You can generate these keys using the `dffmpeg-admin security generate-key` command.
 
 ## Database Maintenance
 

@@ -1,3 +1,4 @@
+import os
 from base64 import b64encode
 
 from cryptography.fernet import Fernet
@@ -18,3 +19,7 @@ class FernetEncryption(BaseEncryption):
 
     def decrypt(self, data: str) -> str:
         return self._fernet.decrypt(data.encode()).decode()
+
+    @classmethod
+    def generate_key(cls) -> str:
+        return b64encode(os.urandom(32)).decode("ascii")

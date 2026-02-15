@@ -17,6 +17,11 @@ class BaseEncryption:
         """Decrypt a B64 encoded string and return the original string"""
         raise NotImplementedError()
 
+    @classmethod
+    def generate_key(cls) -> str:
+        """Generate an encryption key using this encryption method"""
+        raise NotImplementedError()
+
 
 def load_encryption_provider(algo: str) -> Type[BaseEncryption]:
     available_entrypoints = entry_points(group="dffmpeg.common.crypto")
@@ -84,3 +89,9 @@ class CryptoManager:
     def decrypt(self, data: str, key_id: str) -> str:
         provider = self._get_provider(key_id)
         return provider.decrypt(data)
+
+    def generate_key(self, algo: str) -> str:
+        if algo not in self.loaded_providers:
+            raise ValueError(f"Invalid algorithm: {algo}")
+
+        return algo + ":" + self.loaded_providers[algo].generate_key()

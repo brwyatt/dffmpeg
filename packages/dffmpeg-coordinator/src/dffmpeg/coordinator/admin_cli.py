@@ -5,6 +5,7 @@ import sys
 from typing import cast
 
 from dffmpeg.common.auth.request_signer import RequestSigner
+from dffmpeg.common.crypto import CryptoManager
 from dffmpeg.common.models import AuthenticatedIdentity, IdentityRole
 from dffmpeg.coordinator.config import load_config
 from dffmpeg.coordinator.db import DB
@@ -109,6 +110,75 @@ async def worker_show(db: DB, args: argparse.Namespace):
     print(f"Transport:    {worker.transport}")
 
 
+async def security_reencrypt(db: DB, args: argparse.Namespace):
+    client_id = args.client_id
+    key_id = args.key_id
+    decrypt = args.decrypt
+    limit = args.limit
+    batch_size = args.batch_size
+
+    if decrypt:
+        if key_id is not None:
+            print("WARNING: ignoring `--key-id` when `--decrypt` provided!")
+        key_id = None
+    elif key_id is None:
+        key_id = db.auth._default_key_id
+
+    if client_id:
+        # Single mode
+        print(f"{'De' if decrypt else 'Re-en'}crypting user '{client_id}'...")
+        success = await db.auth.reencrypt_identity(client_id, key_id=key_id, decrypt=decrypt)
+        if success:
+            print(f"User '{client_id}' {'de' if decrypt else 're-en'}crypted successfully.")
+        else:
+            print(f"User '{client_id}' not found.")
+            sys.exit(1)
+    else:
+        # Batch mode
+        print(
+            f"Batch {'de' if decrypt else 're-en'}crypting users (Limit: {limit or 'Unlimited'}, "
+            f"Batch Size: {batch_size})..."
+        )
+        processed_count = 0
+
+        while True:
+            # Determine how many to fetch in this batch
+            current_limit = batch_size
+            if limit is not None:
+                remaining = limit - processed_count
+                if remaining <= 0:
+                    break
+                current_limit = min(batch_size, remaining)
+
+            # Find candidates that are NOT using the target key configuration
+            candidates = await db.auth.get_identities_not_using_key(key_id, limit=current_limit)
+
+            candidates = list(candidates)
+            if not candidates:
+                break
+
+            for cid in candidates:
+                await db.auth.reencrypt_identity(cid, key_id=key_id, decrypt=decrypt)
+                processed_count += 1
+                print(f"{'De' if decrypt else 'Re-en'}crypted user '{cid}'")
+
+        print(f"Finished. Total users {'de' if decrypt else 're-en'}crypted: {processed_count}")
+
+
+async def security_generate_key(db: DB, args: argparse.Namespace):
+    algorithm = args.algorithm
+    # Use an empty dictionary for keys as we only need to generate a new key
+    crypto = CryptoManager({})
+
+    try:
+        key = crypto.generate_key(algorithm)
+        print(key)
+    except ValueError as e:
+        print(f"Error: {e}")
+        print(f"Available algorithms: {', '.join(crypto.loaded_providers.keys())}")
+        sys.exit(1)
+
+
 def main():
     parser = argparse.ArgumentParser(description="dffmpeg Administrative CLI")
     parser.add_argument("--config", "-c", type=str, help="Path to coordinator config file")
@@ -160,6 +230,28 @@ def main():
     w_show_parser = worker_subparsers.add_parser("show", help="Show worker details")
     w_show_parser.add_argument("worker_id", help="Worker ID")
     w_show_parser.set_defaults(func=worker_show)
+
+    # Security subcommands
+    security_parser = subparsers.add_parser("security", help="Security management")
+    security_subparsers = security_parser.add_subparsers(dest="subcommand", required=True)
+
+    # security re-encrypt
+    reencrypt_parser = security_subparsers.add_parser("re-encrypt", help="Re-encrypt stored HMAC keys")
+    reencrypt_parser.add_argument("--client-id", help="Specific Client ID to re-encrypt")
+    reencrypt_parser.add_argument("--key-id", help="Target Key ID for encryption (default: configured default)")
+    reencrypt_parser.add_argument(
+        "--decrypt", action="store_true", help="Remove encryption (store plain text) instead of re-encrypting"
+    )
+    reencrypt_parser.add_argument("--limit", type=int, help="Maximum number of users to process in batch mode")
+    reencrypt_parser.add_argument(
+        "--batch-size", type=int, default=100, help="Number of users to process per batch (default: 100)"
+    )
+    reencrypt_parser.set_defaults(func=security_reencrypt)
+
+    # security generate-key
+    gen_key_parser = security_subparsers.add_parser("generate-key", help="Generate a new encryption key")
+    gen_key_parser.add_argument("algorithm", help="Encryption algorithm to use (e.g., fernet)")
+    gen_key_parser.set_defaults(func=security_generate_key)
 
     args = parser.parse_args()
 

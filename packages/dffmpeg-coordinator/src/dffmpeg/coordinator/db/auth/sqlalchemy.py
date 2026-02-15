@@ -1,6 +1,6 @@
 from typing import Iterable, Optional
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 
 from dffmpeg.common.models import AuthenticatedIdentity
 from dffmpeg.coordinator.db.auth import AuthRepository
@@ -83,3 +83,36 @@ class SQLAlchemyAuthRepository(AuthRepository, SQLAlchemyDB):
         sql, params = self.compile_query(query)
         count = await self.execute_and_return_rowcount(sql, params)
         return count > 0
+
+    async def reencrypt_identity(self, client_id: str, key_id: Optional[str] = None, decrypt: bool = False) -> bool:
+        identity = await self.get_identity(client_id, include_hmac_key=True)
+        if not identity:
+            return False
+
+        if decrypt:
+            encrypted_key = identity.hmac_key
+            key_id = None
+        else:
+            encrypted_key, key_id = self._encrypt(str(identity.hmac_key), key_id)
+
+        await self._upsert_identity(identity, str(encrypted_key), key_id)
+        return True
+
+    async def get_identities_not_using_key(self, key_id: Optional[str] = None, limit: int = 100) -> Iterable[str]:
+        query = select(self.table.c.client_id).limit(limit)
+
+        if not key_id:
+            # Find records where key_id IS NOT NULL AND key_id != ''
+            query = query.where(self.table.c.key_id.is_not(None)).where(self.table.c.key_id != "")
+        else:
+            # Find records where key_id != key_id OR key_id IS NULL
+            query = query.where(
+                or_(
+                    self.table.c.key_id != key_id,
+                    self.table.c.key_id.is_(None),
+                )
+            )
+
+        sql, params = self.compile_query(query)
+        results = await self.get_rows(sql, params)
+        return [row["client_id"] for row in results]
