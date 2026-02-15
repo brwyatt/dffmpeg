@@ -49,7 +49,7 @@ class TransportRecord(BaseModel):
 type JobStatus = Literal["pending", "assigned", "running", "completed", "failed", "canceled", "canceling"]
 
 default_job_heartbeat_interval = 5
-type SupportedBinaries = Literal["ffmpeg"]
+type SupportedBinaries = Literal["ffmpeg", "ffprobe"]
 
 
 class Job(BaseModel):
