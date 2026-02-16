@@ -2,9 +2,11 @@ import argparse
 import asyncio
 import os
 import sys
+from datetime import datetime, timedelta, timezone
 from typing import cast
 
 from dffmpeg.common.auth.request_signer import RequestSigner
+from dffmpeg.common.colors import Colors, colorize, colorize_status
 from dffmpeg.common.crypto import CryptoManager
 from dffmpeg.common.models import AuthenticatedIdentity, IdentityRole
 from dffmpeg.coordinator.config import load_config
@@ -18,7 +20,10 @@ async def user_list(db: DB, args: argparse.Namespace):
     print("-" * (40 if show_key else 31))
     for identity in identities:
         key_str = identity.hmac_key if show_key else ""
-        print(f"{identity.client_id:<20} {identity.role:<10} {key_str}")
+        role_color = (
+            Colors.GREEN if identity.role == "client" else Colors.BLUE if identity.role == "worker" else Colors.RED
+        )
+        print(f"{identity.client_id:<20} {colorize(identity.role, role_color):<21} {key_str}")
 
 
 async def user_show(db: DB, args: argparse.Namespace):
@@ -29,8 +34,9 @@ async def user_show(db: DB, args: argparse.Namespace):
         print(f"User '{client_id}' not found.")
         sys.exit(1)
 
-    print(f"Client ID: {identity.client_id}")
-    print(f"Role:      {identity.role}")
+    print(f"Client ID: {colorize(identity.client_id, Colors.CYAN)}")
+    role_color = Colors.GREEN if identity.role == "client" else Colors.BLUE if identity.role == "worker" else Colors.RED
+    print(f"Role:      {colorize(identity.role, role_color)}")
     if show_key:
         print(f"HMAC Key:  {identity.hmac_key}")
 
@@ -41,14 +47,14 @@ async def user_add(db: DB, args: argparse.Namespace):
     # Check if user already exists
     existing = await db.auth.get_identity(client_id)
     if existing:
-        print(f"User '{client_id}' already exists.")
+        print(colorize(f"User '{client_id}' already exists.", Colors.RED))
         sys.exit(1)
 
     hmac_key = RequestSigner.generate_key()
 
     identity = AuthenticatedIdentity(client_id=client_id, role=role, hmac_key=hmac_key, authenticated=False)
     await db.auth.add_identity(identity)
-    print(f"User '{client_id}' added successfully.")
+    print(colorize(f"User '{client_id}' added successfully.", Colors.GREEN))
     print(f"HMAC Key: {hmac_key}")
 
 
@@ -56,9 +62,9 @@ async def user_delete(db: DB, args: argparse.Namespace):
     client_id = args.client_id
     success = await db.auth.delete_identity(client_id)
     if success:
-        print(f"User '{client_id}' deleted successfully.")
+        print(colorize(f"User '{client_id}' deleted successfully.", Colors.GREEN))
     else:
-        print(f"User '{client_id}' not found.")
+        print(colorize(f"User '{client_id}' not found.", Colors.RED))
         sys.exit(1)
 
 
@@ -66,14 +72,14 @@ async def user_rotate_key(db: DB, args: argparse.Namespace):
     client_id = args.client_id
     identity = await db.auth.get_identity(client_id)
     if not identity:
-        print(f"User '{client_id}' not found.")
+        print(colorize(f"User '{client_id}' not found.", Colors.RED))
         sys.exit(1)
 
     hmac_key = RequestSigner.generate_key()
 
     identity.hmac_key = hmac_key
     await db.auth.add_identity(identity)
-    print(f"HMAC Key for '{client_id}' rotated successfully.")
+    print(colorize(f"HMAC Key for '{client_id}' rotated successfully.", Colors.GREEN))
     print(f"New HMAC Key: {hmac_key}")
 
 
@@ -85,23 +91,28 @@ async def worker_list(db: DB, args: argparse.Namespace):
     # Sort: Online first, then by last seen (descending), then ID (ascending)
     workers.sort(key=lambda w: (w.status != "online", -(w.last_seen.timestamp() if w.last_seen else 0), w.worker_id))
 
-    print(f"{'Worker ID':<20} {'Status':<10} {'Last Seen':<20}")
+    print(f"{'Worker ID':<20} {'Status':<21} {'Last Seen':<20}")
     print("-" * 52)
     for w in workers:
         last_seen_str = w.last_seen.strftime("%Y-%m-%d %H:%M:%S") if w.last_seen else "-"
-        print(f"{w.worker_id:<20} {w.status:<10} {last_seen_str}")
+        print(f"{w.worker_id:<20} {colorize_status(w.status):<21} {last_seen_str}")
 
 
 async def worker_show(db: DB, args: argparse.Namespace):
     worker_id = args.worker_id
     worker = await db.workers.get_worker(worker_id)
     if not worker:
-        print(f"Worker '{worker_id}' not found.")
+        print(colorize(f"Worker '{worker_id}' not found.", Colors.RED))
         sys.exit(1)
 
     last_seen_str = worker.last_seen.strftime("%Y-%m-%d %H:%M:%S") if worker.last_seen else "-"
-    print(f"Worker ID:    {worker.worker_id}")
-    print(f"Status:       {worker.status}")
+    if worker.last_seen < datetime.now(timezone.utc) - timedelta(seconds=worker.registration_interval):
+        last_seen_str = colorize(last_seen_str, color=Colors.YELLOW)
+    else:
+        last_seen_str = colorize(last_seen_str, color=Colors.GREEN)
+
+    print(f"Worker ID:    {colorize(worker.worker_id, Colors.CYAN)}")
+    print(f"Status:       {colorize_status(worker.status)}")
     print(f"Last Seen:    {last_seen_str}")
     print(f"Binaries:     {', '.join(worker.binaries)}")
     print(f"Capabilities: {', '.join(worker.capabilities)}")

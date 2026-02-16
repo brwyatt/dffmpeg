@@ -8,6 +8,7 @@ from typing import Dict, List, Tuple, cast
 
 from dffmpeg.client.api import DFFmpegClient
 from dffmpeg.client.config import load_config
+from dffmpeg.common.colors import Colors, colorize, colorize_status
 from dffmpeg.common.models import JobLogsMessage, JobStatusMessage, SupportedBinaries
 
 # Configure logging
@@ -49,11 +50,11 @@ async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, me
 
     except asyncio.CancelledError:
         # If we are cancelled locally (Ctrl+C), try to cancel remote job
-        print("\nCanceling job...", file=sys.stderr)
+        print(colorize("\nCanceling job...", Colors.YELLOW), file=sys.stderr)
         try:
             await client.cancel_job(job_id)
         except Exception as e:
-            print(f"Failed to cancel job: {e}", file=sys.stderr)
+            print(colorize(f"Failed to cancel job: {e}", Colors.RED), file=sys.stderr)
         exit_code = 130
         raise
 
@@ -143,8 +144,8 @@ async def run_submit(
             )
 
             if not monitor:
-                print("Job submitted successfully.")
-                print(f"Job ID: {str(job.job_id)}")
+                print(colorize("Job submitted successfully.", Colors.GREEN))
+                print(f"Job ID: {colorize(str(job.job_id), Colors.CYAN)}")
                 return 0
 
             # Wait/Monitor mode
@@ -172,20 +173,24 @@ async def run_status(job_id: str | None, config_file: str | None = None) -> int:
                     print("No jobs found.")
                     return 0
 
-                print(f"{'Job ID':<26} {'Status':<20} {'Binary':<10} {'Created'}")
+                print(f"{'Job ID':<26} {'Status':<31} {'Binary':<10} {'Created'}")
                 print("-" * 80)
                 for job in jobs:
                     status_str = f"{job.status}{f' ({job.exit_code})' if job.exit_code not in (None, 0) else ''}"
-                    print(f"{str(job.job_id):<26} {status_str:<20} {job.binary_name:<10} {job.created_at}")
+                    print(
+                        f"{str(job.job_id):<26} {colorize_status(status_str):<31} {job.binary_name:<10} "
+                        f"{job.created_at}"
+                    )
                 return 0
 
             status = await client.get_job_status(job_id)
             # Pretty print status
-            print(f"Job ID: {status.job_id}")
+            print(f"Job ID: {colorize(str(status.job_id), Colors.CYAN)}")
             status_str = f"{status.status}{f' ({status.exit_code})' if status.exit_code not in (None, 0) else ''}"
-            print(f"Status: {status_str}")
+            print(f"Status: {colorize_status(status_str)}")
             if status.exit_code is not None:
-                print(f"Exit Code: {status.exit_code}")
+                color = Colors.GREEN if status.exit_code == 0 else Colors.RED
+                print(f"Exit Code: {colorize(str(status.exit_code), color)}")
             print(f"Worker: {status.worker_id or '<Unassigned>'}")
             print(f"Binary: {status.binary_name}")
             print(f"Args: {' '.join(status.arguments)}")
@@ -232,7 +237,7 @@ async def run_cancel(job_id: str, config_file: str | None = None) -> int:
     async with DFFmpegClient(config) as client:
         try:
             await client.cancel_job(job_id)
-            print(f"Job {job_id} cancellation requested.")
+            print(f"Job {colorize(job_id, Colors.CYAN)} cancellation requested.")
             return 0
         except Exception as e:
             logger.error(f"Error canceling job: {e}")
