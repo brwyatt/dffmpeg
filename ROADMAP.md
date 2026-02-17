@@ -11,21 +11,34 @@ This document outlines the development phases for DFFmpeg, leading up to version
 - [x] **Admin Management CLI (`dffmpeg-admin`)**: Create a tool for direct database management (e.g., bootstrapping users).
 - [x] **Mount Point Monitoring**: Verify worker path mappings are mounted before registration.
 - [x] **Active/Background Modes**: Client supports submitting jobs in active (monitored) or background (detached) modes, with heartbeat support.
+- [ ] **CLI Parity (Part 1)**:
+    - [ ] **CLI Status Window**: Add `--window` / `-w` to `dffmpeg-client status` for time-filtered views.
+    - [ ] **Client Cluster View**: Add `dffmpeg-client workers` to view cluster load.
+    - [ ] **Shared Rendering**: Implement shared output formatting for Client and Admin CLIs.
+- [ ] **Packaging**: Automate building and publishing release artifacts (GitHub Releases).
+- [ ] **Quick-Start Guide**: The "short path" setup for people who just want something working.
+- [ ] **Worker Version Reporting**: Workers report their version on registration for compatibility checks.
 
 ## Phase 2: Version 1.0 (Production Ready)
 *Goal: A stable, well-tested, and documented release.*
 
-- [ ] **Client Full Status**: CLI command (something like `dffmpeg-client status --all`) for viewing complete cluster status (similar to the web dashboard).
-- [x] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
-- [ ] **Automated End-to-End Testing**: Robust `pytest` suite covering the full job lifecycle (submission, assignment, execution, completion).
+- [ ] **CLI Parity (Part 2)**:
+    - [ ] **Admin Job List**: Add `job list` and `job status` to Admin CLI, matching Client capabilities.
+- [ ] **Operational Health**:
+    - [ ] **Coordinator Health Table**: Track coordinator instances in the DB for HA visibility.
+    - [ ] **Janitor & Cleanup**: Implement on-demand cleanup tasks in Admin CLI (e.g., `dffmpeg-admin janitor clean-jobs`).
+    - [ ] **Dynamic Binary Validation**: Move allowed binaries list to Coordinator configuration.
+- [ ] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
+- [ ] **Automated End-to-End Testing**: Robust `pytest` suite covering the full job lifecycle.
 - [ ] **Security Audit**: Final review of HMAC implementation and path signing.
 
 ## Phase 3: Optional / "Maybe" (v1.x or v2.0)
 *Goal: Expanded compatibility and features.*
 
 - [ ] **PostgreSQL Support**: Implement PostgreSQL database backend.
+- [ ] **Cassandra Support**: Implement Cassandra database backend.
 - [x] **RabbitMQ Transport**: Implement RabbitMQ transport.
-- [ ] **Improved Transport Negotiation**: Better/fairer selection of transport, rather than "first offered by the client/worker that is supported by the coordinator", instead letting the order from the coordinator have SOME influence to get a "best match", rather than "client's preferred".
+- [ ] **Improved Transport Negotiation**: Better/fairer selection of transport.
 - [ ] **Worker Capabilities**: Dynamic detection of FFmpeg features (codecs, formats).
 
 ## Phase 4: Post-1.0
