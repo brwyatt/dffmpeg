@@ -29,12 +29,13 @@ The Coordinator manages the cluster state.
     ```bash
     sudo mkdir -p /opt/dffmpeg/coordinator
     sudo chown dffmpeg:dffmpeg /opt/dffmpeg/coordinator
-    sudo -u dffmpeg python3 -m venv /opt/dffmpeg/coordinator/venv
+    sudo -u dffmpeg python3 -m venv /opt/dffmpeg/coordinator
     ```
 
-2.  **Install the package**:
+2.  **Install the packages**:
     ```bash
-    sudo -u dffmpeg /opt/dffmpeg/coordinator/venv/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-coordinator"
+    sudo -u dffmpeg /opt/dffmpeg/coordinator/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-common"
+    sudo -u dffmpeg /opt/dffmpeg/coordinator/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-coordinator"
     ```
 
 ### Configuration
@@ -70,18 +71,18 @@ For a full list of configuration options, including detailed database settings, 
 
     ```bash
     # Create an admin/client user
-    sudo /opt/dffmpeg/coordinator/venv/bin/dffmpeg-admin --config /opt/dffmpeg/coordinator/dffmpeg-coordinator.yaml user add my-client --role client
+    sudo /opt/dffmpeg/coordinator/bin/dffmpeg-admin --config /opt/dffmpeg/coordinator/dffmpeg-coordinator.yaml user add my-client --role client
     # Output: Generated HMAC key for my-client: <YOUR_CLIENT_KEY>
 
     # Create a worker user
-    sudo /opt/dffmpeg/coordinator/venv/bin/dffmpeg-admin --config /opt/dffmpeg/coordinator/dffmpeg-coordinator.yaml user add worker01 --role worker
+    sudo /opt/dffmpeg/coordinator/bin/dffmpeg-admin --config /opt/dffmpeg/coordinator/dffmpeg-coordinator.yaml user add worker01 --role worker
     # Output: Generated HMAC key for worker01: <YOUR_WORKER_KEY>
     ```
 
 3.  **Start the Coordinator**:
 
     ```bash
-    sudo /opt/dffmpeg/coordinator/venv/bin/dffmpeg-coordinator --config /opt/dffmpeg/coordinator/dffmpeg-coordinator.yaml
+    sudo /opt/dffmpeg/coordinator/bin/dffmpeg-coordinator --config /opt/dffmpeg/coordinator/dffmpeg-coordinator.yaml
     # Running on http://127.0.0.1:8000
     ```
 
@@ -95,12 +96,13 @@ The Worker executes the jobs.
     ```bash
     sudo mkdir -p /opt/dffmpeg/worker
     sudo chown dffmpeg:dffmpeg /opt/dffmpeg/worker
-    sudo -u dffmpeg python3 -m venv /opt/dffmpeg/worker/venv
+    sudo -u dffmpeg python3 -m venv /opt/dffmpeg/worker
     ```
 
-2.  **Install the package**:
+2.  **Install the packages**:
     ```bash
-    sudo -u dffmpeg /opt/dffmpeg/worker/venv/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-worker"
+    sudo -u dffmpeg /opt/dffmpeg/worker/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-common"
+    sudo -u dffmpeg /opt/dffmpeg/worker/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-worker"
     ```
 
 ### Configuration
@@ -127,7 +129,7 @@ The Worker executes the jobs.
 2.  **Start the Worker**:
 
     ```bash
-    sudo /opt/dffmpeg/worker/venv/bin/dffmpeg-worker --config /opt/dffmpeg/worker/dffmpeg-worker.yaml
+    sudo /opt/dffmpeg/worker/bin/dffmpeg-worker --config /opt/dffmpeg/worker/dffmpeg-worker.yaml
     ```
 
 ## 3. Setting up the Client
@@ -139,12 +141,13 @@ The Client submits jobs.
 1.  **Create directory and virtual environment**:
     ```bash
     sudo mkdir -p /opt/dffmpeg/client
-    sudo python3 -m venv /opt/dffmpeg/client/venv
+    sudo python3 -m venv /opt/dffmpeg/client
     ```
 
-2.  **Install the package**:
+2.  **Install the packages**:
     ```bash
-    sudo /opt/dffmpeg/client/venv/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-client"
+    sudo /opt/dffmpeg/client/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-common"
+    sudo /opt/dffmpeg/client/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-client"
     ```
 
 ### Configuration
@@ -172,7 +175,7 @@ The Client submits jobs.
 
     ```bash
     # The client translates the local path to "$Media/movies/test.mkv"
-    /opt/dffmpeg/client/venv/bin/dffmpeg-client --config /opt/dffmpeg/client/dffmpeg-client.yaml submit -b ffmpeg -i /Volumes/Media/movies/test.mkv output.mp4
+    /opt/dffmpeg/client/bin/dffmpeg-client --config /opt/dffmpeg/client/dffmpeg-client.yaml submit -b ffmpeg -i /Volumes/Media/movies/test.mkv output.mp4
     ```
 
 ### Using as an FFmpeg Replacement (Proxy)
@@ -183,10 +186,10 @@ DFFmpeg includes a proxy mode that mimics the `ffmpeg` CLI interface. This allow
     Create a symlink from your desired location (e.g., `/usr/local/bin/ffmpeg`) to the `dffmpeg_proxy` executable.
 
     ```bash
-    sudo ln -s /opt/dffmpeg/client/venv/bin/dffmpeg_proxy /usr/local/bin/dffmpeg
+    sudo ln -s /opt/dffmpeg/client/bin/dffmpeg_proxy /usr/local/bin/dffmpeg
     # Or replace ffmpeg entirely (backup original first!)
     # sudo mv /usr/bin/ffmpeg /usr/bin/ffmpeg.orig
-    # sudo ln -s /opt/dffmpeg/client/venv/bin/dffmpeg_proxy /usr/bin/ffmpeg
+    # sudo ln -s /opt/dffmpeg/client/bin/dffmpeg_proxy /usr/bin/ffmpeg
     ```
 
 2.  **Environment Configuration**:

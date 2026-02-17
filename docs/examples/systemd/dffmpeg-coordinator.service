@@ -8,8 +8,8 @@ User=dffmpeg
 Group=dffmpeg
 # Adjust this path if you installed elsewhere
 WorkingDirectory=/opt/dffmpeg/coordinator
-Environment="PATH=/opt/dffmpeg/coordinator/venv/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/opt/dffmpeg/coordinator/venv/bin/dffmpeg-coordinator
+Environment="PATH=/opt/dffmpeg/coordinator/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/dffmpeg/coordinator/bin/dffmpeg-coordinator
 Restart=on-failure
 RestartSec=5s
 

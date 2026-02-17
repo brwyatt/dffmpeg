@@ -2,6 +2,10 @@
 
 Thank you for your interest in contributing to `dffmpeg`! This guide will help you get started with the development environment and understand our coding standards.
 
+## Code of Conduct
+
+This project and everyone participating in it is governed by the [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold this code. Please report unacceptable behavior to [INSERT CONTACT METHOD].
+
 ## Getting Started
 
 ### Development Environment
@@ -24,6 +28,15 @@ Thank you for your interest in contributing to `dffmpeg`! This guide will help y
 3.  **Run Tests:**
     ```bash
     python3 -m pytest
+    ```
+
+## Pull Request Process
+
+1.  Ensure all tests pass (`python3 -m pytest`).
+2.  Update the `README.md` or documentation with details of changes to the interface, if applicable.
+3.  The project uses `black`, `isort`, and `flake8` for formatting. Please ensure your code is formatted before submitting.
+    ```bash
+    pre-commit run --all-files
     ```
 
 ## Coding Standards

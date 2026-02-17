@@ -8,8 +8,8 @@ User=dffmpeg
 Group=dffmpeg
 # Adjust this path if you installed elsewhere
 WorkingDirectory=/opt/dffmpeg/worker
-Environment="PATH=/opt/dffmpeg/worker/venv/bin:/usr/local/bin:/usr/bin:/bin"
-ExecStart=/opt/dffmpeg/worker/venv/bin/dffmpeg-worker
+Environment="PATH=/opt/dffmpeg/worker/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=/opt/dffmpeg/worker/bin/dffmpeg-worker
 Restart=on-failure
 RestartSec=5s
 

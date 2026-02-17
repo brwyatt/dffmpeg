@@ -16,7 +16,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
     - [ ] **Client Cluster View**: Add `dffmpeg-client workers` to view cluster load.
     - [ ] **Shared Rendering**: Implement shared output formatting for Client and Admin CLIs.
 - [ ] **Packaging**: Automate building and publishing release artifacts (GitHub Releases).
-- [ ] **Quick-Start Guide**: The "short path" setup for people who just want something working.
+- [x] **Quick-Start Guide**: The "short path" setup for people who just want something working.
 - [ ] **Worker Version Reporting**: Workers report their version on registration for compatibility checks.
 
 ## Phase 2: Version 1.0 (Production Ready)
@@ -28,7 +28,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
     - [ ] **Coordinator Health Table**: Track coordinator instances in the DB for HA visibility.
     - [ ] **Janitor & Cleanup**: Implement on-demand cleanup tasks in Admin CLI (e.g., `dffmpeg-admin janitor clean-jobs`).
     - [ ] **Dynamic Binary Validation**: Move allowed binaries list to Coordinator configuration.
-- [ ] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
+- [x] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
 - [ ] **Automated End-to-End Testing**: Robust `pytest` suite covering the full job lifecycle.
 - [ ] **Security Audit**: Final review of HMAC implementation and path signing.
 
