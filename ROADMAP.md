@@ -27,8 +27,9 @@ This document outlines the development phases for DFFmpeg, leading up to version
 - [ ] **Operational Health**:
     - [ ] **Coordinator Health Table**: Track coordinator instances in the DB for HA visibility.
     - [ ] **Janitor & Cleanup**: Implement on-demand cleanup tasks in Admin CLI (e.g., `dffmpeg-admin janitor clean-jobs`).
-    - [ ] **Dynamic Binary Validation**: Move allowed binaries list to Coordinator configuration.
+    - [x] **Dynamic Binary Validation**: Move allowed binaries list to Coordinator configuration.
 - [x] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
+- [ ] **Dynamic Configuration (DB-backed)**: Move configuration settings to the database with Admin CLI management (Config table).
 - [ ] **Automated End-to-End Testing**: Robust `pytest` suite covering the full job lifecycle.
 - [ ] **Security Audit**: Final review of HMAC implementation and path signing.
 

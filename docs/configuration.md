@@ -26,6 +26,7 @@ The Coordinator manages the cluster state, job queue, and worker registry.
 | `web_dashboard_enabled` | boolean | `true` | Enable the built-in web dashboard at `/status`. |
 | `default_job_heartbeat_interval` | integer | `5` | Default interval (seconds) for job heartbeats if not specified by the client. |
 | `dev_mode` | boolean | `false` | Enable development mode (auto-reload, verbose logging). Can be set via `DFFMPEG_COORDINATOR_DEV=1`. |
+| `allowed_binaries` | list[string] | `["ffmpeg", "ffprobe"]` | List of supported binary names that workers can register and clients can request. |
 
 ### Database Configuration (`database`)
 
@@ -136,9 +137,10 @@ Map logical binary names to local executables.
 ```yaml
 binaries:
   ffmpeg: /usr/bin/ffmpeg
+  ffprobe: /usr/bin/ffprobe
 ```
 
-Currently, only `ffmpeg` is supported, though this could be used to include `ffprobe` or alternative versions like `jellyfin-ffmpeg7`.
+These names must match what is defined in the Coordinator's `allowed_binaries` configuration. Only binaries that appear in both the worker's configuration and the coordinator's allowed list will be available for jobs.
 
 ### Path Mappings (`paths`)
 

@@ -4,12 +4,12 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Dict, List, Tuple, cast
+from typing import Dict, List, Tuple
 
 from dffmpeg.client.api import DFFmpegClient
 from dffmpeg.client.config import load_config
 from dffmpeg.common.colors import Colors, colorize, colorize_status
-from dffmpeg.common.models import JobLogsMessage, JobStatusMessage, SupportedBinaries
+from dffmpeg.common.models import JobLogsMessage, JobStatusMessage
 
 # Configure logging
 # For CLI usage, we generally want INFO or WARNING by default.
@@ -119,7 +119,7 @@ def process_arguments(raw_args: List[str], path_map: Dict[str, str]) -> Tuple[Li
 
 
 async def run_submit(
-    binary_name: SupportedBinaries,
+    binary_name: str,
     raw_args: List[str],
     monitor: bool,
     config_file: str | None = None,
@@ -407,7 +407,7 @@ def proxy_main():
     Entry point for proxy scripts (e.g. 'ffmpeg').
     Behaves as if 'submit' was called with the script name as binary.
     """
-    binary_name: SupportedBinaries = cast(SupportedBinaries, os.path.basename(sys.argv[0]))
+    binary_name: str = os.path.basename(sys.argv[0])
     job_args = sys.argv[1:]
 
     try:

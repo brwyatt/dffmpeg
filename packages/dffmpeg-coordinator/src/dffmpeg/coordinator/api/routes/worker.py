@@ -9,8 +9,9 @@ from dffmpeg.common.models import (
     WorkerRegistration,
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
-from dffmpeg.coordinator.api.dependencies import get_transports, get_worker_repo
+from dffmpeg.coordinator.api.dependencies import get_config, get_transports, get_worker_repo
 from dffmpeg.coordinator.api.utils import get_negotiated_transport
+from dffmpeg.coordinator.config import CoordinatorConfig
 from dffmpeg.coordinator.db.workers import WorkerRecord, WorkerRepository
 from dffmpeg.coordinator.transports import TransportManager
 
@@ -25,6 +26,7 @@ async def worker_register(
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     transports: TransportManager = Depends(get_transports),
     worker_repo: WorkerRepository = Depends(get_worker_repo),
+    config: CoordinatorConfig = Depends(get_config),
 ):
     """
     Registers a worker with the coordinator.
@@ -34,6 +36,7 @@ async def worker_register(
         identity (AuthenticatedIdentity): The authenticated worker identity.
         transports (Transports): Transport manager.
         worker_repo (WorkerRepository): Repository for worker storage.
+        config (CoordinatorConfig): Coordinator configuration.
 
     Returns:
         TransportRecord: The negotiated transport configuration for the worker to use.
@@ -54,8 +57,14 @@ async def worker_register(
             detail=f"No supported transports in: {', '.join(payload.supported_transports)}",
         )
 
+    # Filter reported binaries against allowed binaries (intersection)
+    filtered_binaries = list(set(config.allowed_binaries).intersection(payload.binaries))
+
+    payload_dict = payload.model_dump(mode="python", exclude={"supported_transports"})
+    payload_dict["binaries"] = filtered_binaries
+
     record = WorkerRecord(
-        **payload.model_dump(mode="python", exclude={"supported_transports"}),
+        **payload_dict,
         status="online",
         transport=negotiated_transport,
         transport_metadata=transports[negotiated_transport].get_metadata(payload.worker_id),

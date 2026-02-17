@@ -2,7 +2,7 @@ import asyncio
 import importlib.metadata
 import logging
 import random
-from typing import Dict, Optional, cast
+from typing import Dict, Optional
 
 import httpx
 from ulid import ULID
@@ -13,7 +13,6 @@ from dffmpeg.common.models import (
     JobStatusMessage,
     JobStatusUpdate,
     JobStatusUpdateStatus,
-    SupportedBinaries,
     WorkerDeregistration,
     WorkerRegistration,
 )
@@ -127,7 +126,7 @@ class Worker:
                 payload_model = WorkerRegistration(
                     worker_id=self.client_id,
                     capabilities=[],  # TODO: Retrieve actual capabilities dynamically
-                    binaries=[cast(SupportedBinaries, x) for x in self.config.binaries.keys()],
+                    binaries=list(self.config.binaries.keys()),
                     paths=list(healthy_paths.keys()),
                     supported_transports=self.transport_manager.transport_names,
                     registration_interval=self.config.registration_interval,

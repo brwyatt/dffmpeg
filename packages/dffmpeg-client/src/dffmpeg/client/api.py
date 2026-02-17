@@ -14,7 +14,6 @@ from dffmpeg.common.models import (
     JobRecord,
     JobRequest,
     JobStatusMessage,
-    SupportedBinaries,
 )
 from dffmpeg.common.transports import TransportManager
 
@@ -45,7 +44,7 @@ class DFFmpegClient:
 
     async def submit_job(
         self,
-        binary_name: SupportedBinaries,
+        binary_name: str,
         arguments: List[str],
         paths: List[str],
         monitor: bool = False,

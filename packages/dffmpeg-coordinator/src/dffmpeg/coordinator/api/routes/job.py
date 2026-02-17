@@ -64,8 +64,11 @@ async def job_submit(
         JobRecord: The created job record.
 
     Raises:
-        HTTPException: If no supported transports are available.
+        HTTPException: If no supported transports are available or binary is not allowed.
     """
+    if payload.binary_name not in config.allowed_binaries:
+        raise HTTPException(status_code=400, detail=f"Unsupported binary name: {payload.binary_name}")
+
     try:
         healthy_transports = await transports.get_healthy_transports()
         negotiated_transport = get_negotiated_transport(payload.supported_transports, healthy_transports)

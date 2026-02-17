@@ -49,7 +49,6 @@ class TransportRecord(BaseModel):
 type JobStatus = Literal["pending", "assigned", "running", "completed", "failed", "canceled", "canceling"]
 
 default_job_heartbeat_interval = 5
-type SupportedBinaries = Literal["ffmpeg", "ffprobe"]
 
 
 class Job(BaseModel):
@@ -59,7 +58,7 @@ class Job(BaseModel):
     Attributes:
         job_id (ULID): Unique identifier for the job.
         requester_id (str): The client ID who requested the job.
-        binary_name (SupportedBinaries): The binary to execute.
+        binary_name (str): The binary to execute.
         arguments (List[str]): List of arguments to pass to the binary.
         paths (List[str]): List of path variables required by the job.
         status (Literal): Current status of the job.
@@ -74,7 +73,7 @@ class Job(BaseModel):
 
     job_id: ULID = Field(default_factory=ULID)
     requester_id: str = ClientId
-    binary_name: SupportedBinaries
+    binary_name: str = Field(min_length=1)
     arguments: List[str] = Field(default_factory=list)
     paths: List[str] = Field(default_factory=list)
     status: JobStatus
@@ -93,7 +92,7 @@ class JobRequest(BaseModel):
     Payload for submitting a new job.
 
     Attributes:
-        binary_name (SupportedBinaries): The binary to execute.
+        binary_name (str): The binary to execute.
         arguments (List[str]): List of arguments to pass to the binary.
         paths (List[str]): List of path variables required by the job.
         supported_transports (List[str]): List of transports supported by the client for updates.
@@ -101,7 +100,7 @@ class JobRequest(BaseModel):
         heartbeat_interval (Optional[int]): Requested heartbeat interval.
     """
 
-    binary_name: SupportedBinaries
+    binary_name: str = Field(min_length=1)
     arguments: List[str] = Field(default_factory=list)
     paths: List[str] = Field(default_factory=list)
     supported_transports: List[str] = Field(min_length=1)
@@ -153,7 +152,7 @@ class JobRequestPayload(BaseModel):
     """
 
     job_id: str
-    binary_name: SupportedBinaries
+    binary_name: str = Field(min_length=1)
     arguments: List[str]
     paths: List[str]
     heartbeat_interval: int = default_job_heartbeat_interval
@@ -256,7 +255,7 @@ class WorkerBase(BaseModel):
 
     worker_id: str = ClientId
     capabilities: List[str] = Field(default_factory=list)
-    binaries: List[SupportedBinaries] = Field(default_factory=list)
+    binaries: List[str] = Field(default_factory=list)
     paths: List[str] = Field(default_factory=list)
     registration_interval: int
     version: Optional[str] = None

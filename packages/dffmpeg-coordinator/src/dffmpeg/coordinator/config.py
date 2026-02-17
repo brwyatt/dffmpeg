@@ -1,6 +1,7 @@
 import os
 from logging import getLogger
 from pathlib import Path
+from typing import List
 
 import yaml
 from pydantic import BaseModel, Field
@@ -32,6 +33,7 @@ class CoordinatorConfig(BaseModel):
     default_job_heartbeat_interval: int = default_job_heartbeat_interval
     web_dashboard_enabled: bool = True
     dev_mode: bool = False
+    allowed_binaries: List[str] = Field(default_factory=lambda: ["ffmpeg", "ffprobe"])
 
 
 def load_config(path: Path | str | None = None) -> CoordinatorConfig:
