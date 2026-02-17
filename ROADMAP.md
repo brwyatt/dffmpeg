@@ -36,13 +36,13 @@ This document outlines the development phases for DFFmpeg, leading up to version
 ## Phase 3: Optional / "Maybe" (v1.x or v2.0)
 *Goal: Expanded compatibility and features.*
 
-- [ ] **PostgreSQL Support**: Implement PostgreSQL database backend.
-- [ ] **Cassandra Support**: Implement Cassandra database backend.
 - [x] **RabbitMQ Transport**: Implement RabbitMQ transport.
 - [ ] **Improved Transport Negotiation**: Better/fairer selection of transport.
-- [ ] **Worker Capabilities**: Dynamic detection of FFmpeg features (codecs, formats).
 
 ## Phase 4: Post-1.0
 *Goal: Advanced features and management tools.*
 
 - [ ] **Advanced Scheduling**: Job priority and worker affinity logic.
+- [ ] **Worker Capabilities**: Dynamic detection of FFmpeg features (codecs, formats).
+- [ ] **PostgreSQL Support**: Implement PostgreSQL database backend.
+- [ ] **Cassandra Support**: Implement Cassandra database backend.
