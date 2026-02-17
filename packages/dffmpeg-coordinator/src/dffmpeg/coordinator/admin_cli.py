@@ -114,9 +114,9 @@ async def worker_show(db: DB, args: argparse.Namespace):
     print(f"Worker ID:    {colorize(worker.worker_id, Colors.CYAN)}")
     print(f"Status:       {colorize_status(worker.status)}")
     print(f"Last Seen:    {last_seen_str}")
-    print(f"Binaries:     {', '.join(worker.binaries)}")
+    print(f"Binaries:     {', '.join(sorted(worker.binaries))}")
     print(f"Capabilities: {', '.join(worker.capabilities)}")
-    print(f"Paths:        {', '.join(worker.paths)}")
+    print(f"Paths:        {', '.join(sorted(worker.paths))}")
     print(f"Interval:     {worker.registration_interval}s")
     print(f"Transport:    {worker.transport}")
 

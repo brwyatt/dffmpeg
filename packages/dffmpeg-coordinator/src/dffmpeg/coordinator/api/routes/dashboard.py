@@ -55,8 +55,8 @@ async def get_status_data(window: int, job_repo: JobRepository, worker_repo: Wor
                 "worker_id": w.worker_id,
                 "status": w.status,
                 "last_seen": format_utc(w.last_seen),
-                "binaries": w.binaries,
-                "paths": w.paths,
+                "binaries": sorted(w.binaries),
+                "paths": sorted(w.paths),
             }
             for w in workers
         ],
