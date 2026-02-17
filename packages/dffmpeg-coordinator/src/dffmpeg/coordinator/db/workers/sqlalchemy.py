@@ -26,6 +26,7 @@ class SQLAlchemyWorkerRepository(WorkerRepository, SQLAlchemyDB):
             transport=row["transport"],
             transport_metadata=parse_json(row["transport_metadata"]),
             registration_interval=row["registration_interval"],
+            version=row["version"],
         )
 
     async def get_worker(self, worker_id: str) -> Optional[WorkerRecord]:
@@ -101,6 +102,7 @@ class SQLAlchemyWorkerRepository(WorkerRepository, SQLAlchemyDB):
             transport=worker_record.transport,
             transport_metadata=safe_worker["transport_metadata"],
             registration_interval=worker_record.registration_interval,
+            version=worker_record.version,
         )
 
         if exists:

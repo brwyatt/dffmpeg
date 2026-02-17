@@ -33,6 +33,7 @@ class SQLiteWorkerRepository(SQLAlchemyWorkerRepository, SQLiteDB):
                 transport=worker_record.transport,
                 transport_metadata=safe_worker["transport_metadata"],
                 registration_interval=worker_record.registration_interval,
+                version=worker_record.version,
             )
             .on_conflict_do_update(
                 index_elements=["worker_id"],
@@ -45,6 +46,7 @@ class SQLiteWorkerRepository(SQLAlchemyWorkerRepository, SQLiteDB):
                     transport=worker_record.transport,
                     transport_metadata=safe_worker["transport_metadata"],
                     registration_interval=worker_record.registration_interval,
+                    version=worker_record.version,
                 ),
             )
         )

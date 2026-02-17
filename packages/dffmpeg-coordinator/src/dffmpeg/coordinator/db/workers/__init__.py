@@ -30,6 +30,7 @@ class WorkerRepository(BaseDB):
         Column("transport", String(50), nullable=False),
         Column("transport_metadata", JSON, nullable=False),
         Column("registration_interval", Integer, nullable=False),
+        Column("version", String(50), nullable=True),
     )
 
     def __new__(cls, *args, engine: str, **kwargs):

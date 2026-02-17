@@ -251,6 +251,7 @@ class WorkerBase(BaseModel):
         binaries (List[str]): List of available binaries (e.g., "ffmpeg", "ffprobe").
         paths (List[str]): List of available paths/mounts.
         registration_interval (int): How often the worker is expected to check in (seconds).
+        version (Optional[str]): The version of the worker package.
     """
 
     worker_id: str = ClientId
@@ -258,6 +259,7 @@ class WorkerBase(BaseModel):
     binaries: List[SupportedBinaries] = Field(default_factory=list)
     paths: List[str] = Field(default_factory=list)
     registration_interval: int
+    version: Optional[str] = None
 
 
 type WorkerStatus = Literal["online", "offline", "error"]

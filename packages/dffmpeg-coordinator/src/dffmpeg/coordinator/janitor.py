@@ -72,6 +72,7 @@ class Janitor:
             worker.transport = "none"
             worker.transport_metadata = {}
             worker.registration_interval = 0
+            worker.version = None
             await self.worker_repo.add_or_update(worker)
 
     async def reap_running_jobs(self):

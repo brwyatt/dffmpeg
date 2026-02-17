@@ -94,3 +94,81 @@ async def test_get_stale_workers_threshold(worker_repo):
 
     stale_high = await worker_repo.get_stale_workers(threshold_factor=2.5, timestamp=now)
     assert len(stale_high) == 0
+
+
+@pytest.mark.anyio
+async def test_worker_version_persistence(worker_repo):
+    now = datetime.now(timezone.utc)
+
+    # Create worker with version
+    worker_with_version = WorkerRecord(
+        worker_id="worker_v1",
+        status="online",
+        last_seen=now,
+        capabilities=[],
+        binaries=[],
+        paths=[],
+        transport="http",
+        transport_metadata={},
+        registration_interval=10,
+        version="1.2.3",
+    )
+
+    await worker_repo.add_or_update(worker_with_version)
+
+    fetched = await worker_repo.get_worker("worker_v1")
+    assert fetched is not None
+    assert fetched.version == "1.2.3"
+
+
+@pytest.mark.anyio
+async def test_worker_no_version_persistence(worker_repo):
+    now = datetime.now(timezone.utc)
+
+    # Create worker without version
+    worker_no_version = WorkerRecord(
+        worker_id="worker_v2",
+        status="online",
+        last_seen=now,
+        capabilities=[],
+        binaries=[],
+        paths=[],
+        transport="http",
+        transport_metadata={},
+        registration_interval=10,
+        version=None,
+    )
+
+    await worker_repo.add_or_update(worker_no_version)
+
+    fetched = await worker_repo.get_worker("worker_v2")
+    assert fetched is not None
+    assert fetched.version is None
+
+
+@pytest.mark.anyio
+async def test_worker_version_update(worker_repo):
+    now = datetime.now(timezone.utc)
+
+    # Create worker without version
+    worker = WorkerRecord(
+        worker_id="worker_update",
+        status="online",
+        last_seen=now,
+        capabilities=[],
+        binaries=[],
+        paths=[],
+        transport="http",
+        transport_metadata={},
+        registration_interval=10,
+        version="1.0.0",
+    )
+
+    await worker_repo.add_or_update(worker)
+
+    # Update with new version
+    worker.version = "1.1.0"
+    await worker_repo.add_or_update(worker)
+
+    fetched = await worker_repo.get_worker("worker_update")
+    assert fetched.version == "1.1.0"

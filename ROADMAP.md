@@ -17,7 +17,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
     - [ ] **Shared Rendering**: Implement shared output formatting for Client and Admin CLIs.
 - [ ] **Packaging**: Automate building and publishing release artifacts (GitHub Releases).
 - [x] **Quick-Start Guide**: The "short path" setup for people who just want something working.
-- [ ] **Worker Version Reporting**: Workers report their version on registration for compatibility checks.
+- [x] **Worker Version Reporting**: Workers report their version on registration for compatibility checks.
 
 ## Phase 2: Version 1.0 (Production Ready)
 *Goal: A stable, well-tested, and documented release.*

@@ -1,4 +1,5 @@
 import asyncio
+import importlib.metadata
 import logging
 import random
 from typing import Dict, Optional, cast
@@ -23,6 +24,11 @@ from dffmpeg.worker.mounts import MountManager
 from dffmpeg.worker.transport import WorkerTransportManager
 
 logger = logging.getLogger(__name__)
+
+try:
+    WORKER_VERSION = importlib.metadata.version("dffmpeg-worker")
+except importlib.metadata.PackageNotFoundError:
+    WORKER_VERSION = "unknown"
 
 
 class Worker:
@@ -125,6 +131,7 @@ class Worker:
                     paths=list(healthy_paths.keys()),
                     supported_transports=self.transport_manager.transport_names,
                     registration_interval=self.config.registration_interval,
+                    version=WORKER_VERSION,
                 )
 
                 path = self.coordinator_paths["register"]
