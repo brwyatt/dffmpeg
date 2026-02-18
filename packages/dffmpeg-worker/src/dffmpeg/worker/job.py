@@ -45,6 +45,8 @@ class JobRunner:
         self._heartbeat_task: Optional[asyncio.Task] = None
         self._log_flusher_task: Optional[asyncio.Task] = None
         self._log_queue: asyncio.Queue[LogEntry] = asyncio.Queue()
+        self._flush_lock = asyncio.Lock()
+        self._new_log_event = asyncio.Event()
 
         self.coordinator_paths = {
             "heartbeat": f"/jobs/{self.job_id}/worker_heartbeat",
@@ -116,33 +118,37 @@ class JobRunner:
             entry (LogEntry): The log entry to send.
         """
         self._log_queue.put_nowait(entry)
+        self._new_log_event.set()
 
     async def _flush_logs(self):
         """
         Drains the log queue into the buffer and sends the accumulated batch.
         """
-        # Drains the queue into the buffer
-        while not self._log_queue.empty():
-            self._log_buffer.append(self._log_queue.get_nowait())
+        async with self._flush_lock:
+            # Drains the queue into the buffer
+            while not self._log_queue.empty():
+                self._log_buffer.append(self._log_queue.get_nowait())
 
-        if not self._log_buffer:
-            return
+            if not self._log_buffer:
+                return
 
-        # Try to flush buffer
-        logs_payload = JobLogsPayload(logs=self._log_buffer)
-        path = self.coordinator_paths["logs"]
-        body = logs_payload.model_dump(mode="json", exclude_none=True)
+            # Try to flush buffer
+            logs_payload = JobLogsPayload(logs=self._log_buffer)
+            path = self.coordinator_paths["logs"]
+            body = logs_payload.model_dump(mode="json", exclude_none=True)
 
-        try:
-            await self.client.post(path, json=body)
-            # If successful, clear the buffer
-            self._log_buffer.clear()
-        except Exception as e:
-            logger.warning(f"Failed to send {len(self._log_buffer)} logs: {e}")
-            # Keep logs in buffer for next attempt (up to batch size)
-            if len(self._log_buffer) > self.config.log_batch_size:
-                logger.error(f"Log buffer overflow for job {self.job_id}, dropping oldest logs.")
-                self._log_buffer = self._log_buffer[-self.config.log_batch_size :]
+            try:
+                await self.client.post(path, json=body)
+                # If successful, clear the buffer
+                self._log_buffer.clear()
+            except asyncio.CancelledError as ce:
+                raise ce
+            except Exception as e:
+                logger.warning(f"Failed to send {len(self._log_buffer)} logs: {e}")
+                # Keep logs in buffer for next attempt (up to batch size)
+                if len(self._log_buffer) > self.config.log_batch_size:
+                    logger.error(f"Log buffer overflow for job {self.job_id}, dropping oldest logs.")
+                    self._log_buffer = self._log_buffer[-self.config.log_batch_size :]
 
     async def _log_flusher(self):
         """
@@ -151,31 +157,26 @@ class JobRunner:
         while True:
             try:
                 # Wait indefinitely for the first log to trigger the window
-                entry = await self._log_queue.get()
-                self._log_buffer.append(entry)
+                await self._new_log_event.wait()
+                self._new_log_event.clear()
 
                 # Start the collection window
-                start_time = asyncio.get_event_loop().time()
-                while len(self._log_buffer) < self.config.log_batch_size:
-                    now = asyncio.get_event_loop().time()
-                    remaining = self.config.log_batch_delay - (now - start_time)
-
-                    if remaining <= 0:
-                        break
-
+                now = asyncio.get_event_loop().time()
+                end_time = now + self.config.log_batch_delay
+                while self._log_queue.qsize() < self.config.log_batch_size and now < end_time:
                     try:
-                        entry = await asyncio.wait_for(self._log_queue.get(), timeout=remaining)
-                        self._log_buffer.append(entry)
+                        await asyncio.wait_for(self._new_log_event.wait(), timeout=end_time - now)
+                        self._new_log_event.clear()
                     except asyncio.TimeoutError:
-                        # Window expired
-                        break
+                        pass
+                    now = asyncio.get_event_loop().time()
 
                 # Flush the accumulated buffer (and anything else that arrived in the meantime)
                 await self._flush_logs()
 
-            except asyncio.CancelledError:
+            except asyncio.CancelledError as ce:
                 await self._flush_logs()
-                break
+                raise ce
             except Exception as e:
                 logger.error(f"Log flusher error for job {self.job_id}: {e}", exc_info=True)
                 await asyncio.sleep(1)
