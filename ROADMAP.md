@@ -17,11 +17,14 @@ This document outlines the development phases for DFFmpeg, leading up to version
     - [x] **Shared Rendering**: Implement shared output formatting for Client and Admin CLIs.
 - [x] **Quick-Start Guide**: The "short path" setup for people who just want something working.
 - [x] **Worker Version Reporting**: Workers report their version on registration for compatibility checks.
-- [ ] **Packaging**: Automate building and publishing release artifacts (GitHub Releases).
+- [ ] **Python Packaging (GitHub Releases)**: Automate building and publishing Python artifacts to GitHub Releases for easy install.
 
 ## Phase 2: Version 1.0 (Production Ready)
 *Goal: A stable, well-tested, and documented release.*
 
+- [ ] **Observability / Metrics**: Implement structured metrics (e.g., Prometheus) for queue depth, worker status, etc.
+- [ ] **Database Migrations**: Establish a formal strategy for schema evolution (e.g., Alembic).
+- [ ] **Graceful Shutdown Review**: Verify signal handling (SIGTERM/SIGINT) for Coordinator and Worker (should be good, but let's make sure and be extra defensive here).
 - [x] **CLI Parity (Part 2)**:
     - [x] **Admin Job List**: Add `job list` and `job status` to Admin CLI, matching Client capabilities.
 - [ ] **Operational Health**:
@@ -43,6 +46,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 *Goal: Advanced features and management tools.*
 
 - [ ] **Advanced Scheduling**: Job priority and worker affinity logic.
+- [ ] **Exploration: Retry Codes**: Investigate "smart" retries based on exit codes (considering caller expectations).
 - [ ] **Worker Capabilities**: Dynamic detection of FFmpeg features (codecs, formats).
 - [ ] **PostgreSQL Support**: Implement PostgreSQL database backend.
 - [ ] **Cassandra Support**: Implement Cassandra database backend.
