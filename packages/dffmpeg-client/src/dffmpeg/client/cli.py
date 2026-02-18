@@ -298,7 +298,7 @@ async def run_cancel(job_id: str, config_file: str | None = None) -> int:
             return 1
 
 
-async def run_logs(job_id: str, tail: int | None, follow: bool, config_file: str | None = None) -> int:
+async def run_logs(job_id: str, follow: bool, config_file: str | None = None) -> int:
     try:
         config = load_config(config_file)
     except Exception as e:
@@ -308,15 +308,10 @@ async def run_logs(job_id: str, tail: int | None, follow: bool, config_file: str
     async with DFFmpegClient(config) as client:
         try:
             last_msg_id = None
-            is_first_fetch = True
 
             while True:
                 # Fetch logs
-                # If first fetch and tail is set, use limit=tail
-                limit = tail if (is_first_fetch and tail) else None
-                resp = await client.get_job_logs(
-                    job_id, since_message_id=str(last_msg_id) if last_msg_id else None, limit=limit
-                )
+                resp = await client.get_job_logs(job_id, since_message_id=str(last_msg_id) if last_msg_id else None)
 
                 # Sort logs by timestamp just in case
                 # LogEntry has timestamp field
@@ -330,12 +325,9 @@ async def run_logs(job_id: str, tail: int | None, follow: bool, config_file: str
                 if resp.last_message_id:
                     last_msg_id = resp.last_message_id
 
-                is_first_fetch = False
-
                 if not follow:
                     # If not following, we exit if we got no logs this time
-                    # OR if we specified tail, we only do one fetch (historical tail)
-                    if not resp.logs or tail:
+                    if not resp.logs:
                         break
                     continue
 
@@ -379,10 +371,6 @@ def main():
     )
     submit_parser.add_argument("arguments", nargs=argparse.REMAINDER, help="Arguments for the binary")
 
-    # Attach
-    attach_parser = subparsers.add_parser("attach", help="Attach to an existing job to monitor it")
-    attach_parser.add_argument("job_id", help="Job ID")
-
     # Status
     status_parser = subparsers.add_parser("status", help="Get cluster status")
     status_parser.add_argument("--window", "-w", type=int, default=3600, help="Time window in seconds (default: 3600)")
@@ -413,15 +401,18 @@ def main():
     j_show_parser = job_subparsers.add_parser("show", help="Show job details")
     j_show_parser.add_argument("job_id", help="Job ID")
 
-    # Cancel
-    cancel_parser = subparsers.add_parser("cancel", help="Cancel a job")
-    cancel_parser.add_argument("job_id", help="Job ID")
+    # job logs
+    j_logs_parser = job_subparsers.add_parser("logs", help="Fetch job logs")
+    j_logs_parser.add_argument("job_id", help="Job ID")
+    j_logs_parser.add_argument("--follow", "-f", action="store_true", help="Follow log output")
 
-    # Logs
-    logs_parser = subparsers.add_parser("logs", help="Fetch job logs")
-    logs_parser.add_argument("job_id", help="Job ID")
-    logs_parser.add_argument("--tail", "-n", type=int, help="Number of lines to show (from end)")
-    logs_parser.add_argument("--follow", "-f", action="store_true", help="Follow log output")
+    # job cancel
+    j_cancel_parser = job_subparsers.add_parser("cancel", help="Cancel a job")
+    j_cancel_parser.add_argument("job_id", help="Job ID")
+
+    # job attach
+    j_attach_parser = job_subparsers.add_parser("attach", help="Attach to an existing job to monitor it")
+    j_attach_parser.add_argument("job_id", help="Job ID")
 
     args = parser.parse_args()
 
@@ -442,9 +433,6 @@ def main():
                 )
             )
 
-        elif args.command == "attach":
-            sys.exit(asyncio.run(run_attach(args.job_id, args.config)))
-
         elif args.command == "status":
             sys.exit(asyncio.run(run_status_cmd(args.window, args.config)))
 
@@ -459,12 +447,12 @@ def main():
                 sys.exit(asyncio.run(run_job_list(args.window, args.config)))
             elif args.subcommand == "show":
                 sys.exit(asyncio.run(run_job_show(args.job_id, args.config)))
-
-        elif args.command == "cancel":
-            sys.exit(asyncio.run(run_cancel(args.job_id, args.config)))
-
-        elif args.command == "logs":
-            sys.exit(asyncio.run(run_logs(args.job_id, args.tail, args.follow, args.config)))
+            elif args.subcommand == "logs":
+                sys.exit(asyncio.run(run_logs(args.job_id, args.follow, args.config)))
+            elif args.subcommand == "cancel":
+                sys.exit(asyncio.run(run_cancel(args.job_id, args.config)))
+            elif args.subcommand == "attach":
+                sys.exit(asyncio.run(run_attach(args.job_id, args.config)))
 
     except KeyboardInterrupt:
         sys.exit(130)

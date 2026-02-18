@@ -161,7 +161,7 @@ async def test_run_logs_basic():
         # 3. Third fetch (terminal check) -> mock_empty
         mock_client.get_job_logs.side_effect = [mock_logs, mock_empty, mock_empty]
 
-        result = await run_logs(job_id, tail=None, follow=False)
+        result = await run_logs(job_id, follow=False)
 
         assert result == 0
         # The loop fetches until logs is empty, so at least 2 calls.
@@ -224,14 +224,14 @@ async def test_run_logs_follow():
         mock_client.get_job_logs.side_effect = [mock_logs1, mock_logs2, mock_logs3]
         mock_client.get_job_status.side_effect = [mock_job_running, mock_job_completed]
 
-        result = await run_logs(job_id, tail=None, follow=True)
+        result = await run_logs(job_id, follow=True)
 
         assert result == 0
         assert mock_client.get_job_logs.call_count == 3
         assert mock_client.get_job_status.call_count == 2
 
         # Check that it uses the cursor
-        mock_client.get_job_logs.assert_any_call(job_id, since_message_id=None, limit=None)
-        mock_client.get_job_logs.assert_any_call(job_id, since_message_id=str(msg_id1), limit=None)
+        mock_client.get_job_logs.assert_any_call(job_id, since_message_id=None)
+        mock_client.get_job_logs.assert_any_call(job_id, since_message_id=str(msg_id1))
         # Note: the terminal fetch uses the last seen message ID from mock_logs2
         mock_client.get_job_logs.assert_any_call(job_id, since_message_id=str(msg_id2))

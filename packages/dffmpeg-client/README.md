@@ -39,12 +39,6 @@ Use the `--detach` (or `-D`) flag to submit a job and exit immediately. The job 
 dffmpeg-client submit --detach -b ffmpeg -i /mnt/media/movies/input.mkv output.mp4
 ```
 
-Attach to a running job:
-You can resume monitoring a detached job (or a job started by another client instance) using the `attach` command. This starts the heartbeat loop and log streaming.
-```bash
-dffmpeg-client attach <job_id>
-```
-
 Check cluster status (dashboard):
 ```bash
 dffmpeg-client status [--window <seconds>]
@@ -72,25 +66,24 @@ dffmpeg-client worker show <worker_id>
 
 Cancel a job:
 ```bash
-dffmpeg-client cancel <job_id>
+dffmpeg-client job cancel <job_id>
+```
+
+Attach to a running job:
+```bash
+dffmpeg-client job attach <job_id>
 ```
 
 View job logs:
 Fetch historical logs for a job.
 ```bash
-dffmpeg-client logs <job_id>
+dffmpeg-client job logs <job_id>
 ```
 
 Follow job logs:
 Fetch historical logs and continue polling for new logs.
 ```bash
-dffmpeg-client logs --follow <job_id>
-```
-
-Tail job logs:
-Fetch only the last $N$ lines of logs.
-```bash
-dffmpeg-client logs --tail 50 <job_id>
+dffmpeg-client job logs --follow <job_id>
 ```
 
 ### Transparent Proxy

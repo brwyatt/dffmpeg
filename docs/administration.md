@@ -43,6 +43,13 @@ Show detailed information about a specific job.
 dffmpeg-admin job show <job_id>
 ```
 
+**Job Logs:**
+Fetch historical logs for a job.
+
+```bash
+dffmpeg-admin job logs <job_id>
+```
+
 #### Worker Management
 
 **List Workers:**

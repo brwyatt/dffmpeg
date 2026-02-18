@@ -15,7 +15,7 @@ from dffmpeg.common.formatting import (
     print_worker_details,
     print_worker_list,
 )
-from dffmpeg.common.models import AuthenticatedIdentity, IdentityRole
+from dffmpeg.common.models import AuthenticatedIdentity, IdentityRole, JobLogsMessage
 from dffmpeg.coordinator.config import load_config
 from dffmpeg.coordinator.db import DB
 
@@ -129,6 +129,29 @@ async def job_show(db: DB, args: argparse.Namespace):
         sys.exit(1)
 
     print_job_details(job)
+
+
+async def job_logs(db: DB, args: argparse.Namespace):
+    job_id_str = args.job_id
+    try:
+        job_id = ULID.from_str(job_id_str)
+    except ValueError:
+        print(colorize(f"Invalid Job ID: {job_id_str}", Colors.RED))
+        sys.exit(1)
+
+    job = await db.jobs.get_job(job_id)
+    if not job:
+        print(colorize(f"Job '{job_id_str}' not found.", Colors.RED))
+        sys.exit(1)
+
+    messages = await db.messages.get_job_messages(job_id, message_type="job_logs")
+
+    for msg in messages:
+        if isinstance(msg, JobLogsMessage):
+            for log in msg.payload.logs:
+                stream = sys.stdout if log.stream == "stdout" else sys.stderr
+                print(log.content, file=stream)
+                stream.flush()
 
 
 async def status_cmd(db: DB, args: argparse.Namespace):
@@ -284,6 +307,11 @@ def main():
     j_show_parser = job_subparsers.add_parser("show", help="Show job details")
     j_show_parser.add_argument("job_id", help="Job ID")
     j_show_parser.set_defaults(func=job_show)
+
+    # job logs
+    j_logs_parser = job_subparsers.add_parser("logs", help="Fetch job logs")
+    j_logs_parser.add_argument("job_id", help="Job ID")
+    j_logs_parser.set_defaults(func=job_logs)
 
     # Security subcommands
     security_parser = subparsers.add_parser("security", help="Security management")
