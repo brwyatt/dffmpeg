@@ -2,12 +2,19 @@ import argparse
 import asyncio
 import os
 import sys
-from datetime import datetime, timedelta, timezone
 from typing import cast
 
+from ulid import ULID
+
 from dffmpeg.common.auth.request_signer import RequestSigner
-from dffmpeg.common.colors import Colors, colorize, colorize_status
+from dffmpeg.common.colors import Colors, colorize
 from dffmpeg.common.crypto import CryptoManager
+from dffmpeg.common.formatting import (
+    print_job_details,
+    print_job_list,
+    print_worker_details,
+    print_worker_list,
+)
 from dffmpeg.common.models import AuthenticatedIdentity, IdentityRole
 from dffmpeg.coordinator.config import load_config
 from dffmpeg.coordinator.db import DB
@@ -84,18 +91,11 @@ async def user_rotate_key(db: DB, args: argparse.Namespace):
 
 
 async def worker_list(db: DB, args: argparse.Namespace):
+    window = args.window if hasattr(args, "window") else 3600 * 24
     online = await db.workers.get_workers_by_status("online")
-    offline = await db.workers.get_workers_by_status("offline", since_seconds=3600 * 24)
+    offline = await db.workers.get_workers_by_status("offline", since_seconds=window)
     workers = online + offline
-
-    # Sort: Online first, then by last seen (descending), then ID (ascending)
-    workers.sort(key=lambda w: (w.status != "online", -(w.last_seen.timestamp() if w.last_seen else 0), w.worker_id))
-
-    print(f"{'Worker ID':<20} {'Status':<21} {'Last Seen':<20}")
-    print("-" * 52)
-    for w in workers:
-        last_seen_str = w.last_seen.strftime("%Y-%m-%d %H:%M:%S") if w.last_seen else "-"
-        print(f"{w.worker_id:<20} {colorize_status(w.status):<21} {last_seen_str}")
+    print_worker_list(workers)
 
 
 async def worker_show(db: DB, args: argparse.Namespace):
@@ -105,20 +105,41 @@ async def worker_show(db: DB, args: argparse.Namespace):
         print(colorize(f"Worker '{worker_id}' not found.", Colors.RED))
         sys.exit(1)
 
-    last_seen_str = worker.last_seen.strftime("%Y-%m-%d %H:%M:%S") if worker.last_seen else "-"
-    if worker.last_seen < datetime.now(timezone.utc) - timedelta(seconds=worker.registration_interval):
-        last_seen_str = colorize(last_seen_str, color=Colors.YELLOW)
-    else:
-        last_seen_str = colorize(last_seen_str, color=Colors.GREEN)
+    print_worker_details(worker)
 
-    print(f"Worker ID:    {colorize(worker.worker_id, Colors.CYAN)}")
-    print(f"Status:       {colorize_status(worker.status)}")
-    print(f"Last Seen:    {last_seen_str}")
-    print(f"Binaries:     {', '.join(sorted(worker.binaries))}")
-    print(f"Capabilities: {', '.join(worker.capabilities)}")
-    print(f"Paths:        {', '.join(sorted(worker.paths))}")
-    print(f"Interval:     {worker.registration_interval}s")
-    print(f"Transport:    {worker.transport}")
+
+async def job_list(db: DB, args: argparse.Namespace):
+    window = args.window if hasattr(args, "window") else 3600
+    # Show requester for admin view
+    jobs = await db.jobs.get_dashboard_jobs(recent_window_seconds=window)
+    print_job_list(jobs, show_requester=True)
+
+
+async def job_show(db: DB, args: argparse.Namespace):
+    job_id_str = args.job_id
+    try:
+        job_id = ULID.from_str(job_id_str)
+    except ValueError:
+        print(colorize(f"Invalid Job ID: {job_id_str}", Colors.RED))
+        sys.exit(1)
+
+    job = await db.jobs.get_job(job_id)
+    if not job:
+        print(colorize(f"Job '{job_id_str}' not found.", Colors.RED))
+        sys.exit(1)
+
+    print_job_details(job)
+
+
+async def status_cmd(db: DB, args: argparse.Namespace):
+    print(colorize("=== Workers ===", Colors.MAGENTA))
+    # Default window for status view if not specified (handled by argparse defaults usually)
+    if not hasattr(args, "window"):
+        args.window = 3600
+    await worker_list(db, args)
+    print()
+    print(colorize("=== Recent Jobs ===", Colors.MAGENTA))
+    await job_list(db, args)
 
 
 async def security_reencrypt(db: DB, args: argparse.Namespace):
@@ -196,6 +217,11 @@ def main():
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    # Status
+    status_parser = subparsers.add_parser("status", help="Show cluster status")
+    status_parser.add_argument("--window", "-w", type=int, default=3600, help="Time window in seconds (default: 3600)")
+    status_parser.set_defaults(func=status_cmd)
+
     # User subcommands
     user_parser = subparsers.add_parser("user", help="User management")
     user_subparsers = user_parser.add_subparsers(dest="subcommand", required=True)
@@ -235,12 +261,29 @@ def main():
 
     # worker list
     w_list_parser = worker_subparsers.add_parser("list", help="List workers")
+    w_list_parser.add_argument(
+        "--window", "-w", type=int, default=3600 * 24, help="Time window for offline workers (default: 86400)"
+    )
     w_list_parser.set_defaults(func=worker_list)
 
     # worker show
     w_show_parser = worker_subparsers.add_parser("show", help="Show worker details")
     w_show_parser.add_argument("worker_id", help="Worker ID")
     w_show_parser.set_defaults(func=worker_show)
+
+    # Job subcommands
+    job_parser = subparsers.add_parser("job", help="Job management")
+    job_subparsers = job_parser.add_subparsers(dest="subcommand", required=True)
+
+    # job list
+    j_list_parser = job_subparsers.add_parser("list", help="List jobs")
+    j_list_parser.add_argument("--window", "-w", type=int, default=3600, help="Time window in seconds (default: 3600)")
+    j_list_parser.set_defaults(func=job_list)
+
+    # job show
+    j_show_parser = job_subparsers.add_parser("show", help="Show job details")
+    j_show_parser.add_argument("job_id", help="Job ID")
+    j_show_parser.set_defaults(func=job_show)
 
     # Security subcommands
     security_parser = subparsers.add_parser("security", help="Security management")

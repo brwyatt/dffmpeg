@@ -45,14 +45,29 @@ You can resume monitoring a detached job (or a job started by another client ins
 dffmpeg-client attach <job_id>
 ```
 
-Check status:
+Check cluster status (dashboard):
 ```bash
-dffmpeg-client status <job_id>
+dffmpeg-client status [--window <seconds>]
 ```
 
-List recent jobs:
+List jobs:
 ```bash
-dffmpeg-client status
+dffmpeg-client job list [--window <seconds>]
+```
+
+Show job details:
+```bash
+dffmpeg-client job show <job_id>
+```
+
+List workers:
+```bash
+dffmpeg-client worker list [--window <seconds>]
+```
+
+Show worker details:
+```bash
+dffmpeg-client worker show <worker_id>
 ```
 
 Cancel a job:
@@ -76,12 +91,6 @@ Tail job logs:
 Fetch only the last $N$ lines of logs.
 ```bash
 dffmpeg-client logs --tail 50 <job_id>
-```
-
-Get job arguments:
-Retrieve the full command line used for a job.
-```bash
-dffmpeg-client args <job_id>
 ```
 
 ### Transparent Proxy

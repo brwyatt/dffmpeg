@@ -248,7 +248,7 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
     async def get_dashboard_jobs(
         self,
         requester_id: Optional[str] = None,
-        limit: int = 20,
+        limit: Optional[int] = None,
         since_id: Optional[ULID] = None,
         recent_window_seconds: int = 3600,
     ) -> list[JobRecord]:
@@ -274,7 +274,9 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
         if since_id:
             conditions.append(self.table.c.job_id < str(since_id))
 
-        query = select(self.table).where(and_(*conditions)).order_by(self.table.c.job_id.desc()).limit(limit)
+        query = select(self.table).where(and_(*conditions)).order_by(self.table.c.job_id.desc())
+        if limit is not None:
+            query = query.limit(limit)
 
         sql, params = self.compile_query(query)
         rows = await self.get_rows(sql, params)

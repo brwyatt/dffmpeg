@@ -3,7 +3,7 @@ from unittest.mock import ANY, patch
 import pytest
 from ulid import ULID
 
-from dffmpeg.client.cli import process_arguments, run_args, run_logs, run_submit
+from dffmpeg.client.cli import process_arguments, run_logs, run_submit
 from dffmpeg.client.config import ClientConfig
 from dffmpeg.common.models import JobLogsResponse, JobRecord, LogEntry
 
@@ -235,31 +235,3 @@ async def test_run_logs_follow():
         mock_client.get_job_logs.assert_any_call(job_id, since_message_id=str(msg_id1), limit=None)
         # Note: the terminal fetch uses the last seen message ID from mock_logs2
         mock_client.get_job_logs.assert_any_call(job_id, since_message_id=str(msg_id2))
-
-
-@pytest.mark.anyio
-async def test_run_args():
-    job_id = str(ULID())
-    mock_config = ClientConfig(client_id="client1")
-    mock_job = JobRecord(
-        job_id=ULID.from_str(job_id),
-        requester_id="client1",
-        binary_name="ffmpeg",
-        arguments=["-i", "in.mp4", "out.mp4"],
-        status="completed",
-        transport="http",
-        transport_metadata={},
-    )
-
-    with (
-        patch("dffmpeg.client.cli.load_config") as mock_load_config,
-        patch("dffmpeg.client.cli.DFFmpegClient") as mock_client_cls,
-    ):
-        mock_load_config.return_value = mock_config
-        mock_client = mock_client_cls.return_value.__aenter__.return_value
-        mock_client.get_job_status.return_value = mock_job
-
-        result = await run_args(job_id)
-
-        assert result == 0
-        mock_client.get_job_status.assert_called_once_with(job_id)

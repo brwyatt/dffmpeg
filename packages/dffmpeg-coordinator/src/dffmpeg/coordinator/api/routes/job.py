@@ -107,17 +107,17 @@ async def job_submit(
 
 @router.get("/jobs")
 async def job_list(
-    limit: int = 20,
+    window: int = 3600,
     since_id: Optional[str] = None,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     job_repo: JobRepository = Depends(get_job_repo),
 ):
     """
     Lists jobs for the authenticated client.
-    Shows active jobs and recently finished jobs (last 1 hour).
+    Shows active jobs and recently finished jobs.
 
     Args:
-        limit (int): Max number of jobs to return.
+        window (int): Time window in seconds for recently finished jobs (default: 1 hour).
         since_id (Optional[str]): Cursor for pagination (job_id).
         identity (AuthenticatedIdentity): The authenticated client identity.
         job_repo (JobRepository): Job repository.
@@ -134,8 +134,8 @@ async def job_list(
 
     jobs = await job_repo.get_dashboard_jobs(
         requester_id=identity.client_id,
-        limit=limit,
         since_id=s_id,
+        recent_window_seconds=window,
     )
 
     return jobs

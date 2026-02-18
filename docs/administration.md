@@ -19,6 +19,46 @@ dffmpeg-admin [global options] <command> [subcommand] [options]
 
 ### Commands
 
+#### Cluster Status
+
+Show the current status of the cluster (active workers and recent jobs).
+
+```bash
+dffmpeg-admin status [--window <seconds>]
+```
+
+#### Job Management
+
+**List Jobs:**
+List recent jobs.
+
+```bash
+dffmpeg-admin job list [--window <seconds>]
+```
+
+**Show Job Details:**
+Show detailed information about a specific job.
+
+```bash
+dffmpeg-admin job show <job_id>
+```
+
+#### Worker Management
+
+**List Workers:**
+List all known workers.
+
+```bash
+dffmpeg-admin worker list [--window <seconds>]
+```
+
+**Show Worker Details:**
+Show detailed information about a specific worker.
+
+```bash
+dffmpeg-admin worker show <worker_id>
+```
+
 #### Add User
 
 Register a new user and generate an HMAC key.

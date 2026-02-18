@@ -8,7 +8,13 @@ from typing import Dict, List, Tuple
 
 from dffmpeg.client.api import DFFmpegClient
 from dffmpeg.client.config import load_config
-from dffmpeg.common.colors import Colors, colorize, colorize_status
+from dffmpeg.common.colors import Colors, colorize
+from dffmpeg.common.formatting import (
+    print_job_details,
+    print_job_list,
+    print_worker_details,
+    print_worker_list,
+)
 from dffmpeg.common.models import JobLogsMessage, JobStatusMessage
 
 # Configure logging
@@ -158,7 +164,7 @@ async def run_submit(
             return 1
 
 
-async def run_status(job_id: str | None, config_file: str | None = None) -> int:
+async def run_worker_list(window: int = 3600 * 24, config_file: str | None = None) -> int:
     try:
         config = load_config(config_file)
     except Exception as e:
@@ -167,36 +173,84 @@ async def run_status(job_id: str | None, config_file: str | None = None) -> int:
 
     async with DFFmpegClient(config) as client:
         try:
-            if not job_id:
-                jobs = await client.list_jobs(limit=20)
-                if not jobs:
-                    print("No jobs found.")
-                    return 0
+            workers = await client.list_workers(window=window)
+            print_worker_list(workers)
+            return 0
+        except Exception as e:
+            logger.error(f"Error getting worker list: {e}")
+            return 1
 
-                print(f"{'Job ID':<26} {'Status':<31} {'Binary':<10} {'Created'}")
-                print("-" * 80)
-                for job in jobs:
-                    status_str = f"{job.status}{f' ({job.exit_code})' if job.exit_code not in (None, 0) else ''}"
-                    print(
-                        f"{str(job.job_id):<26} {colorize_status(status_str):<31} {job.binary_name:<10} "
-                        f"{job.created_at}"
-                    )
-                return 0
 
+async def run_worker_show(worker_id: str, config_file: str | None = None) -> int:
+    try:
+        config = load_config(config_file)
+    except Exception as e:
+        logger.error(f"Configuration error: {e}")
+        return 1
+
+    async with DFFmpegClient(config) as client:
+        try:
+            worker = await client.get_worker(worker_id)
+            print_worker_details(worker)
+            return 0
+        except Exception as e:
+            logger.error(f"Error getting worker details: {e}")
+            return 1
+
+
+async def run_job_list(window: int = 3600, config_file: str | None = None) -> int:
+    try:
+        config = load_config(config_file)
+    except Exception as e:
+        logger.error(f"Configuration error: {e}")
+        return 1
+
+    async with DFFmpegClient(config) as client:
+        try:
+            jobs = await client.list_jobs(window=window)
+            print_job_list(jobs)
+            return 0
+        except Exception as e:
+            logger.error(f"Error getting job list: {e}")
+            return 1
+
+
+async def run_job_show(job_id: str, config_file: str | None = None) -> int:
+    try:
+        config = load_config(config_file)
+    except Exception as e:
+        logger.error(f"Configuration error: {e}")
+        return 1
+
+    async with DFFmpegClient(config) as client:
+        try:
             status = await client.get_job_status(job_id)
-            # Pretty print status
-            print(f"Job ID: {colorize(str(status.job_id), Colors.CYAN)}")
-            status_str = f"{status.status}{f' ({status.exit_code})' if status.exit_code not in (None, 0) else ''}"
-            print(f"Status: {colorize_status(status_str)}")
-            if status.exit_code is not None:
-                color = Colors.GREEN if status.exit_code == 0 else Colors.RED
-                print(f"Exit Code: {colorize(str(status.exit_code), color)}")
-            print(f"Worker: {status.worker_id or '<Unassigned>'}")
-            print(f"Binary: {status.binary_name}")
-            print(f"Args: {' '.join(status.arguments)}")
-            print(f"Paths: {status.paths}")
-            print(f"Created: {status.created_at}")
-            print(f"Last Update: {status.last_update}")
+            print_job_details(status)
+            return 0
+        except Exception as e:
+            logger.error(f"Error getting job details: {e}")
+            return 1
+
+
+async def run_status_cmd(window: int = 3600, config_file: str | None = None) -> int:
+    try:
+        config = load_config(config_file)
+    except Exception as e:
+        logger.error(f"Configuration error: {e}")
+        return 1
+
+    async with DFFmpegClient(config) as client:
+        try:
+            print(colorize("=== Workers ===", Colors.MAGENTA))
+            # Status command usually implies "current state", so maybe window applies to jobs?
+            # For workers, we probably want to see recently offline ones too.
+            # Let's use the window for both.
+            workers = await client.list_workers(window=window)
+            print_worker_list(workers)
+            print()
+            print(colorize("=== Recent Jobs ===", Colors.MAGENTA))
+            jobs = await client.list_jobs(window=window)
+            print_job_list(jobs)
             return 0
         except Exception as e:
             logger.error(f"Error getting status: {e}")
@@ -241,23 +295,6 @@ async def run_cancel(job_id: str, config_file: str | None = None) -> int:
             return 0
         except Exception as e:
             logger.error(f"Error canceling job: {e}")
-            return 1
-
-
-async def run_args(job_id: str, config_file: str | None = None) -> int:
-    try:
-        config = load_config(config_file)
-    except Exception as e:
-        logger.error(f"Configuration error: {e}")
-        return 1
-
-    async with DFFmpegClient(config) as client:
-        try:
-            status = await client.get_job_status(job_id)
-            print(f"{status.binary_name} {' '.join(status.arguments)}")
-            return 0
-        except Exception as e:
-            logger.error(f"Error getting job args: {e}")
             return 1
 
 
@@ -347,8 +384,34 @@ def main():
     attach_parser.add_argument("job_id", help="Job ID")
 
     # Status
-    status_parser = subparsers.add_parser("status", help="Get job status")
-    status_parser.add_argument("job_id", nargs="?", help="Job ID (optional, lists jobs if omitted)")
+    status_parser = subparsers.add_parser("status", help="Get cluster status")
+    status_parser.add_argument("--window", "-w", type=int, default=3600, help="Time window in seconds (default: 3600)")
+
+    # Worker
+    worker_parser = subparsers.add_parser("worker", help="Worker management")
+    worker_subparsers = worker_parser.add_subparsers(dest="subcommand", required=True)
+
+    # Worker list
+    w_list_parser = worker_subparsers.add_parser("list", help="List workers")
+    w_list_parser.add_argument(
+        "--window", "-w", type=int, default=3600 * 24, help="Time window for offline workers (default: 86400)"
+    )
+
+    # Worker show
+    w_show_parser = worker_subparsers.add_parser("show", help="Show worker details")
+    w_show_parser.add_argument("worker_id", help="Worker ID")
+
+    # Job
+    job_parser = subparsers.add_parser("job", help="Job management")
+    job_subparsers = job_parser.add_subparsers(dest="subcommand", required=True)
+
+    # Job list
+    j_list_parser = job_subparsers.add_parser("list", help="List jobs")
+    j_list_parser.add_argument("--window", "-w", type=int, default=3600, help="Time window in seconds (default: 3600)")
+
+    # Job show
+    j_show_parser = job_subparsers.add_parser("show", help="Show job details")
+    j_show_parser.add_argument("job_id", help="Job ID")
 
     # Cancel
     cancel_parser = subparsers.add_parser("cancel", help="Cancel a job")
@@ -359,10 +422,6 @@ def main():
     logs_parser.add_argument("job_id", help="Job ID")
     logs_parser.add_argument("--tail", "-n", type=int, help="Number of lines to show (from end)")
     logs_parser.add_argument("--follow", "-f", action="store_true", help="Follow log output")
-
-    # Args
-    args_parser = subparsers.add_parser("args", help="Get full arguments for a job")
-    args_parser.add_argument("job_id", help="Job ID")
 
     args = parser.parse_args()
 
@@ -387,16 +446,25 @@ def main():
             sys.exit(asyncio.run(run_attach(args.job_id, args.config)))
 
         elif args.command == "status":
-            sys.exit(asyncio.run(run_status(args.job_id, args.config)))
+            sys.exit(asyncio.run(run_status_cmd(args.window, args.config)))
+
+        elif args.command == "worker":
+            if args.subcommand == "list":
+                sys.exit(asyncio.run(run_worker_list(args.window, args.config)))
+            elif args.subcommand == "show":
+                sys.exit(asyncio.run(run_worker_show(args.worker_id, args.config)))
+
+        elif args.command == "job":
+            if args.subcommand == "list":
+                sys.exit(asyncio.run(run_job_list(args.window, args.config)))
+            elif args.subcommand == "show":
+                sys.exit(asyncio.run(run_job_show(args.job_id, args.config)))
 
         elif args.command == "cancel":
             sys.exit(asyncio.run(run_cancel(args.job_id, args.config)))
 
         elif args.command == "logs":
             sys.exit(asyncio.run(run_logs(args.job_id, args.tail, args.follow, args.config)))
-
-        elif args.command == "args":
-            sys.exit(asyncio.run(run_args(args.job_id, args.config)))
 
     except KeyboardInterrupt:
         sys.exit(130)

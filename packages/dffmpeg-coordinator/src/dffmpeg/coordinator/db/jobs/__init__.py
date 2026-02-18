@@ -96,7 +96,7 @@ class JobRepository(BaseDB):
     async def get_dashboard_jobs(
         self,
         requester_id: Optional[str] = None,
-        limit: int = 20,
+        limit: Optional[int] = None,
         since_id: Optional[ULID] = None,
         recent_window_seconds: int = 3600,
     ) -> list[JobRecord]:

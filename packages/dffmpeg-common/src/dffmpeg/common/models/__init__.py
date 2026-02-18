@@ -289,6 +289,10 @@ class WorkerRegistration(WorkerBase):
     supported_transports: List[str] = Field(min_length=1)
 
 
+class WorkerRecord(Worker, TransportRecord):
+    pass
+
+
 class ComponentHealth(BaseModel):
     """
     Represents the health status of a single component.

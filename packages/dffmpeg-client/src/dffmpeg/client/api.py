@@ -14,6 +14,7 @@ from dffmpeg.common.models import (
     JobRecord,
     JobRequest,
     JobStatusMessage,
+    Worker,
 )
 from dffmpeg.common.transports import TransportManager
 
@@ -92,9 +93,9 @@ class DFFmpegClient:
         resp.raise_for_status()
         return CommandResponse.model_validate(resp.json())
 
-    async def list_jobs(self, limit: int = 20, since_id: str | None = None) -> List[JobRecord]:
+    async def list_jobs(self, window: int = 3600, since_id: str | None = None) -> List[JobRecord]:
         """Lists active and recently finished jobs."""
-        params: Dict[str, Any] = {"limit": limit}
+        params: Dict[str, Any] = {"window": window}
         if since_id:
             params["since_id"] = since_id
 
@@ -117,6 +118,21 @@ class DFFmpegClient:
         resp = await self.client.get(path, params=params)
         resp.raise_for_status()
         return JobLogsResponse.model_validate(resp.json())
+
+    async def list_workers(self, window: int = 3600 * 24) -> List[Worker]:
+        """Lists all known workers."""
+        path = "/workers"
+        params = {"window": window}
+        resp = await self.client.get(path, params=params)
+        resp.raise_for_status()
+        return [Worker.model_validate(w) for w in resp.json()]
+
+    async def get_worker(self, worker_id: str) -> Worker:
+        """Gets details for a specific worker."""
+        path = f"/workers/{worker_id}"
+        resp = await self.client.get(path)
+        resp.raise_for_status()
+        return Worker.model_validate(resp.json())
 
     async def start_monitoring(self, job_id: str, monitor: bool = True):
         """

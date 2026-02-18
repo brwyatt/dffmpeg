@@ -1,10 +1,12 @@
 from logging import getLogger
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from dffmpeg.common.models import (
     AuthenticatedIdentity,
     TransportRecord,
+    Worker,
     WorkerDeregistration,
     WorkerRegistration,
 )
@@ -113,3 +115,61 @@ async def worker_deregister(
 
     await worker_repo.add_or_update(record)
     return {"status": "ok"}
+
+
+@router.get("/workers", response_model=List[Worker])
+async def list_workers(
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    worker_repo: WorkerRepository = Depends(get_worker_repo),
+    window: int = 3600 * 24,
+):
+    """
+    Lists all known workers (online and offline).
+
+    Args:
+        identity (AuthenticatedIdentity): The authenticated identity (optional).
+        worker_repo (WorkerRepository): Repository for worker storage.
+
+    Returns:
+        List[Worker]: A list of worker details.
+    """
+    # While the dashboard is unauthenticated, this API returns a lot more information
+
+    online = await worker_repo.get_workers_by_status("online")
+    # For offline, maybe limit to recent ones? Or all?
+    # Admin CLI limits to 24h. Let's do the same for API to avoid massive lists.
+    offline = await worker_repo.get_workers_by_status("offline", since_seconds=window)
+
+    workers = online + offline
+    # Sort by status (online first), then last seen (desc), then ID
+    workers.sort(key=lambda w: (w.status != "online", -(w.last_seen.timestamp() if w.last_seen else 0), w.worker_id))
+
+    return workers
+
+
+@router.get("/workers/{worker_id}", response_model=Worker)
+async def get_worker(
+    worker_id: str,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    worker_repo: WorkerRepository = Depends(get_worker_repo),
+):
+    """
+    Gets details for a specific worker.
+
+    Args:
+        worker_id (str): The ID of the worker.
+        identity (AuthenticatedIdentity): The authenticated identity (optional).
+        worker_repo (WorkerRepository): Repository for worker storage.
+
+    Returns:
+        Worker: The worker details.
+
+    Raises:
+        HTTPException: If worker not found.
+    """
+    # While the dashboard is unauthenticated, this API returns a lot more information
+
+    worker = await worker_repo.get_worker(worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    return worker

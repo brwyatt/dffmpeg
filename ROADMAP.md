@@ -13,8 +13,8 @@ This document outlines the development phases for DFFmpeg, leading up to version
 - [x] **Active/Background Modes**: Client supports submitting jobs in active (monitored) or background (detached) modes, with heartbeat support.
 - [ ] **CLI Parity (Part 1)**:
     - [ ] **CLI Status Window**: Add `--window` / `-w` to `dffmpeg-client status` for time-filtered views.
-    - [ ] **Client Cluster View**: Add `dffmpeg-client workers` to view cluster load.
-    - [ ] **Shared Rendering**: Implement shared output formatting for Client and Admin CLIs.
+    - [x] **Client Cluster View**: Add `dffmpeg-client workers` to view cluster load.
+    - [x] **Shared Rendering**: Implement shared output formatting for Client and Admin CLIs.
 - [ ] **Packaging**: Automate building and publishing release artifacts (GitHub Releases).
 - [x] **Quick-Start Guide**: The "short path" setup for people who just want something working.
 - [x] **Worker Version Reporting**: Workers report their version on registration for compatibility checks.
@@ -23,7 +23,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 *Goal: A stable, well-tested, and documented release.*
 
 - [ ] **CLI Parity (Part 2)**:
-    - [ ] **Admin Job List**: Add `job list` and `job status` to Admin CLI, matching Client capabilities.
+    - [x] **Admin Job List**: Add `job list` and `job status` to Admin CLI, matching Client capabilities.
 - [ ] **Operational Health**:
     - [ ] **Coordinator Health Table**: Track coordinator instances in the DB for HA visibility.
     - [ ] **Janitor & Cleanup**: Implement on-demand cleanup tasks in Admin CLI (e.g., `dffmpeg-admin janitor clean-jobs`).
