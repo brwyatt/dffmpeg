@@ -175,6 +175,7 @@ class LogEntry(BaseModel):
     Represents a single log line from a job.
     """
 
+    id: ULID = Field(default_factory=ULID)
     stream: Literal["stdout", "stderr"]
     content: str
     timestamp: datetime | None = None
