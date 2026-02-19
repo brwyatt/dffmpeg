@@ -4,12 +4,13 @@ import sys
 
 import uvicorn
 
+from dffmpeg.common.cli_utils import add_config_arg
 from dffmpeg.coordinator.config import load_config
 
 
 def main():
     parser = argparse.ArgumentParser(description="dffmpeg Coordinator")
-    parser.add_argument("--config", "-c", type=str, help="Path to config file")
+    add_config_arg(parser)
     parser.add_argument("--host", type=str, help="Bind host")
     parser.add_argument("--port", type=int, help="Bind port")
     parser.add_argument("--dev", action="store_true", help="Enable development mode (reload, debug logs)")

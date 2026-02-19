@@ -7,6 +7,14 @@ from typing import cast
 from ulid import ULID
 
 from dffmpeg.common.auth.request_signer import RequestSigner
+from dffmpeg.common.cli_utils import (
+    add_client_id_arg,
+    add_config_arg,
+    add_job_subcommand,
+    add_window_arg,
+    add_worker_subcommand,
+    setup_subcommand,
+)
 from dffmpeg.common.colors import Colors, colorize
 from dffmpeg.common.crypto import CryptoManager
 from dffmpeg.common.formatting import (
@@ -236,89 +244,56 @@ async def security_generate_key(db: DB, args: argparse.Namespace):
 
 def main():
     parser = argparse.ArgumentParser(description="dffmpeg Administrative CLI")
-    parser.add_argument("--config", "-c", type=str, help="Path to coordinator config file")
+    add_config_arg(parser, help_text="Path to coordinator config file")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Status
-    status_parser = subparsers.add_parser("status", help="Show cluster status")
-    status_parser.add_argument("--window", "-w", type=int, default=3600, help="Time window in seconds (default: 3600)")
-    status_parser.set_defaults(func=status_cmd)
+    status_parser = setup_subcommand(subparsers, "status", "Show cluster status", func=status_cmd)
+    add_window_arg(status_parser)
 
     # User subcommands
-    user_parser = subparsers.add_parser("user", help="User management")
+    user_parser = setup_subcommand(subparsers, "user", "User management")
     user_subparsers = user_parser.add_subparsers(dest="subcommand", required=True)
 
     # user list
-    list_parser = user_subparsers.add_parser("list", help="List all users")
+    list_parser = setup_subcommand(user_subparsers, "list", "List all users", func=user_list)
     list_parser.add_argument("--show-key", action="store_true", help="Display HMAC keys")
-    list_parser.set_defaults(func=user_list)
 
     # user show
-    show_parser = user_subparsers.add_parser("show", help="Show user details")
-    show_parser.add_argument("client_id", help="Client ID of the user")
+    show_parser = setup_subcommand(user_subparsers, "show", "Show user details", func=user_show)
+    add_client_id_arg(show_parser, help_text="Client ID of the user")
     show_parser.add_argument("--show-key", action="store_true", help="Display HMAC key")
-    show_parser.set_defaults(func=user_show)
 
     # user add
-    add_parser = user_subparsers.add_parser("add", help="Add a new user")
-    add_parser.add_argument("client_id", help="Client ID for the new user")
+    add_parser = setup_subcommand(user_subparsers, "add", "Add a new user", func=user_add)
+    add_client_id_arg(add_parser, help_text="Client ID for the new user")
     add_parser.add_argument(
         "--role", choices=["client", "worker", "admin"], default="client", help="Role for the new user"
     )
-    add_parser.set_defaults(func=user_add)
 
     # user delete
-    delete_parser = user_subparsers.add_parser("delete", help="Delete a user")
-    delete_parser.add_argument("client_id", help="Client ID of the user to delete")
-    delete_parser.set_defaults(func=user_delete)
+    delete_parser = setup_subcommand(user_subparsers, "delete", "Delete a user", func=user_delete)
+    add_client_id_arg(delete_parser, help_text="Client ID of the user to delete")
 
     # user rotate-key
-    rotate_parser = user_subparsers.add_parser("rotate-key", help="Rotate a user's HMAC key")
-    rotate_parser.add_argument("client_id", help="Client ID of the user")
-    rotate_parser.set_defaults(func=user_rotate_key)
+    rotate_parser = setup_subcommand(user_subparsers, "rotate-key", "Rotate a user's HMAC key", func=user_rotate_key)
+    add_client_id_arg(rotate_parser, help_text="Client ID of the user")
 
     # Worker subcommands
-    worker_parser = subparsers.add_parser("worker", help="Worker management")
-    worker_subparsers = worker_parser.add_subparsers(dest="subcommand", required=True)
-
-    # worker list
-    w_list_parser = worker_subparsers.add_parser("list", help="List workers")
-    w_list_parser.add_argument(
-        "--window", "-w", type=int, default=3600 * 24, help="Time window for offline workers (default: 86400)"
-    )
-    w_list_parser.set_defaults(func=worker_list)
-
-    # worker show
-    w_show_parser = worker_subparsers.add_parser("show", help="Show worker details")
-    w_show_parser.add_argument("worker_id", help="Worker ID")
-    w_show_parser.set_defaults(func=worker_show)
+    add_worker_subcommand(subparsers, list_func=worker_list, show_func=worker_show)
 
     # Job subcommands
-    job_parser = subparsers.add_parser("job", help="Job management")
-    job_subparsers = job_parser.add_subparsers(dest="subcommand", required=True)
-
-    # job list
-    j_list_parser = job_subparsers.add_parser("list", help="List jobs")
-    j_list_parser.add_argument("--window", "-w", type=int, default=3600, help="Time window in seconds (default: 3600)")
-    j_list_parser.set_defaults(func=job_list)
-
-    # job show
-    j_show_parser = job_subparsers.add_parser("show", help="Show job details")
-    j_show_parser.add_argument("job_id", help="Job ID")
-    j_show_parser.set_defaults(func=job_show)
-
-    # job logs
-    j_logs_parser = job_subparsers.add_parser("logs", help="Fetch job logs")
-    j_logs_parser.add_argument("job_id", help="Job ID")
-    j_logs_parser.set_defaults(func=job_logs)
+    add_job_subcommand(subparsers, list_func=job_list, show_func=job_show, logs_func=job_logs)
 
     # Security subcommands
-    security_parser = subparsers.add_parser("security", help="Security management")
+    security_parser = setup_subcommand(subparsers, "security", "Security management")
     security_subparsers = security_parser.add_subparsers(dest="subcommand", required=True)
 
     # security re-encrypt
-    reencrypt_parser = security_subparsers.add_parser("re-encrypt", help="Re-encrypt stored HMAC keys")
+    reencrypt_parser = setup_subcommand(
+        security_subparsers, "re-encrypt", "Re-encrypt stored HMAC keys", func=security_reencrypt
+    )
     reencrypt_parser.add_argument("--client-id", help="Specific Client ID to re-encrypt")
     reencrypt_parser.add_argument("--key-id", help="Target Key ID for encryption (default: configured default)")
     reencrypt_parser.add_argument(
@@ -328,12 +303,12 @@ def main():
     reencrypt_parser.add_argument(
         "--batch-size", type=int, default=100, help="Number of users to process per batch (default: 100)"
     )
-    reencrypt_parser.set_defaults(func=security_reencrypt)
 
     # security generate-key
-    gen_key_parser = security_subparsers.add_parser("generate-key", help="Generate a new encryption key")
+    gen_key_parser = setup_subcommand(
+        security_subparsers, "generate-key", "Generate a new encryption key", func=security_generate_key
+    )
     gen_key_parser.add_argument("algorithm", help="Encryption algorithm to use (e.g., fernet)")
-    gen_key_parser.set_defaults(func=security_generate_key)
 
     args = parser.parse_args()
 

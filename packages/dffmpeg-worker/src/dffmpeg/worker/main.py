@@ -3,6 +3,7 @@ import asyncio
 import logging
 import signal
 
+from dffmpeg.common.cli_utils import add_config_arg
 from dffmpeg.worker.config import load_config
 from dffmpeg.worker.worker import Worker
 
@@ -48,7 +49,7 @@ async def run_worker(config):
 
 def main():
     parser = argparse.ArgumentParser(description="dffmpeg Worker")
-    parser.add_argument("--config", "-c", type=str, default=None, help="Path to config file")
+    add_config_arg(parser)
     args = parser.parse_args()
 
     try:
