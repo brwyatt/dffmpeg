@@ -31,6 +31,14 @@ Example:
 POST|/api/v1/jobs|1678886400|ba7816bf8f01...20015ad
 ```
 
+### Credential Scoping
+
+To improve security, the API enforces network-based access controls. Each registered identity (Client or Worker) can be restricted to specific IP addresses or CIDR ranges.
+
+*   **Default:** New users are created with global access (`0.0.0.0/0` and `::/0`) unless specified otherwise.
+*   **Enforcement:** The Coordinator checks the source IP of every request against the allowed CIDRs for the authenticated user. If the IP matches, the request proceeds to HMAC verification. If not, it is rejected with a `401 Unauthorized` error.
+*   **Proxies:** If the Coordinator is behind a trusted reverse proxy (configured via `trusted_proxies`), it will respect the `X-Forwarded-For` header to determine the real client IP. Localhost (`127.0.0.1`) is trusted by default if unspecified.
+
 ## Key Management
 
 Keys are managed by the Coordinator.

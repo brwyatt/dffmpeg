@@ -27,6 +27,7 @@ The Coordinator manages the cluster state, job queue, and worker registry.
 | `default_job_heartbeat_interval` | integer | `5` | Default interval (seconds) for job heartbeats if not specified by the client. |
 | `dev_mode` | boolean | `false` | Enable development mode (auto-reload, verbose logging). Can be set via `DFFMPEG_COORDINATOR_DEV=1`. |
 | `allowed_binaries` | list[string] | `["ffmpeg", "ffprobe"]` | List of supported binary names that workers can register and clients can request. |
+| `trusted_proxies` | list[string] | `["127.0.0.1"]` | List of trusted proxy IPs/CIDRs. If set, the Coordinator will respect `X-Forwarded-For` headers from these addresses. |
 
 ### Database Configuration (`database`)
 
