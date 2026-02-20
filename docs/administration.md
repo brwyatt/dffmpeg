@@ -71,7 +71,7 @@ dffmpeg-admin worker show <worker_id>
 Register a new user and generate an HMAC key.
 
 ```bash
-dffmpeg-admin user add <client_id> --role <role>
+dffmpeg-admin user add <client_id> --role <role> [--allowed-cidrs <cidr>...]
 ```
 
 *   **`<client_id>`**: The unique identifier for the user (e.g., `worker01`, `my-client`).
@@ -79,10 +79,11 @@ dffmpeg-admin user add <client_id> --role <role>
     *   `client`: Can submit jobs.
     *   `worker`: Can execute jobs.
     *   `admin`: Can perform administrative API calls (future use).
+*   **`--allowed-cidrs`**: (Optional) List of allowed IP addresses or CIDR ranges. Defaults to global access.
 
 **Example:**
 ```bash
-dffmpeg-admin user add worker01 --role worker
+dffmpeg-admin user add worker01 --role worker --allowed-cidrs 192.168.1.50 10.0.0.0/8
 # Output: Generated HMAC key for worker01: <YOUR_GENERATED_KEY>
 ```
 
@@ -133,6 +134,22 @@ dffmpeg-admin user rotate-key <client_id>
 ```bash
 dffmpeg-admin user rotate-key worker01
 # Output: Rotated HMAC key for worker01: <NEW_GENERATED_KEY>
+```
+
+#### Set User Scope
+
+Update the list of allowed IP addresses or CIDR ranges for a user.
+
+```bash
+dffmpeg-admin user set-scope <client_id> <cidr> [cidr...]
+```
+
+*   **`<client_id>`**: The user to update.
+*   **`<cidr>`**: One or more IP addresses or CIDR ranges. To allow global access, use `0.0.0.0/0 ::/0`.
+
+**Example:**
+```bash
+dffmpeg-admin user set-scope worker01 192.168.1.50 10.0.0.0/8
 ```
 
 #### Delete User

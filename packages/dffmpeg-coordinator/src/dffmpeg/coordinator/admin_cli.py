@@ -52,6 +52,8 @@ async def user_show(db: DB, args: argparse.Namespace):
     print(f"Client ID: {colorize(identity.client_id, Colors.CYAN)}")
     role_color = Colors.GREEN if identity.role == "client" else Colors.BLUE if identity.role == "worker" else Colors.RED
     print(f"Role:      {colorize(identity.role, role_color)}")
+    cidrs_str = ", ".join(str(c) for c in identity.allowed_cidrs)
+    print(f"Scope:     {cidrs_str}")
     if show_key:
         print(f"HMAC Key:  {identity.hmac_key}")
 
@@ -59,6 +61,8 @@ async def user_show(db: DB, args: argparse.Namespace):
 async def user_add(db: DB, args: argparse.Namespace):
     client_id = args.client_id
     role = cast(IdentityRole, args.role)
+    allowed_cidrs = args.allowed_cidrs
+
     # Check if user already exists
     existing = await db.auth.get_identity(client_id)
     if existing:
@@ -67,7 +71,16 @@ async def user_add(db: DB, args: argparse.Namespace):
 
     hmac_key = RequestSigner.generate_key()
 
-    identity = AuthenticatedIdentity(client_id=client_id, role=role, hmac_key=hmac_key, authenticated=False)
+    kwargs = {
+        "client_id": client_id,
+        "role": role,
+        "hmac_key": hmac_key,
+        "authenticated": False,
+    }
+    if allowed_cidrs:
+        kwargs["allowed_cidrs"] = allowed_cidrs
+
+    identity = AuthenticatedIdentity(**kwargs)
     await db.auth.add_identity(identity)
     print(colorize(f"User '{client_id}' added successfully.", Colors.GREEN))
     print(f"HMAC Key: {hmac_key}")
@@ -96,6 +109,28 @@ async def user_rotate_key(db: DB, args: argparse.Namespace):
     await db.auth.add_identity(identity)
     print(colorize(f"HMAC Key for '{client_id}' rotated successfully.", Colors.GREEN))
     print(f"New HMAC Key: {hmac_key}")
+
+
+async def user_set_scope(db: DB, args: argparse.Namespace):
+    client_id = args.client_id
+    cidrs = args.cidrs
+
+    # We need the HMAC key to re-save the identity (add_identity requires it)
+    identity = await db.auth.get_identity(client_id, include_hmac_key=True)
+    if not identity:
+        print(colorize(f"User '{client_id}' not found.", Colors.RED))
+        sys.exit(1)
+
+    # Validate CIDRs by recreating Identity model
+    try:
+        identity = identity.model_copy(update={"allowed_cidrs": cidrs})
+    except Exception as e:
+        print(colorize(f"Invalid CIDR list: {e}", Colors.RED))
+        sys.exit(1)
+
+    await db.auth.add_identity(identity)
+    print(colorize(f"Scope for '{client_id}' updated successfully.", Colors.GREEN))
+    print(f"New Scope: {', '.join(str(c) for c in identity.allowed_cidrs)}")
 
 
 async def worker_list(db: DB, args: argparse.Namespace):
@@ -271,6 +306,9 @@ def main():
     add_parser.add_argument(
         "--role", choices=["client", "worker", "admin"], default="client", help="Role for the new user"
     )
+    add_parser.add_argument(
+        "--allowed-cidrs", nargs="+", help="List of allowed IP addresses or CIDR ranges (default: global)"
+    )
 
     # user delete
     delete_parser = setup_subcommand(user_subparsers, "delete", "Delete a user", func=user_delete)
@@ -279,6 +317,13 @@ def main():
     # user rotate-key
     rotate_parser = setup_subcommand(user_subparsers, "rotate-key", "Rotate a user's HMAC key", func=user_rotate_key)
     add_client_id_arg(rotate_parser, help_text="Client ID of the user")
+
+    # user set-scope
+    scope_parser = setup_subcommand(
+        user_subparsers, "set-scope", "Update a user's allowed IP scope", func=user_set_scope
+    )
+    add_client_id_arg(scope_parser, help_text="Client ID of the user")
+    scope_parser.add_argument("cidrs", nargs="+", help="List of allowed IP addresses or CIDR ranges")
 
     # Worker subcommands
     add_worker_subcommand(subparsers, list_func=worker_list, show_func=worker_show)
