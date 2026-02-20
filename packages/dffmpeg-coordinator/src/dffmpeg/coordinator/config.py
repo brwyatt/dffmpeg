@@ -34,6 +34,7 @@ class CoordinatorConfig(BaseModel):
     web_dashboard_enabled: bool = True
     dev_mode: bool = False
     allowed_binaries: List[str] = Field(default_factory=lambda: ["ffmpeg", "ffprobe"])
+    trusted_proxies: List[str] = Field(default_factory=lambda: ["127.0.0.1"])
 
 
 def load_config(path: Path | str | None = None) -> CoordinatorConfig:

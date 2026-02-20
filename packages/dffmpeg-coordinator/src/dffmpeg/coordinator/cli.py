@@ -44,6 +44,8 @@ def main():
         port=port,
         reload=args.dev,
         log_level=log_level,
+        # We manually add ProxyHeadersMiddleware in create_app with config values
+        proxy_headers=False,
     )
 
 

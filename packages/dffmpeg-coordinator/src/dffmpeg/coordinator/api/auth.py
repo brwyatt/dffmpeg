@@ -1,3 +1,4 @@
+import ipaddress
 from logging import getLogger
 from typing import Optional
 
@@ -43,6 +44,26 @@ async def _get_verified_identity_from_request(
     if not client_identity or not client_identity.hmac_key:
         logger.warning(f"Unable to find a key for client {request_client_id}")
         raise HTTPException(status_code=401, detail="Invalid user")
+
+    # Validate IP against allowed CIDRs
+    if request.client and request.client.host:
+        try:
+            client_ip = ipaddress.ip_address(request.client.host)
+            allowed = False
+            for cidr in client_identity.allowed_cidrs:
+                if client_ip in cidr:
+                    allowed = True
+                    break
+
+            if not allowed:
+                logger.warning(
+                    f"Client {request_client_id} blocked from IP {request.client.host} "
+                    f"(Allowed: {client_identity.allowed_cidrs})"
+                )
+                raise HTTPException(status_code=401, detail="Client IP not allowed")
+        except ValueError:
+            logger.warning(f"Invalid client IP address: {request.client.host}")
+            raise HTTPException(status_code=401, detail="Invalid client IP")
 
     body = await request.body()
     signer = RequestSigner(client_identity.hmac_key)

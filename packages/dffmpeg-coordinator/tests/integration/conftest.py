@@ -64,8 +64,16 @@ def sign_request():
 
 @pytest.fixture
 def create_auth_identity():
-    async def _create(app: FastAPI, client_id: str, role: IdentityRole, key: str | None):
-        await app.state.db.auth.add_identity(AuthenticatedIdentity(client_id=client_id, role=role, hmac_key=key))
+    async def _create(app: FastAPI, client_id: str, role: IdentityRole, key: str | None, allowed_cidrs: list = None):
+        kwargs = {
+            "client_id": client_id,
+            "role": role,
+            "hmac_key": key,
+        }
+        if allowed_cidrs is not None:
+            kwargs["allowed_cidrs"] = allowed_cidrs
+
+        await app.state.db.auth.add_identity(AuthenticatedIdentity(**kwargs))
 
     return _create
 
