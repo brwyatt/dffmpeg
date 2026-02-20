@@ -1,3 +1,6 @@
+import json
+import logging
+import secrets
 from typing import Iterable, Optional
 
 from sqlalchemy import delete, or_, select, update
@@ -6,8 +9,35 @@ from dffmpeg.common.models import AuthenticatedIdentity
 from dffmpeg.coordinator.db.auth import AuthRepository
 from dffmpeg.coordinator.db.engines.sqlalchemy import SQLAlchemyDB
 
+logger = logging.getLogger(__name__)
+
 
 class SQLAlchemyAuthRepository(AuthRepository, SQLAlchemyDB):
+    def _row_to_identity(self, row, include_hmac_key: bool = False) -> AuthenticatedIdentity:
+        def parse_json(value):
+            if isinstance(value, str):
+                return json.loads(value)
+            return value
+
+        hmac_key = row["hmac_key"]
+        if include_hmac_key:
+            hmac_key = self._decrypt(hmac_key, row["key_id"])
+
+        kwargs = {
+            "client_id": row["client_id"],
+            "role": row["role"],
+            "hmac_key": hmac_key if include_hmac_key else None,
+            "authenticated": False,
+        }
+
+        # If allowed_cidrs is None (e.g. from legacy row or manual insert),
+        # don't pass it to Pydantic so the default_factory triggers.
+        allowed_cidrs = parse_json(row.get("allowed_cidrs"))
+        if allowed_cidrs is not None:
+            kwargs["allowed_cidrs"] = allowed_cidrs
+
+        return AuthenticatedIdentity(**kwargs)
+
     async def get_identity(self, client_id: str, include_hmac_key: bool = False) -> Optional[AuthenticatedIdentity]:
         query = select(self.table).where(self.table.c.client_id == client_id)
         sql, params = self.compile_query(query)
@@ -16,35 +46,34 @@ class SQLAlchemyAuthRepository(AuthRepository, SQLAlchemyDB):
         if not result:
             return None
 
-        hmac_key = result["hmac_key"]
-        if include_hmac_key:
-            hmac_key = self._decrypt(hmac_key, result["key_id"])
-
-        return AuthenticatedIdentity(
-            client_id=result["client_id"],
-            role=result["role"],
-            hmac_key=hmac_key if include_hmac_key else None,
-            authenticated=False,
-        )
+        return self._row_to_identity(result, include_hmac_key=include_hmac_key)
 
     async def _upsert_identity(self, identity: AuthenticatedIdentity, encrypted_key: str, key_id: Optional[str]):
+        identity_data = identity.model_dump(mode="json")
+
         # Portable implementation: SELECT then UPDATE/INSERT
-        query = select(self.table.c.client_id).where(self.table.c.client_id == identity.client_id)
+        query = select(self.table.c.client_id).where(self.table.c.client_id == identity_data["client_id"])
         sql, params = self.compile_query(query)
         exists = await self.get_row(sql, params)
 
         if exists:
             query = (
                 update(self.table)
-                .where(self.table.c.client_id == identity.client_id)
-                .values(role=identity.role, hmac_key=encrypted_key, key_id=key_id)
+                .where(self.table.c.client_id == identity_data["client_id"])
+                .values(
+                    role=identity_data["role"],
+                    hmac_key=encrypted_key,
+                    key_id=key_id,
+                    allowed_cidrs=identity_data["allowed_cidrs"],
+                )
             )
         else:
             query = self.table.insert().values(
-                client_id=identity.client_id,
-                role=identity.role,
+                client_id=identity_data["client_id"],
+                role=identity_data["role"],
                 hmac_key=encrypted_key,
                 key_id=key_id,
+                allowed_cidrs=identity_data["allowed_cidrs"],
             )
 
         sql, params = self.compile_query(query)
@@ -62,21 +91,28 @@ class SQLAlchemyAuthRepository(AuthRepository, SQLAlchemyDB):
         sql, params = self.compile_query(query)
         results = await self.get_rows(sql, params)
 
-        identities = []
-        for row in results:
-            hmac_key = row["hmac_key"]
-            if include_hmac_key:
-                hmac_key = self._decrypt(hmac_key, row["key_id"])
+        return [self._row_to_identity(row, include_hmac_key=include_hmac_key) for row in results]
 
-            identities.append(
-                AuthenticatedIdentity(
-                    client_id=row["client_id"],
-                    role=row["role"],
-                    hmac_key=hmac_key if include_hmac_key else None,
-                    authenticated=False,
-                )
+    async def bootstrap_local_admin(self) -> None:
+        """
+        Ensures a 'localadmin' user exists with localhost scoping.
+        """
+        local_admin_id = "localadmin"
+        identity = await self.get_identity(local_admin_id)
+        if not identity:
+            logger.info("Bootstrapping 'localadmin' user.")
+            # Generate a random key
+            hmac_key = secrets.token_urlsafe(33)
+
+            identity = AuthenticatedIdentity(
+                client_id=local_admin_id,
+                role="admin",
+                hmac_key=hmac_key,
+                allowed_cidrs=["127.0.0.0/8", "::1/128"],
+                authenticated=True,
             )
-        return identities
+            await self.add_identity(identity)
+            logger.info("Created 'localadmin' user with scoped access to localhost.")
 
     async def delete_identity(self, client_id: str) -> bool:
         query = delete(self.table).where(self.table.c.client_id == client_id)

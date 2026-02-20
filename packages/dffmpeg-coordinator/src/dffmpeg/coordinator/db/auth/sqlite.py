@@ -15,11 +15,25 @@ class SQLiteAuthRepository(SQLAlchemyAuthRepository, SQLiteDB):
         SQLiteDB.__init__(self, path=path, tablename=tablename)
 
     async def _upsert_identity(self, identity: AuthenticatedIdentity, encrypted_key: str, key_id: Optional[str]):
+        identity_data = identity.model_dump(mode="json")
+
         stmt = (
             insert(self.table)
-            .values(client_id=identity.client_id, role=identity.role, hmac_key=encrypted_key, key_id=key_id)
+            .values(
+                client_id=identity_data["client_id"],
+                role=identity_data["role"],
+                hmac_key=encrypted_key,
+                key_id=key_id,
+                allowed_cidrs=identity_data["allowed_cidrs"],
+            )
             .on_conflict_do_update(
-                index_elements=["client_id"], set_=dict(role=identity.role, hmac_key=encrypted_key, key_id=key_id)
+                index_elements=["client_id"],
+                set_=dict(
+                    role=identity_data["role"],
+                    hmac_key=encrypted_key,
+                    key_id=key_id,
+                    allowed_cidrs=identity_data["allowed_cidrs"],
+                ),
             )
         )
         sql, params = self.compile_query(stmt)

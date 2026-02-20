@@ -1,6 +1,6 @@
 from typing import Dict, Iterable, Optional, Tuple
 
-from sqlalchemy import TIMESTAMP, Column, MetaData, String, Table, func
+from sqlalchemy import JSON, TIMESTAMP, Column, MetaData, String, Table, func
 
 from dffmpeg.common.crypto import CryptoManager
 from dffmpeg.common.models import AuthenticatedIdentity
@@ -17,6 +17,7 @@ class AuthRepository(BaseDB):
         Column("role", String(50), nullable=False),
         Column("hmac_key", String(255), nullable=False),
         Column("key_id", String(255), nullable=True),
+        Column("allowed_cidrs", JSON, nullable=True),
         Column("created_at", TIMESTAMP, server_default=func.current_timestamp()),
     )
 
@@ -49,6 +50,12 @@ class AuthRepository(BaseDB):
         raise NotImplementedError()
 
     async def get_identities_not_using_key(self, key_id: Optional[str] = None, limit: int = 100) -> Iterable[str]:
+        raise NotImplementedError()
+
+    async def bootstrap_local_admin(self) -> None:
+        """
+        Ensures a 'localadmin' user exists with localhost scoping.
+        """
         raise NotImplementedError()
 
     def _encrypt(self, hmac_key: str, key_id: Optional[str] = None) -> Tuple[str, Optional[str]]:

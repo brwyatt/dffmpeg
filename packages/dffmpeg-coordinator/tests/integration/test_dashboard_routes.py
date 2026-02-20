@@ -5,9 +5,8 @@ from dffmpeg.coordinator.config import CoordinatorConfig
 from dffmpeg.coordinator.db import DBConfig
 
 
-def get_test_config(web_enabled: bool):
-    # Use in-memory SQLite for testing to avoid path issues and persistence
-    repo_config = {"engine": "sqlite", "path": ":memory:"}
+def get_test_config(web_enabled: bool, db_path: str):
+    repo_config = {"engine": "sqlite", "path": db_path}
     db_config = DBConfig(
         repositories={
             "auth": repo_config,
@@ -19,8 +18,8 @@ def get_test_config(web_enabled: bool):
     return CoordinatorConfig(web_dashboard_enabled=web_enabled, database=db_config)
 
 
-def test_dashboard_redirect():
-    config = get_test_config(True)
+def test_dashboard_redirect(tmp_path):
+    config = get_test_config(True, str(tmp_path / "test.db"))
     app = create_app(config=config)
     client = TestClient(app)
 
@@ -30,8 +29,8 @@ def test_dashboard_redirect():
     assert response.headers["location"] == "/status"
 
 
-def test_dashboard_disabled_redirect():
-    config = get_test_config(False)
+def test_dashboard_disabled_redirect(tmp_path):
+    config = get_test_config(False, str(tmp_path / "test.db"))
     app = create_app(config=config)
     client = TestClient(app)
 
@@ -41,8 +40,8 @@ def test_dashboard_disabled_redirect():
     assert response.headers["location"] == "/health"
 
 
-def test_dashboard_disabled_404():
-    config = get_test_config(False)
+def test_dashboard_disabled_404(tmp_path):
+    config = get_test_config(False, str(tmp_path / "test.db"))
     app = create_app(config=config)
     with TestClient(app) as client:
         # Test dashboard page returns 404 when disabled

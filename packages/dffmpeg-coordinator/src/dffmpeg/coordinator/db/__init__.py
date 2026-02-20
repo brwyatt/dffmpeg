@@ -70,6 +70,9 @@ class DB:
         await self.messages.setup()
         await self.workers.setup()
 
+        # Bootstrap local admin user
+        await self.auth.bootstrap_local_admin()
+
     async def health_check(self) -> Dict[str, ComponentHealth]:
         """
         Check the health of all database repositories.

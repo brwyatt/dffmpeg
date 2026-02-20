@@ -1,3 +1,4 @@
+import ipaddress
 import time
 from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
@@ -10,6 +11,8 @@ OptionalClientId: str | None = Field(default=None, min_length=1)
 
 type IdentityRole = Literal["client", "worker", "admin"]
 
+type CIDR = ipaddress.IPv4Network | ipaddress.IPv6Network
+
 
 class AuthenticatedIdentity(BaseModel):
     """
@@ -21,6 +24,7 @@ class AuthenticatedIdentity(BaseModel):
         role (Literal["client", "worker", "admin"]): The role of the client.
         timestamp (float): The timestamp of the request/authentication.
         hmac_key (Optional[str]): The HMAC key used for signing (usually filtered out in responses).
+        allowed_cidrs (List[CIDR]): Optional list of allowed network addresses. (Defaults to "0.0.0.0/0", "::/0")
     """
 
     authenticated: bool = False
@@ -28,6 +32,12 @@ class AuthenticatedIdentity(BaseModel):
     role: IdentityRole
     timestamp: float = Field(default_factory=time.time)
     hmac_key: Optional[str] = Field(min_length=44, max_length=44)
+    allowed_cidrs: List[CIDR] = Field(
+        default_factory=lambda: [
+            ipaddress.ip_network("0.0.0.0/0"),
+            ipaddress.ip_network("::/0"),
+        ],
+    )
 
 
 TransportMetadata = Dict[str, Any]
