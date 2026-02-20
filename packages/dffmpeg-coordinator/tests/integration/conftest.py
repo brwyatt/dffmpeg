@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import pytest
 from fastapi import FastAPI
@@ -64,7 +64,9 @@ def sign_request():
 
 @pytest.fixture
 def create_auth_identity():
-    async def _create(app: FastAPI, client_id: str, role: IdentityRole, key: str | None, allowed_cidrs: list = None):
+    async def _create(
+        app: FastAPI, client_id: str, role: IdentityRole, key: str | None, allowed_cidrs: Optional[List] = None
+    ):
         kwargs = {
             "client_id": client_id,
             "role": role,

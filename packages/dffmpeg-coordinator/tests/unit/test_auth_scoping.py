@@ -55,7 +55,7 @@ async def test_bootstrap_local_admin(db: DB):
     assert ipaddress.IPv4Network("127.0.0.0/8") in admin.allowed_cidrs
     assert ipaddress.IPv6Network("::1/128") in admin.allowed_cidrs
     assert len(admin.allowed_cidrs) == 2
-    assert len(admin.hmac_key) == 44
+    assert len(str(admin.hmac_key)) == 44
 
 
 @pytest.mark.asyncio

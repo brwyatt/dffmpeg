@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import logging
 import secrets
@@ -108,7 +109,7 @@ class SQLAlchemyAuthRepository(AuthRepository, SQLAlchemyDB):
                 client_id=local_admin_id,
                 role="admin",
                 hmac_key=hmac_key,
-                allowed_cidrs=["127.0.0.0/8", "::1/128"],
+                allowed_cidrs=[ipaddress.IPv4Network("127.0.0.0/8"), ipaddress.IPv6Network("::1/128")],
                 authenticated=True,
             )
             await self.add_identity(identity)
