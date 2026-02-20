@@ -2,8 +2,10 @@ import argparse
 import asyncio
 import logging
 import signal
+import sys
 
 from dffmpeg.common.cli_utils import add_config_arg
+from dffmpeg.common.version import get_package_version
 from dffmpeg.worker.config import load_config
 from dffmpeg.worker.worker import Worker
 
@@ -50,7 +52,12 @@ async def run_worker(config):
 def main():
     parser = argparse.ArgumentParser(description="dffmpeg Worker")
     add_config_arg(parser)
+    parser.add_argument("--version", action="store_true", help="Print version and exit")
     args = parser.parse_args()
+
+    if args.version:
+        print(f"dffmpeg-worker {get_package_version('dffmpeg-worker')}")
+        sys.exit(0)
 
     try:
         config = load_config(args.config)

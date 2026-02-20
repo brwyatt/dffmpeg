@@ -5,6 +5,7 @@ import sys
 import uvicorn
 
 from dffmpeg.common.cli_utils import add_config_arg
+from dffmpeg.common.version import get_package_version
 from dffmpeg.coordinator.config import load_config
 
 
@@ -14,8 +15,13 @@ def main():
     parser.add_argument("--host", type=str, help="Bind host")
     parser.add_argument("--port", type=int, help="Bind port")
     parser.add_argument("--dev", action="store_true", help="Enable development mode (reload, debug logs)")
+    parser.add_argument("--version", action="store_true", help="Print version and exit")
 
     args = parser.parse_args()
+
+    if args.version:
+        print(f"dffmpeg-coordinator {get_package_version('dffmpeg-coordinator')}")
+        sys.exit(0)
 
     if args.config:
         os.environ["DFFMPEG_COORDINATOR_CONFIG"] = args.config

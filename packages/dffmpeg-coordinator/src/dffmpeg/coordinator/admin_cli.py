@@ -24,6 +24,7 @@ from dffmpeg.common.formatting import (
     print_worker_list,
 )
 from dffmpeg.common.models import AuthenticatedIdentity, IdentityRole, JobLogsMessage
+from dffmpeg.common.version import get_package_version
 from dffmpeg.coordinator.config import load_config
 from dffmpeg.coordinator.db import DB
 
@@ -280,8 +281,9 @@ async def security_generate_key(db: DB, args: argparse.Namespace):
 def main():
     parser = argparse.ArgumentParser(description="dffmpeg Administrative CLI")
     add_config_arg(parser, help_text="Path to coordinator config file")
+    parser.add_argument("--version", action="store_true", help="Print version and exit")
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
 
     # Status
     status_parser = setup_subcommand(subparsers, "status", "Show cluster status", func=status_cmd)
@@ -356,6 +358,14 @@ def main():
     gen_key_parser.add_argument("algorithm", help="Encryption algorithm to use (e.g., fernet)")
 
     args = parser.parse_args()
+
+    if args.version:
+        print(f"dffmpeg-admin {get_package_version('dffmpeg-coordinator')}")
+        sys.exit(0)
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
 
     if args.config:
         os.environ["DFFMPEG_COORDINATOR_CONFIG"] = args.config

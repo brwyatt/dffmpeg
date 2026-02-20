@@ -24,6 +24,7 @@ from dffmpeg.common.formatting import (
     print_worker_list,
 )
 from dffmpeg.common.models import JobLogsMessage, JobStatusMessage
+from dffmpeg.common.version import get_package_version
 
 # Configure logging
 logging.basicConfig(level=logging.WARNING, format="%(message)s")
@@ -264,8 +265,9 @@ async def job_logs(client: DFFmpegClient, args: argparse.Namespace) -> int:
 def main():
     parser = argparse.ArgumentParser(description="dffmpeg client CLI")
     add_config_arg(parser)
+    parser.add_argument("--version", action="store_true", help="Print version and exit")
 
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
 
     # Submit
     submit_parser = setup_subcommand(subparsers, "submit", "Submit a job", func=job_submit)
@@ -301,6 +303,14 @@ def main():
     add_job_id_arg(j_attach)
 
     args = parser.parse_args()
+
+    if args.version:
+        print(f"dffmpeg-client {get_package_version('dffmpeg-client')}")
+        sys.exit(0)
+
+    if not args.command:
+        parser.print_help()
+        sys.exit(1)
 
     try:
         config = load_config(args.config)

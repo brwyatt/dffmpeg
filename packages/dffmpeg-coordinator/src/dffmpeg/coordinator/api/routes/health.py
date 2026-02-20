@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Response
 
 from dffmpeg.common.models import HealthResponse
+from dffmpeg.common.version import get_package_version
 from dffmpeg.coordinator.api.dependencies import get_db, get_transports
 from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.transports import TransportManager
@@ -27,8 +28,10 @@ async def health(
     Returns:
         HealthResponse: The health status of the service.
     """
+    version = get_package_version("dffmpeg-coordinator")
+
     if not deep:
-        return HealthResponse(status="online")
+        return HealthResponse(status="online", version=version)
 
     db_health = await db.health_check()
     transport_health = await transports.health_check()
@@ -43,6 +46,7 @@ async def health(
 
     return HealthResponse(
         status=status,
+        version=version,
         databases=db_health,
         transports=transport_health,
     )

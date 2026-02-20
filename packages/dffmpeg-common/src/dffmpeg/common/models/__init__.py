@@ -322,10 +322,12 @@ class HealthResponse(BaseModel):
 
     Attributes:
         status (Literal["online", "unhealthy"]): Overall status of the service.
+        version (Optional[str]): The version of the service.
         databases (Optional[Dict[str, ComponentHealth]]): Health status of database repositories.
         transports (Optional[Dict[str, ComponentHealth]]): Health status of transport implementations.
     """
 
     status: Literal["online", "unhealthy"]
+    version: Optional[str] = None
     databases: Optional[Dict[str, ComponentHealth]] = None
     transports: Optional[Dict[str, ComponentHealth]] = None

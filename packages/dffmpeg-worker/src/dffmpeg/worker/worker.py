@@ -1,5 +1,4 @@
 import asyncio
-import importlib.metadata
 import logging
 import random
 from typing import Dict, Optional
@@ -16,6 +15,7 @@ from dffmpeg.common.models import (
     WorkerDeregistration,
     WorkerRegistration,
 )
+from dffmpeg.common.version import get_package_version
 from dffmpeg.worker.config import WorkerConfig
 from dffmpeg.worker.executor import SubprocessJobExecutor
 from dffmpeg.worker.job import JobRunner
@@ -24,10 +24,7 @@ from dffmpeg.worker.transport import WorkerTransportManager
 
 logger = logging.getLogger(__name__)
 
-try:
-    WORKER_VERSION = importlib.metadata.version("dffmpeg-worker")
-except importlib.metadata.PackageNotFoundError:
-    WORKER_VERSION = "unknown"
+WORKER_VERSION = get_package_version("dffmpeg-worker")
 
 
 class Worker:
