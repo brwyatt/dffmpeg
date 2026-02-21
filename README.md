@@ -44,19 +44,16 @@ These instructions assume you have (at least) two hosts:
 ### Host A: Media Server Setup
 
 1.  **Install Components:**
-    Create a virtual environment in `/opt/dffmpeg` and install the packages.
+    Download and run the installation script. You will need to run it twice: once for the **Coordinator** and once for the **Client**.
     ```bash
-    # Create Venv
-    sudo python3 -m venv /opt/dffmpeg
-
-    # Install Common, Coordinator, and Client
-    sudo /opt/dffmpeg/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-common"
-    sudo /opt/dffmpeg/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-coordinator"
-    sudo /opt/dffmpeg/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-client"
+    curl -O https://raw.githubusercontent.com/brwyatt/dffmpeg/main/scripts/install.sh
+    chmod +x install.sh
+    sudo ./install.sh
+    # Select "Coordinator" on the first run, then "Client" on the second run.
     ```
 
 2.  **Configure Coordinator:**
-    Create `/opt/dffmpeg/dffmpeg-coordinator.yaml`:
+    Create `/opt/dffmpeg/coordinator/dffmpeg-coordinator.yaml`:
     ```yaml
     database:
       engine_defaults:
@@ -71,21 +68,21 @@ These instructions assume you have (at least) two hosts:
 
 3.  **Start the Coordinator:**
     You can run it manually for testing, or set up a system service (recommended).
-    *   **Manual:** `/opt/dffmpeg/bin/dffmpeg-coordinator`
+    *   **Manual:** `/opt/dffmpeg/coordinator/bin/dffmpeg-coordinator`
     *   **Systemd:** See example at `docs/examples/systemd/dffmpeg-coordinator.service`.
 
 4.  **Create Users:**
     Use the admin CLI to generate credentials.
     ```bash
     # Create client user (Save the Output Key!)
-    sudo /opt/dffmpeg/bin/dffmpeg-admin user add jellyfin --role client
+    sudo /opt/dffmpeg/coordinator/bin/dffmpeg-admin user add jellyfin --role client
 
     # Create worker user (Save the Output Key!)
-    sudo /opt/dffmpeg/bin/dffmpeg-admin user add worker01 --role worker
+    sudo /opt/dffmpeg/coordinator/bin/dffmpeg-admin user add worker01 --role worker
     ```
 
 5.  **Configure Client:**
-    Create `/opt/dffmpeg/dffmpeg-client.yaml` (Ensure this file is readable by the `jellyfin` user!):
+    Create `/opt/dffmpeg/client/dffmpeg-client.yaml` (Ensure this file is readable by the `jellyfin` user!):
     ```yaml
     client_id: jellyfin
     hmac_key: "YOUR_CLIENT_KEY_FROM_STEP_4"
@@ -102,25 +99,22 @@ These instructions assume you have (at least) two hosts:
     Symlink the `dffmpeg` proxy to where your media server expects `ffmpeg`.
     ```bash
     # Link it (Example for Jellyfin)
-    sudo ln -s /opt/dffmpeg/bin/dffmpeg_proxy /usr/lib/jellyfin-ffmpeg/ffmpeg
-    sudo ln -s /opt/dffmpeg/bin/dffmpeg_proxy /usr/lib/jellyfin-ffmpeg/ffprobe
+    sudo ln -s /opt/dffmpeg/client/bin/dffmpeg_proxy /usr/lib/jellyfin-ffmpeg/ffmpeg
+    sudo ln -s /opt/dffmpeg/client/bin/dffmpeg_proxy /usr/lib/jellyfin-ffmpeg/ffprobe
     ```
 
 ### Host B: Worker Setup
 
 1.  **Install Worker:**
-    Create a virtual environment in `/opt/dffmpeg` and install the packages.
+    Download and run the installation script. This will ask you which components you want to install (Select "Worker").
     ```bash
-    # Create Venv
-    sudo python3 -m venv /opt/dffmpeg
-
-    # Install Common and Worker
-    sudo /opt/dffmpeg/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-common"
-    sudo /opt/dffmpeg/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-worker"
+    curl -O https://raw.githubusercontent.com/brwyatt/dffmpeg/main/scripts/install.sh
+    chmod +x install.sh
+    sudo ./install.sh
     ```
 
 2.  **Configure Worker:**
-    Create `/opt/dffmpeg/dffmpeg-worker.yaml`:
+    Create `/opt/dffmpeg/worker/dffmpeg-worker.yaml`:
     ```yaml
     client_id: worker01
     hmac_key: "YOUR_WORKER_KEY_FROM_STEP_4"
@@ -138,7 +132,7 @@ These instructions assume you have (at least) two hosts:
 
 3.  **Start Worker:**
     You can run it manually for testing, or set up a system service (recommended).
-    *   **Manual:** `/opt/dffmpeg/bin/dffmpeg-worker`
+    *   **Manual:** `/opt/dffmpeg/worker/bin/dffmpeg-worker`
     *   **Systemd:** See example at `docs/examples/systemd/dffmpeg-worker.service`.
 
 *For more details and advanced configuration, see [Getting Started](docs/getting-started.md).*

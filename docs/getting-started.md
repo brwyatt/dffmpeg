@@ -13,7 +13,7 @@ We will install each component into its own virtual environment under `/opt/dffm
 
 ## 0. System Preparation
 
-Create a dedicated system user for running the services:
+(**Optional**) Create a dedicated system user for running the services:
 
 ```bash
 sudo useradd -r -s /bin/false dffmpeg
@@ -25,17 +25,12 @@ The Coordinator manages the cluster state.
 
 ### Installation
 
-1.  **Create directory and virtual environment**:
+1.  **Run the installation script**:
     ```bash
-    sudo mkdir -p /opt/dffmpeg/coordinator
-    sudo chown dffmpeg:dffmpeg /opt/dffmpeg/coordinator
-    sudo -u dffmpeg python3 -m venv /opt/dffmpeg/coordinator
-    ```
-
-2.  **Install the packages**:
-    ```bash
-    sudo -u dffmpeg /opt/dffmpeg/coordinator/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-common"
-    sudo -u dffmpeg /opt/dffmpeg/coordinator/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-coordinator"
+    curl -O https://raw.githubusercontent.com/brwyatt/dffmpeg/main/scripts/install.sh
+    chmod +x install.sh
+    sudo ./install.sh
+    # Select "Coordinator" when prompted
     ```
 
 ### Configuration
@@ -66,11 +61,11 @@ For a full list of configuration options, including detailed database settings, 
     web_dashboard_enabled: true
     ```
 
-2.  **Initialize the Admin User**:
+2.  **Initialize Users**:
     You need to create a user for the client and the worker. For more details on user management, see [Administration Guide](administration.md).
 
     ```bash
-    # Create an admin/client user
+    # Create a client user
     sudo /opt/dffmpeg/coordinator/bin/dffmpeg-admin --config /opt/dffmpeg/coordinator/dffmpeg-coordinator.yaml user add my-client --role client
     # Output: Generated HMAC key for my-client: <YOUR_CLIENT_KEY>
 
@@ -92,17 +87,12 @@ The Worker executes the jobs.
 
 ### Installation
 
-1.  **Create directory and virtual environment**:
+1.  **Run the installation script**:
     ```bash
-    sudo mkdir -p /opt/dffmpeg/worker
-    sudo chown dffmpeg:dffmpeg /opt/dffmpeg/worker
-    sudo -u dffmpeg python3 -m venv /opt/dffmpeg/worker
-    ```
-
-2.  **Install the packages**:
-    ```bash
-    sudo -u dffmpeg /opt/dffmpeg/worker/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-common"
-    sudo -u dffmpeg /opt/dffmpeg/worker/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-worker"
+    curl -O https://raw.githubusercontent.com/brwyatt/dffmpeg/main/scripts/install.sh
+    chmod +x install.sh
+    sudo ./install.sh
+    # Select "Worker" when prompted
     ```
 
 ### Configuration
@@ -138,16 +128,12 @@ The Client submits jobs.
 
 ### Installation
 
-1.  **Create directory and virtual environment**:
+1.  **Run the installation script**:
     ```bash
-    sudo mkdir -p /opt/dffmpeg/client
-    sudo python3 -m venv /opt/dffmpeg/client
-    ```
-
-2.  **Install the packages**:
-    ```bash
-    sudo /opt/dffmpeg/client/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-common"
-    sudo /opt/dffmpeg/client/bin/pip install "git+https://github.com/brwyatt/dffmpeg.git#subdirectory=packages/dffmpeg-client"
+    curl -O https://raw.githubusercontent.com/brwyatt/dffmpeg/main/scripts/install.sh
+    chmod +x install.sh
+    sudo ./install.sh
+    # Select "Client" when prompted
     ```
 
 ### Configuration
