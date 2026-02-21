@@ -5,10 +5,15 @@ authors = [
     { name="Bryan Wyatt", email="brwyatt@gmail.com" },
 ]
 description = "Worker application components for dffmpeg"
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
 ]
+urls = { Homepage = "https://github.com/brwyatt/dffmpeg", Repository = "https://github.com/brwyatt/dffmpeg" }
 dependencies = [
     "dffmpeg-common~=0.1.0",
     "pydantic>=2.12.0, <3.0.0",

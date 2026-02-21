@@ -5,10 +5,15 @@ authors = [
     { name="Bryan Wyatt", email="brwyatt@gmail.com" },
 ]
 description = "Coordinator application components for dffmpeg"
+readme = "README.md"
+license = { text = "GPL-3.0-or-later" }
 requires-python = ">=3.12"
 classifiers = [
     "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
 ]
+urls = { Homepage = "https://github.com/brwyatt/dffmpeg", Repository = "https://github.com/brwyatt/dffmpeg" }
 dependencies = [
     "aiomqtt>=2.5.0, <3.0.0",
     "aio-pika>=9.5.0, <10.0.0",
