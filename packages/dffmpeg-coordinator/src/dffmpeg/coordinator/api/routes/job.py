@@ -405,7 +405,7 @@ async def job_worker_heartbeat(
         # If the job is terminal but the worker is still heartbeating, send a cancel message back to the worker
         await transports.send_message(
             JobStatusMessage(
-                recipient_id=job.worker_id,
+                recipient_id=identity.client_id,
                 job_id=j_id,
                 sender_id="coordinator",
                 payload=JobStatusPayload(status="canceled", last_update=job.last_update or timestamp),
