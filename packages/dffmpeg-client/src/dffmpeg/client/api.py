@@ -152,8 +152,8 @@ class DFFmpegClient:
 
     async def _start_heartbeat_loop(self, job_id: str, interval: int):
         """Starts the background heartbeat loop."""
-        self._monitoring = True
         await self._stop_heartbeat_loop()
+        self._monitoring = True
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop(job_id, interval))
 
     async def _stop_heartbeat_loop(self):
