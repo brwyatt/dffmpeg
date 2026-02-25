@@ -401,6 +401,18 @@ async def job_worker_heartbeat(
 
     await job_repo.update_worker_heartbeat(j_id, timestamp=timestamp)
 
+    if job.status in ["completed", "failed", "canceled"]:
+        # If the job is terminal but the worker is still heartbeating, send a cancel message back to the worker
+        await transports.send_message(
+            JobStatusMessage(
+                recipient_id=job.worker_id,
+                job_id=j_id,
+                sender_id="coordinator",
+                payload=JobStatusPayload(status="canceled", last_update=job.last_update or timestamp),
+            )
+        )
+        return CommandResponse(status="ok", detail="Job already terminal")
+
     await transports.send_message(
         JobStatusMessage(
             recipient_id=job.requester_id,
@@ -418,6 +430,7 @@ async def job_client_heartbeat(
     job_id: str,
     monitor: Optional[bool] = None,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
 ) -> CommandResponse:
     """
@@ -447,13 +460,24 @@ async def job_client_heartbeat(
     if job.requester_id != identity.client_id and identity.role != "admin":
         raise HTTPException(status_code=403, detail="No permission to heartbeat for this job")
 
-    # If job is already terminal, just return OK (no need to update DB)
-    if job.status in ["completed", "failed", "canceled"]:
-        return CommandResponse(status="ok", detail="Job already finished")
-
     timestamp = datetime.now(timezone.utc)
 
     await job_repo.update_client_heartbeat(j_id, timestamp=timestamp, monitor=monitor)
+
+    # If job is already terminal, return the final status to ensure the client receives it
+    if job.status in ["completed", "failed", "canceled"]:
+        # Re-send the terminal status in case the client missed it
+        await transports.send_message(
+            JobStatusMessage(
+                recipient_id=job.requester_id,
+                job_id=j_id,
+                sender_id=job.worker_id if job.worker_id else "coordinator",
+                payload=JobStatusPayload(
+                    status=job.status, exit_code=job.exit_code, last_update=job.last_update or timestamp
+                ),
+            )
+        )
+        return CommandResponse(status="ok", detail="Job already finished")
 
     return CommandResponse(status="ok")
 
