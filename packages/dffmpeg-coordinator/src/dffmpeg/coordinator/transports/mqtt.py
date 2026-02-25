@@ -98,6 +98,7 @@ class MQTTServerTransport(BaseServerTransport):
             logger.info(f"Publishing message {message.message_id} to topic {topic}")
             await self._client.publish(topic, payload, qos=1)
             logger.debug(f"Published message {message.message_id} to topic {topic}")
+            await self._messages.update_message_sent_at(str(message.message_id))
             return True
         except aiomqtt.MqttError as e:
             logger.error(f"MQTT publish error for message {message.message_id}: {e}")
