@@ -152,11 +152,13 @@ class DFFmpegClient:
 
     async def _start_heartbeat_loop(self, job_id: str, interval: int):
         """Starts the background heartbeat loop."""
+        self._monitoring = True
         await self._stop_heartbeat_loop()
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop(job_id, interval))
 
     async def _stop_heartbeat_loop(self):
         """Stops the background heartbeat loop."""
+        self._monitoring = False
         if self._heartbeat_task:
             self._heartbeat_task.cancel()
             try:
@@ -169,8 +171,16 @@ class DFFmpegClient:
         """Periodically sends client heartbeats to the coordinator."""
         # Use jitter logic similar to worker
         jitter_bound = min(0.5 * interval, 0.5)  # Max 0.5s jitter for client
-        while True:
+        first_loop = True
+        while self._monitoring:
             try:
+                if not first_loop:
+                    # Sleep with jitter before subsequent heartbeats
+                    jitter = random.uniform(-jitter_bound, jitter_bound)
+                    await asyncio.sleep(max(1, interval + jitter))
+
+                first_loop = False
+
                 path = f"/jobs/{job_id}/client_heartbeat"
                 resp = await self.client.post(path)
                 if resp.status_code != 200:
@@ -179,10 +189,8 @@ class DFFmpegClient:
                 break
             except Exception as e:
                 logger.error(f"Error in client heartbeat loop: {e}")
-
-            # Sleep with jitter
-            jitter = random.uniform(-jitter_bound, jitter_bound)
-            await asyncio.sleep(max(1, interval + jitter))
+                # Ensure we don't rapid-fire on exception if it happened before the sleep
+                first_loop = False
 
     async def stream_job(
         self, job_id: str, transport_name: str, transport_metadata: Dict[str, Any]
