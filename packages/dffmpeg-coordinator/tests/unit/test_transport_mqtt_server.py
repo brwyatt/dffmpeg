@@ -46,6 +46,7 @@ async def test_mqtt_server_health_check():
 @pytest.mark.asyncio
 async def test_mqtt_server_send_message():
     app = MagicMock()
+    app.state.db.messages.update_message_sent_at = AsyncMock()
     transport = MQTTServerTransport(app=app)
     mock_client = AsyncMock()
     transport._client = mock_client

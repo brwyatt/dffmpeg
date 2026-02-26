@@ -190,6 +190,7 @@ class RabbitMQServerTransport(BaseServerTransport):
             )
 
             logger.debug(f"Published message {message.message_id} to {exchange_name}::{routing_key}")
+            await self._messages.update_message_sent_at(str(message.message_id))
             return True
 
         except Exception as e:

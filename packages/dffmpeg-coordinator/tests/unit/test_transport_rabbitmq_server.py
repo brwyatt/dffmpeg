@@ -50,6 +50,7 @@ async def test_rabbitmq_server_health_check():
 @pytest.mark.asyncio
 async def test_rabbitmq_server_send_message():
     app = MagicMock()
+    app.state.db.messages.update_message_sent_at = AsyncMock()
     transport = RabbitMQServerTransport(app=app)
 
     mock_exchange = AsyncMock()

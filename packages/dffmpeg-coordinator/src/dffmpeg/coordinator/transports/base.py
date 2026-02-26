@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from ulid import ULID
 
 from dffmpeg.common.models import BaseMessage, ComponentHealth, TransportMetadata
+from dffmpeg.coordinator.db.messages import MessageRepository
 
 
 class BaseServerTransport:
@@ -14,6 +15,7 @@ class BaseServerTransport:
 
     def __init__(self, *args, app: FastAPI, **kwargs):
         self.app = app
+        self._messages: MessageRepository = self.app.state.db.messages
 
     async def setup(self):
         """

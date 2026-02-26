@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional
 
 from sqlalchemy import JSON, TIMESTAMP, Column, ForeignKey, MetaData, String, Table, func
@@ -55,4 +56,7 @@ class MessageRepository(BaseDB):
     async def retrieve_messages(
         self, recipient_id: str, last_message_id: Optional[ULID] = None, job_id: Optional[ULID] = None
     ) -> List[BaseMessage]:
+        raise NotImplementedError()
+
+    async def update_message_sent_at(self, message_id: str, sent_at: Optional[datetime] = None) -> None:
         raise NotImplementedError()

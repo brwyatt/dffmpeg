@@ -106,3 +106,9 @@ class SQLAlchemyMessageRepository(MessageRepository, SQLAlchemyDB):
             messages.reverse()
 
         return messages
+
+    async def update_message_sent_at(self, message_id: str, sent_at: Optional[datetime] = None) -> None:
+        timestamp = sent_at or datetime.now(timezone.utc)
+        query = update(self.table).where(self.table.c.message_id == message_id).values(sent_at=timestamp)
+        sql, params = self.compile_query(query)
+        await self.execute(sql, params)

@@ -59,9 +59,11 @@ class JobRunner:
         self._last_status: Optional[str] = None
         self._silent_cancellation: bool = False
         self._fast_shutdown: bool = False
+        self._running: bool = False
 
     async def start(self):
         """Starts the job execution."""
+        self._running = True
         logger.info(f"[{self.client_id}] Starting job {self.job_id}")
         self._log_flusher_task = asyncio.create_task(self._log_flusher())
         self._main_task = asyncio.create_task(self._run())
@@ -97,7 +99,7 @@ class JobRunner:
         path = self.coordinator_paths["heartbeat"]
         interval = self.payload.get("heartbeat_interval", 5)
         jitter_bound = min(0.5 * interval, self.config.jitter)
-        while True:
+        while self._running:
             try:
                 jitter = random.uniform(-jitter_bound, jitter_bound)
                 await asyncio.sleep(max(1, interval + jitter))
@@ -154,7 +156,7 @@ class JobRunner:
         """
         Background task to periodically flush logs using a time-based window.
         """
-        while True:
+        while self._running:
             try:
                 # Wait indefinitely for the first log to trigger the window
                 await self._new_log_event.wait()
@@ -224,19 +226,33 @@ class JobRunner:
             await self._report_status("failed", exit_code=exit_code)
 
         finally:
+            self._running = False
+
+            # Cancel background tasks first to stop them from adding/sending more
             if self._heartbeat_task:
                 self._heartbeat_task.cancel()
 
-            # Final log flush
             if self._log_flusher_task:
                 self._log_flusher_task.cancel()
+
+            try:
+                # Ensure any remaining logs in the queue or buffer are sent immediately
+                await self._flush_logs()
+            except (Exception, asyncio.CancelledError) as e:
+                logger.error(f"[{self.client_id}] Error during job {self.job_id} final log flush: {e}", exc_info=True)
+
+            # Now await the cancelled tasks to ensure they terminate cleanly
+            if self._heartbeat_task:
+                try:
+                    await self._heartbeat_task
+                except asyncio.CancelledError:
+                    pass
+
+            if self._log_flusher_task:
                 try:
                     await self._log_flusher_task
                 except asyncio.CancelledError:
                     pass
-
-            # Ensure any remaining logs in the queue or buffer are sent
-            await self._flush_logs()
 
             # client is owned by Worker, do not close here
             self.cleanup_callback(self.job_id)
