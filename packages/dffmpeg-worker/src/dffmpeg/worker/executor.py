@@ -100,19 +100,24 @@ class SubprocessJobExecutor:
         )
 
         async def read_stream(stream, stream_name):
-            while True:
-                line = await stream.readline()
-                if not line:
-                    break
-                decoded_line = line.decode()
-                if decoded_line:
-                    await log_callback(
-                        LogEntry(
-                            stream=stream_name,
-                            content=decoded_line.rstrip("\r\n"),
-                            timestamp=datetime.now(timezone.utc),
+            try:
+                while True:
+                    line = await stream.readline()
+                    if not line:
+                        break
+                    decoded_line = line.decode()
+                    if decoded_line:
+                        await log_callback(
+                            LogEntry(
+                                stream=stream_name,
+                                content=decoded_line.rstrip("\r\n"),
+                                timestamp=datetime.now(timezone.utc),
+                            )
                         )
-                    )
+            except asyncio.CancelledError:
+                raise
+            except Exception as e:
+                logger.warning(f"Error reading from {stream_name} stream, but process continues: {e}")
 
         try:
             await asyncio.gather(
