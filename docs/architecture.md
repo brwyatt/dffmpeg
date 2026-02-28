@@ -10,7 +10,7 @@ DFFmpeg is designed to coordinate distributed FFmpeg encoding jobs. It separates
 
 *   **Coordinator-Centric**: The Coordinator is the single source of truth for job state.
 *   **Pull-Based Execution**: Workers poll the Coordinator for jobs (or receive notifications to poll).
-*   **Path-Blind**: The Coordinator stores logical paths (using variables), allowing clients and workers to have different mount points.
+*   **Path-Blind**: The Coordinator stores logical paths (using variables), allowing clients and workers to have different mount points. This includes the job's working directory.
 *   **Stateless Protocol**: Communication is primarily stateless HTTP, authenticated via HMAC.
 
 ## Scenarios
@@ -156,7 +156,7 @@ graph TD
 *   **Mount Manager**: Verifies that required paths are mounted before accepting work.
 
 ### Client
-*   **Submission**: Parses local paths, converts them to variables, and submits the job.
+*   **Submission**: Parses local paths (including the current working directory), converts them to variables, and submits the job.
 *   **Monitor**: Polls (or listens via MQTT/AMQP) for job status and logs.
 
 ## State Diagrams
