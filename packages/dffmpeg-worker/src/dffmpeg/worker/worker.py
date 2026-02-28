@@ -1,12 +1,12 @@
 import asyncio
 import logging
-import random
 from typing import Dict, Optional
 
 import httpx
 from ulid import ULID
 
 from dffmpeg.common.http_client import AuthenticatedAsyncClient
+from dffmpeg.common.loop_utils import heartbeat_loop
 from dffmpeg.common.models import (
     JobRequestMessage,
     JobStatusMessage,
@@ -111,53 +111,52 @@ class Worker:
     async def _registration_loop(self):
         """Periodically registers with the coordinator."""
         jitter_bound = min(0.5 * self.config.registration_interval, self.config.jitter)
-        while self._running:
-            try:
-                # Check and recover mounts
-                await self.mount_manager.refresh_and_recover()
 
-                # Filter paths based on mount status
-                healthy_paths = self.mount_manager.get_healthy_paths(self.config.paths)
+        async def _action():
+            # Check and recover mounts
+            await self.mount_manager.refresh_and_recover()
 
-                # Prepare payload
-                payload_model = WorkerRegistration(
-                    worker_id=self.client_id,
-                    capabilities=[],  # TODO: Retrieve actual capabilities dynamically
-                    binaries=list(self.config.binaries.keys()),
-                    paths=list(healthy_paths.keys()),
-                    supported_transports=self.transport_manager.transport_names,
-                    registration_interval=self.config.registration_interval,
-                    version=WORKER_VERSION,
-                )
+            # Filter paths based on mount status
+            healthy_paths = self.mount_manager.get_healthy_paths(self.config.paths)
 
-                path = self.coordinator_paths["register"]
-                body = payload_model.model_dump(mode="json")
+            # Prepare payload
+            payload_model = WorkerRegistration(
+                worker_id=self.client_id,
+                capabilities=[],  # TODO: Retrieve actual capabilities dynamically
+                binaries=list(self.config.binaries.keys()),
+                paths=list(healthy_paths.keys()),
+                supported_transports=self.transport_manager.transport_names,
+                registration_interval=self.config.registration_interval,
+                version=WORKER_VERSION,
+            )
 
-                resp = await self.client.post(path, json=body)
+            path = self.coordinator_paths["register"]
+            body = payload_model.model_dump(mode="json")
 
-                if resp.status_code == 200:
-                    data = resp.json()
-                    new_transport = data.get("transport")
-                    metadata = data.get("transport_metadata", {})
+            resp = await self.client.post(path, json=body)
 
-                    if new_transport != self.transport_manager.current_transport_name:
-                        logger.info(
-                            f"Transport changed from {self.transport_manager.current_transport_name} to {new_transport}"
-                        )
-                        await self._update_transport(new_transport, metadata)
-                else:
-                    logger.warning(f"Registration failed: {resp.status_code} - {resp.text}")
+            if resp.status_code == 200:
+                data = resp.json()
+                new_transport = data.get("transport")
+                metadata = data.get("transport_metadata", {})
 
-            except asyncio.CancelledError:
-                break
-            except httpx.RequestError as e:
-                logger.warning(f"Registration request failed (network error): {e}")
-            except Exception as e:
-                logger.error(f"Error in registration loop: {e}")
+                if new_transport != self.transport_manager.current_transport_name:
+                    logger.info(
+                        f"Transport changed from {self.transport_manager.current_transport_name} to {new_transport}"
+                    )
+                    await self._update_transport(new_transport, metadata)
+            else:
+                logger.warning(f"Registration failed: {resp.status_code} - {resp.text}")
+                resp.raise_for_status()
 
-            # Sleep with jitter
-            jitter = random.uniform(-jitter_bound, jitter_bound)
-            await asyncio.sleep(max(1, self.config.registration_interval + jitter))
+        await heartbeat_loop(
+            name="registration",
+            action=_action,
+            is_running=lambda: getattr(self, "_running", False),
+            interval=float(self.config.registration_interval),
+            jitter_bound=jitter_bound,
+            first_immediate=True,
+        )
 
     async def _update_transport(self, transport_name: str, metadata: dict):
         """

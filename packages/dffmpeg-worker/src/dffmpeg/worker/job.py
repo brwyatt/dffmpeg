@@ -1,11 +1,11 @@
 import asyncio
 import logging
-import random
 from typing import Callable, Dict, Optional
 
 from ulid import ULID
 
 from dffmpeg.common.http_client import AuthenticatedAsyncClient
+from dffmpeg.common.loop_utils import heartbeat_loop
 from dffmpeg.common.models import (
     JobLogsPayload,
     JobStatusUpdate,
@@ -99,18 +99,22 @@ class JobRunner:
         path = self.coordinator_paths["heartbeat"]
         interval = self.payload.get("heartbeat_interval", 5)
         jitter_bound = min(0.5 * interval, self.config.jitter)
-        while self._running:
-            try:
-                jitter = random.uniform(-jitter_bound, jitter_bound)
-                await asyncio.sleep(max(1, interval + jitter))
 
-                await self.client.post(path)
+        async def _action():
+            resp = await self.client.post(path)
+            logger.debug(f"[{self.client_id}] Sent heartbeat for {self.job_id}")
+            if resp.status_code != 200:
+                logger.warning(f"Job heartbeat failed for {self.job_id}: {resp.status_code} - {resp.text}")
+                resp.raise_for_status()
 
-                logger.debug(f"[{self.client_id}] Sent heartbeat for {self.job_id}")
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.warning(f"[{self.client_id}] Heartbeat failed for {self.job_id}: {e}")
+        await heartbeat_loop(
+            name=f"job heartbeat ({self.job_id})",
+            action=_action,
+            is_running=lambda: getattr(self, "_running", False),
+            interval=float(interval),
+            jitter_bound=jitter_bound,
+            first_immediate=False,
+        )
 
     async def _send_log(self, entry: LogEntry):
         """

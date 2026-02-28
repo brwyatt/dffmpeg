@@ -18,7 +18,7 @@ class JanitorConfig(BaseModel):
     interval: int = 10
     jitter: float = 0.5
     worker_threshold_factor: float = 1.5
-    job_heartbeat_threshold_factor: float = 1.5
+    job_heartbeat_threshold_factor: float = 2.5
     job_assignment_timeout: int = 30
     job_pending_retry_delay: int = 5
     job_pending_timeout: int = 30
