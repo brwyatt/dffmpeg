@@ -16,6 +16,36 @@ async def job_repo(tmp_path):
 
 
 @pytest.mark.anyio
+async def test_create_and_get_job(job_repo):
+    """Test creating a job and retrieving it."""
+    sample_job = JobRecord(
+        job_id=ULID(),
+        requester_id="client1",
+        binary_name="ffmpeg",
+        status="pending",
+        arguments=["-i", "input.mp4", "output.mp4"],
+        paths=["input.mp4", "output.mp4"],
+        working_directory="$MEDIA_DIR",
+        transport="http_polling",
+    )
+
+    # Create the job
+    await job_repo.create_job(sample_job)
+
+    # Retrieve the job
+    retrieved = await job_repo.get_job(sample_job.job_id)
+    assert retrieved is not None
+    assert retrieved.job_id == sample_job.job_id
+    assert retrieved.requester_id == sample_job.requester_id
+    assert retrieved.status == "pending"
+    assert retrieved.binary_name == "ffmpeg"
+    assert retrieved.arguments == ["-i", "input.mp4", "output.mp4"]
+    assert retrieved.paths == ["input.mp4", "output.mp4"]
+    assert retrieved.working_directory == "$MEDIA_DIR"
+    assert retrieved.transport == "http_polling"
+
+
+@pytest.mark.anyio
 async def test_get_stale_running_jobs(job_repo):
     now = datetime.now(timezone.utc)
 

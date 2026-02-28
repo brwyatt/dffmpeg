@@ -141,6 +141,11 @@ class MySQLDB(SQLAlchemyDB):
                 await cursor.execute(query, params or ())
                 return await cursor.fetchone()
 
+    async def get_existing_columns(self) -> set[str]:
+        query = f"SHOW COLUMNS FROM {self.tablename}"
+        rows = await self.get_rows(query)
+        return {row["Field"] for row in rows}
+
     async def execute(self, query: str, params: Optional[Iterable[Any]] = None) -> None:
         """
         Executes a write operation (INSERT, UPDATE, DELETE).

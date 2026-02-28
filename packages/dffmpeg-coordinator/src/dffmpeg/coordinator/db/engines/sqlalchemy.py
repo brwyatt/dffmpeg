@@ -78,3 +78,32 @@ class SQLAlchemyDB(BaseDB):
 
     async def get_row(self, query: str, params: Optional[Iterable[Any]] = None) -> Optional[Dict[str, Any]]:
         raise NotImplementedError()
+
+    async def get_existing_columns(self) -> set[str]:
+        """
+        Retrieves the set of column names that currently exist in the database table.
+        """
+        raise NotImplementedError()
+
+    async def migrate(self) -> None:
+        """
+        Compares the existing database table columns against the SQLAlchemy Table definition,
+        and generates/executes ALTER TABLE statements for any missing columns.
+        """
+        import logging
+
+        from sqlalchemy.schema import CreateColumn
+
+        logger = logging.getLogger(__name__)
+
+        try:
+            existing_columns = await self.get_existing_columns()
+        except NotImplementedError:
+            return
+
+        for column in self.table.columns:
+            if column.name not in existing_columns:
+                logger.info(f"Adding missing column '{column.name}' to table '{self.table.name}'")
+                compiled_col = CreateColumn(column).compile(dialect=self.dialect)
+                alter_stmt = f"ALTER TABLE {self.table.name} ADD COLUMN {compiled_col}"
+                await self.execute(alter_stmt)

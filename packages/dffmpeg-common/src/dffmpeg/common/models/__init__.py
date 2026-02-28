@@ -71,6 +71,7 @@ class Job(BaseModel):
         binary_name (str): The binary to execute.
         arguments (List[str]): List of arguments to pass to the binary.
         paths (List[str]): List of path variables required by the job.
+        working_directory (Optional[str]): Job's expected working directory
         status (Literal): Current status of the job.
         worker_id (Optional[str]): The worker assigned to the job, if any.
         created_at (datetime): Timestamp of creation.
@@ -86,6 +87,7 @@ class Job(BaseModel):
     binary_name: str = Field(min_length=1)
     arguments: List[str] = Field(default_factory=list)
     paths: List[str] = Field(default_factory=list)
+    working_directory: Optional[str] = None
     status: JobStatus
     exit_code: Optional[int] = None
     worker_id: str | None = OptionalClientId
@@ -105,6 +107,7 @@ class JobRequest(BaseModel):
         binary_name (str): The binary to execute.
         arguments (List[str]): List of arguments to pass to the binary.
         paths (List[str]): List of path variables required by the job.
+        working_directory (Optional[str]): Job's expected working directory
         supported_transports (List[str]): List of transports supported by the client for updates.
         monitor (bool): Whether to enable active client monitoring.
         heartbeat_interval (Optional[int]): Requested heartbeat interval.
@@ -113,6 +116,7 @@ class JobRequest(BaseModel):
     binary_name: str = Field(min_length=1)
     arguments: List[str] = Field(default_factory=list)
     paths: List[str] = Field(default_factory=list)
+    working_directory: Optional[str] = None
     supported_transports: List[str] = Field(min_length=1)
     monitor: bool = False
     heartbeat_interval: Optional[int] = None
@@ -165,6 +169,7 @@ class JobRequestPayload(BaseModel):
     binary_name: str = Field(min_length=1)
     arguments: List[str]
     paths: List[str]
+    working_directory: Optional[str] = None
     heartbeat_interval: int = default_job_heartbeat_interval
 
 

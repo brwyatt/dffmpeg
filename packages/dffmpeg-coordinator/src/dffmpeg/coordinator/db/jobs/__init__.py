@@ -23,6 +23,7 @@ class JobRepository(BaseDB):
         Column("binary_name", String(255), nullable=False, default="ffmpeg"),
         Column("arguments", JSON, nullable=False),
         Column("paths", JSON, nullable=False),
+        Column("working_directory", String(1024), nullable=True),
         Column("status", String(50), default="pending"),
         Column("exit_code", Integer, nullable=True),
         Column("worker_id", String(255), ForeignKey("auth.client_id"), nullable=True),
