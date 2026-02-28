@@ -32,7 +32,7 @@ def test_load_config_missing_client_id(tmp_path):
     with open(config_file, "w") as f:
         yaml.dump(config_data, f)
 
-    with pytest.raises(ValidationError) as excinfo:
+    with pytest.raises(ValidationError) as excinfo:  # pyright: ignore[reportArgumentType]
         load_config(str(config_file))
     assert "client_id" in str(excinfo.value)
 
