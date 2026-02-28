@@ -1,12 +1,12 @@
 import asyncio
 import logging
-import random
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 from ulid import ULID
 
 from dffmpeg.client.config import ClientConfig
 from dffmpeg.common.http_client import AuthenticatedAsyncClient
+from dffmpeg.common.loop_utils import heartbeat_loop
 from dffmpeg.common.models import (
     CommandResponse,
     JobLogsMessage,
@@ -169,28 +169,26 @@ class DFFmpegClient:
 
     async def _heartbeat_loop(self, job_id: str, interval: int):
         """Periodically sends client heartbeats to the coordinator."""
-        # Use jitter logic similar to worker
-        jitter_bound = min(0.5 * interval, 0.5)  # Max 0.5s jitter for client
-        first_loop = True
-        while self._monitoring:
-            try:
-                if not first_loop:
-                    # Sleep with jitter before subsequent heartbeats
-                    jitter = random.uniform(-jitter_bound, jitter_bound)
-                    await asyncio.sleep(max(1, interval + jitter))
+        path = f"/jobs/{job_id}/client_heartbeat"
 
-                first_loop = False
+        async def _action():
+            resp = await self.client.post(path)
+            logger.debug(f"[{self.config.client_id}] Sent heartbeat for {job_id}")
+            if resp.status_code != 200:
+                logger.warning(f"Client heartbeat failed: {resp.status_code} - {resp.text}")
+                resp.raise_for_status()
 
-                path = f"/jobs/{job_id}/client_heartbeat"
-                resp = await self.client.post(path)
-                if resp.status_code != 200:
-                    logger.warning(f"Client heartbeat failed: {resp.status_code} - {resp.text}")
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                logger.error(f"Error in client heartbeat loop: {e}")
-                # Ensure we don't rapid-fire on exception if it happened before the sleep
-                first_loop = False
+        # Max 0.5s jitter for client
+        jitter_bound = min(0.5 * interval, 0.5)
+
+        await heartbeat_loop(
+            name="client heartbeat",
+            action=_action,
+            is_running=lambda: getattr(self, "_monitoring", False),
+            interval=float(interval),
+            jitter_bound=jitter_bound,
+            first_immediate=True,
+        )
 
     async def stream_job(
         self, job_id: str, transport_name: str, transport_metadata: Dict[str, Any]
