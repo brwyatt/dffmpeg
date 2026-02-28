@@ -3,8 +3,6 @@ import asyncio
 import logging
 import os
 import sys
-from pathlib import Path
-from typing import Dict, List, Tuple
 
 from dffmpeg.client.api import DFFmpegClient
 from dffmpeg.client.config import load_config
@@ -24,6 +22,7 @@ from dffmpeg.common.formatting import (
     print_worker_list,
 )
 from dffmpeg.common.models import JobLogsMessage, JobStatusMessage
+from dffmpeg.common.paths import map_arguments, map_path
 from dffmpeg.common.version import get_package_version
 
 # Configure logging
@@ -70,49 +69,6 @@ async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, me
     return exit_code
 
 
-def process_arguments(raw_args: List[str], path_map: Dict[str, str]) -> Tuple[List[str], List[str]]:
-    """
-    Processes arguments to identify and replace local paths with path variables.
-    Returns (processed_args, used_path_variables)
-    """
-    processed_args = []
-    used_paths = set()
-
-    sorted_paths = sorted(path_map.items(), key=lambda x: len(x[1]), reverse=True)
-
-    for arg in raw_args:
-        prefix = ""
-        path_to_process = arg
-        if arg.startswith("file:"):
-            prefix = "file:"
-            path_to_process = arg[5:]
-
-        if not path_to_process.startswith("/"):
-            processed_args.append(arg)
-            continue
-
-        try:
-            abs_path = str(Path(path_to_process).resolve())
-        except Exception:
-            abs_path = str(Path(path_to_process).absolute())
-
-        replaced = False
-        for var_name, local_path in sorted_paths:
-            if abs_path.startswith(local_path):
-                remainder = abs_path[len(local_path) :]
-                if not remainder or remainder.startswith(os.sep):
-                    new_arg = f"{prefix}${var_name}{remainder}"
-                    processed_args.append(new_arg)
-                    used_paths.add(var_name)
-                    replaced = True
-                    break
-
-        if not replaced:
-            processed_args.append(arg)
-
-    return processed_args, list(used_paths)
-
-
 async def job_submit(client: DFFmpegClient, args: argparse.Namespace) -> int:
     # Strip '--' if present in arguments
     job_args = args.arguments
@@ -124,11 +80,21 @@ async def job_submit(client: DFFmpegClient, args: argparse.Namespace) -> int:
 
     # Process arguments to handle path mapping
     # Note: client.config is accessible
-    processed_job_args, paths = process_arguments(job_args, client.config.paths)
+    processed_job_args, paths = map_arguments(job_args, client.config.paths)
+
+    cwd = os.getcwd()
+    mapped_cwd, used_cwd_var = map_path(cwd, client.config.paths)
+    if used_cwd_var and used_cwd_var not in paths:
+        paths.append(used_cwd_var)
 
     try:
         job = await client.submit_job(
-            args.binary, processed_job_args, paths, monitor=monitor, heartbeat_interval=heartbeat_interval
+            args.binary,
+            processed_job_args,
+            paths,
+            working_directory=mapped_cwd,
+            monitor=monitor,
+            heartbeat_interval=heartbeat_interval,
         )
 
         if not monitor:

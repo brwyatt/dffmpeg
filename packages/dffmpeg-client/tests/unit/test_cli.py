@@ -4,63 +4,9 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 from ulid import ULID
 
-from dffmpeg.client.cli import job_logs, job_submit, process_arguments
+from dffmpeg.client.cli import job_logs, job_submit
 from dffmpeg.client.config import ClientConfig
 from dffmpeg.common.models import JobLogsResponse, JobRecord, LogEntry
-
-
-def test_process_arguments_basic():
-    path_map = {"Movies": "/mnt/media/movies"}
-    raw_args = ["-i", "/mnt/media/movies/input.mkv", "output.mp4"]
-
-    processed, used = process_arguments(raw_args, path_map)
-
-    assert processed == ["-i", "$Movies/input.mkv", "output.mp4"]
-    assert used == ["Movies"]
-
-
-def test_process_arguments_nested():
-    path_map = {"Movies": "/mnt/media/movies", "All": "/mnt/media"}
-    raw_args = ["/mnt/media/movies/file.mkv", "/mnt/media/other/file.mkv"]
-
-    processed, used = process_arguments(raw_args, path_map)
-
-    # "Movies" is longer than "All", so first arg should use Movies
-    assert processed[0] == "$Movies/file.mkv"
-    # Second arg doesn't match Movies, but matches All
-    assert processed[1] == "$All/other/file.mkv"
-    assert set(used) == {"Movies", "All"}
-
-
-def test_process_arguments_boundary():
-    path_map = {"Movies": "/mnt/media/movies"}
-    # Should NOT match /mnt/media/movies-animated
-    raw_args = ["/mnt/media/movies-animated/file.mkv"]
-
-    processed, used = process_arguments(raw_args, path_map)
-
-    assert processed == raw_args
-    assert used == []
-
-
-def test_process_arguments_exact():
-    path_map = {"Movies": "/mnt/media/movies"}
-    raw_args = ["/mnt/media/movies"]
-
-    processed, used = process_arguments(raw_args, path_map)
-
-    assert processed == ["$Movies"]
-    assert used == ["Movies"]
-
-
-def test_process_arguments_file_prefix():
-    path_map = {"Movies": "/mnt/media/movies"}
-    raw_args = ["-i", "file:/mnt/media/movies/input.mkv", "file:/mnt/media/movies"]
-
-    processed, used = process_arguments(raw_args, path_map)
-
-    assert processed == ["-i", "file:$Movies/input.mkv", "file:$Movies"]
-    assert set(used) == {"Movies"}
 
 
 @pytest.mark.anyio
@@ -98,7 +44,9 @@ async def test_job_submit_defaults():
         result = await job_submit(mock_client, args)
 
         assert result == 0
-        mock_client.submit_job.assert_called_once_with("ffmpeg", ANY, ANY, monitor=True, heartbeat_interval=None)
+        mock_client.submit_job.assert_called_once_with(
+            "ffmpeg", ANY, ANY, working_directory=ANY, monitor=True, heartbeat_interval=None
+        )
         mock_client._start_heartbeat_loop.assert_called_once_with(str(job_id), 5)
 
 
@@ -134,7 +82,9 @@ async def test_job_submit_background():
     result = await job_submit(mock_client, args)
 
     assert result == 0
-    mock_client.submit_job.assert_called_once_with("ffmpeg", ANY, ANY, monitor=False, heartbeat_interval=None)
+    mock_client.submit_job.assert_called_once_with(
+        "ffmpeg", ANY, ANY, working_directory=ANY, monitor=False, heartbeat_interval=None
+    )
     mock_client._start_heartbeat_loop.assert_not_called()
 
 
