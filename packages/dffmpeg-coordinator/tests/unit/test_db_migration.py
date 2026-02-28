@@ -45,4 +45,5 @@ async def test_migration_adds_column(tmp_path):
     )
     await repo.create_job(sample_job)
     retrieved = await repo.get_job(sample_job.job_id)
+    assert retrieved is not None
     assert retrieved.working_directory == "/test/path"
