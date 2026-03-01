@@ -49,6 +49,7 @@ def print_job_details(job: Job | JobRecord):
     print(f"Binary:       {job.binary_name}")
     print(f"Args:         {' '.join(job.arguments)}")
     print(f"Paths:        {', '.join(job.paths)}")
+    print(f"Working Dir:  {job.working_directory or '<None>'}")
     print(f"Created:      {format_timestamp(job.created_at)}")
     print(f"Last Update:  {format_timestamp(job.last_update)}")
 
