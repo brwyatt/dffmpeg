@@ -1,6 +1,6 @@
 [project]
 name = "dffmpeg-worker"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
     { name="Bryan Wyatt", email="brwyatt@gmail.com" },
 ]
@@ -15,7 +15,7 @@ classifiers = [
 ]
 urls = { Homepage = "https://github.com/brwyatt/dffmpeg", Repository = "https://github.com/brwyatt/dffmpeg" }
 dependencies = [
-    "dffmpeg-common~=0.1.0",
+    "dffmpeg-common~=0.1.1",
     "pydantic>=2.12.0, <3.0.0",
     "pyyaml>=6.0.0, <7.0.0",
 ]

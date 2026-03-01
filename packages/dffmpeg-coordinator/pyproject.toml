@@ -1,6 +1,6 @@
 [project]
 name = "dffmpeg-coordinator"
-version = "0.1.0"
+version = "0.1.1"
 authors = [
     { name="Bryan Wyatt", email="brwyatt@gmail.com" },
 ]
@@ -20,7 +20,7 @@ dependencies = [
     "dnspython>=2.6.0, <3.0.0",
     "aiomysql>=0.2.0, <1.0.0",
     "aiosqlite>=0.22.0, <1.0.0",
-    "dffmpeg-common~=0.1.0",
+    "dffmpeg-common~=0.1.1",
     "fastapi>=0.128.0, <1.0.0",
     "jinja2>=3.1.0, <4.0.0",
     "pydantic>=2.12.0, <3.0.0",

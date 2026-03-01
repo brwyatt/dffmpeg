@@ -33,7 +33,7 @@ If applicable, add screenshots to help explain your problem.
 **Environment (please complete the following information):**
  - OS and version: [e.g. "Debian 13"]
  - Python Version: [e.g. "3.12"]
- - Package Version(s): [e.g. "0.1.0"]
+ - Package Version(s): [e.g. "0.1.1"]
 
 **Database Engine**
 Which database engine(s) are you using? (e.g. SQLite, MariaDB, etc.)
