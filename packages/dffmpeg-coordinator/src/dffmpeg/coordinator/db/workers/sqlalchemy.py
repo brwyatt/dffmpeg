@@ -4,6 +4,7 @@ from typing import Optional
 
 from sqlalchemy import and_, select, update
 
+from dffmpeg.common.formatting import ensure_utc
 from dffmpeg.common.models import TransportRecord
 from dffmpeg.coordinator.db.engines.sqlalchemy import SQLAlchemyDB
 from dffmpeg.coordinator.db.workers import WorkerRecord, WorkerRepository
@@ -19,7 +20,7 @@ class SQLAlchemyWorkerRepository(WorkerRepository, SQLAlchemyDB):
         return WorkerRecord(
             worker_id=row["worker_id"],
             status=row["status"],
-            last_seen=row["last_seen"],
+            last_seen=ensure_utc(row["last_seen"]),
             capabilities=parse_json(row["capabilities"]),
             binaries=parse_json(row["binaries"]),
             paths=parse_json(row["paths"]),

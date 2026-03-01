@@ -6,6 +6,7 @@ from pydantic import TypeAdapter
 from sqlalchemy import select, update
 from ulid import ULID
 
+from dffmpeg.common.formatting import ensure_utc
 from dffmpeg.common.models import BaseMessage, Message
 from dffmpeg.coordinator.db.engines.sqlalchemy import SQLAlchemyDB
 from dffmpeg.coordinator.db.messages import MessageRepository
@@ -40,10 +41,10 @@ class SQLAlchemyMessageRepository(MessageRepository, SQLAlchemyDB):
                 "sender_id": row["sender_id"],
                 "recipient_id": row["recipient_id"],
                 "job_id": row["job_id"],
-                "timestamp": row["timestamp"],
+                "timestamp": ensure_utc(row["timestamp"]),
                 "message_type": row["message_type"],
                 "payload": payload,
-                "sent_at": row["sent_at"],
+                "sent_at": ensure_utc(row["sent_at"]),
             }
         )
 

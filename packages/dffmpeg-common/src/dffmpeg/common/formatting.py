@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List, Optional, overload
 
 from dffmpeg.common.colors import Colors, colorize, colorize_status
 from dffmpeg.common.models import Job, JobRecord, Worker, WorkerRecord
@@ -9,6 +9,24 @@ def format_timestamp(dt: Optional[datetime]) -> str:
     if not dt:
         return "-"
     return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+@overload
+def ensure_utc(dt: datetime) -> datetime: ...
+
+
+@overload
+def ensure_utc(dt: None) -> None: ...
+
+
+def ensure_utc(dt: Optional[datetime]) -> Optional[datetime]:
+    """
+    Ensures that a datetime object is timezone-aware (UTC).
+    If it is naive, it is replaced with UTC.
+    """
+    if dt is not None and isinstance(dt, datetime) and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 def print_job_list(jobs: List[Job] | List[JobRecord], show_requester: bool = False):

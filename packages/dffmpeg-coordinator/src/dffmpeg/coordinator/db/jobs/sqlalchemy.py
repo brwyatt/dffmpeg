@@ -5,6 +5,7 @@ from typing import Any, Optional
 from sqlalchemy import ColumnElement, TextClause, and_, func, or_, select, update
 from ulid import ULID
 
+from dffmpeg.common.formatting import ensure_utc
 from dffmpeg.common.models import JobStatus, TransportRecord
 from dffmpeg.coordinator.db.engines.sqlalchemy import SQLAlchemyDB
 from dffmpeg.coordinator.db.jobs import JobRecord, JobRepository
@@ -61,14 +62,14 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             status=row["status"],
             exit_code=row["exit_code"],
             worker_id=row["worker_id"],
-            created_at=row["created_at"],
-            last_update=row["last_update"],
-            worker_last_seen=row["worker_last_seen"],
+            created_at=ensure_utc(row["created_at"]),
+            last_update=ensure_utc(row["last_update"]),
+            worker_last_seen=ensure_utc(row["worker_last_seen"]),
             transport=row["callback_transport"],
             transport_metadata=parse_json(row["callback_transport_metadata"]),
             heartbeat_interval=row["heartbeat_interval"],
             monitor=bool(row["monitor"]),
-            client_last_seen=row["client_last_seen"],
+            client_last_seen=ensure_utc(row["client_last_seen"]),
         )
 
     async def get_job(self, job_id: ULID) -> Optional[JobRecord]:
