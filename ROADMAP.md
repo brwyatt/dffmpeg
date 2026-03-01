@@ -23,7 +23,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 *Goal: A stable, well-tested, and documented release.*
 
 - [ ] **Observability / Metrics**: Implement structured metrics (e.g., Prometheus) for queue depth, worker status, etc.
-- [ ] **Database Migrations**: Establish a formal strategy for schema evolution (e.g., Alembic).
+- [x] **Database Migrations**: Establish a formal strategy for schema evolution (custom dynamically compiled schema generation).
 - [ ] **Graceful Shutdown Review**: Verify signal handling (SIGTERM/SIGINT) for Coordinator and Worker (should be good, but let's make sure and be extra defensive here).
 - [x] **CLI Parity (Part 2)**:
     - [x] **Admin Job List**: Add `job list` and `job status` to Admin CLI, matching Client capabilities.

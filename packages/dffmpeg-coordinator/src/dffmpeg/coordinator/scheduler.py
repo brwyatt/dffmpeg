@@ -72,6 +72,11 @@ async def process_job_assignment(
         # Assign
         await job_repo.update_status(job_id, "assigned", worker_id=selected_worker.worker_id, timestamp=timestamp)
 
+        # Only send mapped working directories (starting with $) to worker to prevent arbitrary execution
+        safe_cwd = job.working_directory
+        if safe_cwd and not safe_cwd.startswith("$") and not safe_cwd.startswith("file:$"):
+            safe_cwd = None
+
         # Notify Worker
         await transports.send_message(
             JobRequestMessage(
@@ -82,6 +87,7 @@ async def process_job_assignment(
                     binary_name=job.binary_name,
                     arguments=job.arguments,
                     paths=job.paths,
+                    working_directory=safe_cwd,
                     heartbeat_interval=job.heartbeat_interval,
                 ),
             )

@@ -26,6 +26,7 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             binary_name=job.binary_name,
             arguments=safe_job["arguments"],  # SQLAlchemy handles JSON serialization
             paths=safe_job["paths"],  # SQLAlchemy handles JSON serialization
+            working_directory=job.working_directory,
             status=job.status,
             exit_code=job.exit_code,
             worker_id=job.worker_id,
@@ -56,6 +57,7 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             binary_name=row["binary_name"],
             arguments=parse_json(row["arguments"]),
             paths=parse_json(row["paths"]),
+            working_directory=row.get("working_directory"),
             status=row["status"],
             exit_code=row["exit_code"],
             worker_id=row["worker_id"],

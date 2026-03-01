@@ -66,9 +66,13 @@ class DB:
         Initializes all repositories (e.g., creating tables).
         """
         await self.auth.setup()
+        await self.auth.migrate()
         await self.jobs.setup()
+        await self.jobs.migrate()
         await self.messages.setup()
+        await self.messages.migrate()
         await self.workers.setup()
+        await self.workers.migrate()
 
         # Bootstrap local admin user
         await self.auth.bootstrap_local_admin()

@@ -244,6 +244,7 @@ class Worker:
                 binary_path=binary_path,
                 arguments=message.payload.arguments,
                 path_map=path_map,
+                working_directory=message.payload.working_directory,
             )
 
             runner = JobRunner(

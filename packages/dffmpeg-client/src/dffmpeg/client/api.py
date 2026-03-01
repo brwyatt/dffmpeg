@@ -48,6 +48,7 @@ class DFFmpegClient:
         binary_name: str,
         arguments: List[str],
         paths: List[str],
+        working_directory: Optional[str] = None,
         monitor: bool = False,
         heartbeat_interval: Optional[int] = None,
     ) -> JobRecord:
@@ -69,6 +70,7 @@ class DFFmpegClient:
             binary_name=binary_name,
             arguments=arguments,
             paths=paths,
+            working_directory=working_directory,
             supported_transports=supported_transports,
             monitor=monitor,
             heartbeat_interval=heartbeat_interval,

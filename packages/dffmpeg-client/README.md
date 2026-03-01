@@ -16,7 +16,7 @@ The client requires a configuration to connect to the Coordinator.
 
 ## Path Mapping
 
-The client automatically maps local paths to path variables required by the Coordinator.
+The client automatically maps local paths and the current working directory to path variables required by the Coordinator.
 For example, if you have `paths: {"Movies": "/mnt/media/movies"}` configured:
 *   Input argument: `/mnt/media/movies/Action/movie.mkv`
 *   Transformed argument sent to job: `$Movies/Action/movie.mkv`

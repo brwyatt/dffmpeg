@@ -31,6 +31,10 @@ You can also override the host and port:
 dffmpeg-coordinator --host 0.0.0.0 --port 9000
 ```
 
+## Automatic Database Migrations
+
+The Coordinator includes a lightweight migration framework that automatically updates your database schema during startup. This ensures that new features (like logical path mapping for working directories) are enabled without requiring manual SQL interventions.
+
 ## API Documentation
 
 FastAPI automatically generates interactive API documentation. Once the server is running, you can access:

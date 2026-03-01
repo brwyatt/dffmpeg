@@ -83,6 +83,7 @@ async def job_submit(
         binary_name=payload.binary_name,
         arguments=payload.arguments,
         paths=payload.paths,
+        working_directory=payload.working_directory,
         status="pending",
         transport=negotiated_transport,
         transport_metadata=transports[negotiated_transport].get_metadata(identity.client_id, job_id),

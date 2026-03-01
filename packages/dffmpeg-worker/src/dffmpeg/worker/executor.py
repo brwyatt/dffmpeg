@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Awaitable, Callable, Dict, List, Protocol
 
 from dffmpeg.common.models import LogEntry
+from dffmpeg.common.paths import resolve_arguments, resolve_path
 
 logger = logging.getLogger(__name__)
 
@@ -37,51 +38,17 @@ class SubprocessJobExecutor:
         binary_path: str,
         arguments: List[str],
         path_map: Dict[str, str],
+        working_directory: str | None = None,
     ):
         self.job_id = job_id
         self.binary_path = binary_path
         self.raw_arguments = arguments
         self.path_map = path_map
-        self.resolved_arguments = self._resolve_arguments()
 
-    def _resolve_arguments(self) -> List[str]:
-        """
-        Resolves arguments by substituting path variables.
-        """
-        resolved = []
-        for arg in self.raw_arguments:
-            prefix = ""
-            var_part = arg
-            if arg.startswith("file:$"):
-                prefix = "file:"
-                var_part = arg[5:]
+        self.resolved_arguments = resolve_arguments(arguments, path_map)
 
-            if var_part.startswith("$"):
-                # Extract variable name (up to first / or end of string)
-                # Example: $Movies/file.mkv -> variable=Movies, suffix=/file.mkv
-                parts = var_part.split("/", 1)
-                variable_with_prefix = parts[0]
-                variable = variable_with_prefix[1:]  # Strip $
-
-                if variable in self.path_map:
-                    base_path = self.path_map[variable]
-                    suffix = ("/" + parts[1]) if len(parts) > 1 else ""
-                    # Ensure we don't end up with double slashes if base_path ends with /
-                    if base_path.endswith("/") and suffix.startswith("/"):
-                        resolved_arg = base_path + suffix[1:]
-                    else:
-                        resolved_arg = base_path + suffix
-                    resolved.append(f"{prefix}{resolved_arg}")
-                    continue
-                else:
-                    # If variable not found, leave as is
-                    # Given the pre-validation in worker, this shouldn't happen for known paths.
-                    # For now, we assume pre-validation caught missing required paths.
-                    logger.warning(f"Variable {variable} not found in path map for argument {arg}. Leaving as is.")
-                    resolved.append(arg)
-            else:
-                resolved.append(arg)
-        return resolved
+        self.working_directory = working_directory
+        self.resolved_working_directory = resolve_path(working_directory, path_map) if working_directory else None
 
     async def execute(
         self,
@@ -95,6 +62,7 @@ class SubprocessJobExecutor:
         process = await asyncio.create_subprocess_exec(
             self.binary_path,
             *self.resolved_arguments,
+            cwd=self.resolved_working_directory,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

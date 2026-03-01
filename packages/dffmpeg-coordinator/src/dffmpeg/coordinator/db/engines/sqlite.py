@@ -89,6 +89,11 @@ class SQLiteDB(SQLAlchemyDB):
                 row = await cursor.fetchone()
                 return dict(row) if row else None
 
+    async def get_existing_columns(self) -> set[str]:
+        query = f"PRAGMA table_info({self.tablename})"
+        rows = await self.get_rows(query)
+        return {row["name"] for row in rows}
+
     async def execute(self, query: str, params: Optional[Iterable[sql_types]] = None) -> None:
         """
         Executes a write operation (INSERT, UPDATE, DELETE).
