@@ -76,7 +76,10 @@ class RabbitMQConnectionManager:
     ) -> None:
         """Callback triggered when aio_pika successfully reconnects."""
         if connection:
-            logger.info(f"RabbitMQ successfully reconnected to {connection.url}")
+            url = "UNKNOWN"
+            if connection.transport:
+                url = str(connection.transport.connection.url)
+            logger.info(f"RabbitMQ successfully reconnected to {url}")
         else:
             logger.info("RabbitMQ successfully reconnected.")
         self.is_connected.set()
