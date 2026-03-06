@@ -74,3 +74,74 @@ class WorkerTransportManager:
 
         async for message in self._current_transport.listen():  # type: ignore
             yield message
+
+    @staticmethod
+    def collapse_batch(batch: List[BaseMessage]) -> List[BaseMessage]:
+        """
+        Filters a batch of messages to keep only the latest message per job.
+        Because ULIDs are lexicographically sortable by time, the largest ULID is the newest.
+        Non-job messages are passed through using their message_id as a key.
+        """
+        latest_by_job: Dict[str, BaseMessage] = {}
+        for msg in batch:
+            # All job-related messages must have a job_id (ULID or str)
+            job_id = getattr(msg, "job_id", getattr(getattr(msg, "payload", None), "job_id", None))
+
+            if not job_id:
+                # If it's not a job message (e.g. some future worker-level command), just pass it through
+                # Using the message_id to ensure it doesn't collide with job_ids
+                latest_by_job[str(msg.message_id)] = msg
+                continue
+
+            job_id_str = str(job_id)
+
+            if job_id_str not in latest_by_job:
+                latest_by_job[job_id_str] = msg
+            else:
+                # Compare message IDs (ULIDs) to find the newest
+                if str(msg.message_id) > str(latest_by_job[job_id_str].message_id):
+                    latest_by_job[job_id_str] = msg
+
+        return sorted(list(latest_by_job.values()), key=lambda x: x.message_id)
+
+    async def listen_batch(self, debounce: float = 0.1, max_batch_size: int = 100) -> AsyncIterator[List[BaseMessage]]:
+        """
+        Listens for messages and yields them in filtered batches.
+        When a message arrives, it pulls from the queue for up to `debounce` seconds
+        or until `max_batch_size` messages are collected. It then filters the batch
+        to keep only the most recent message per job.
+        """
+        import asyncio
+
+        if not self._current_transport:
+            return
+
+        iterator = self._current_transport.listen().__aiter__()
+
+        while True:
+            batch = []
+            try:
+                # Block until we get at least one message
+                first_msg = await iterator.__anext__()
+
+                batch.append(first_msg)
+
+                async def _drain():
+                    while len(batch) < max_batch_size:
+                        msg = await iterator.__anext__()
+                        batch.append(msg)
+
+                # Read from the queue for up to `debounce` seconds
+                try:
+                    await asyncio.wait_for(_drain(), timeout=debounce)
+                except asyncio.TimeoutError:
+                    pass
+
+                # Yield the filtered values
+                yield self.collapse_batch(batch)
+
+            except StopAsyncIteration:
+                # If the iterator ends and we have a batch in progress, yield it before stopping
+                if batch:
+                    yield self.collapse_batch(batch)
+                break

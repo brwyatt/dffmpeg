@@ -191,13 +191,15 @@ class Worker:
         """Listens for messages from the transport."""
         logger.info(f"Listening on transport {self.transport_manager.current_transport_name}...")
         try:
-            async for message in self.transport_manager.listen():
-                if isinstance(message, JobRequestMessage):
-                    await self._handle_job_request(message)
-                elif isinstance(message, JobStatusMessage):
-                    await self._handle_job_status(message)
-                else:
-                    logger.debug(f"Ignored message type: {message.message_type}")
+            # Process in batches to collapse flapping/duplicate state messages
+            async for batch in self.transport_manager.listen_batch(debounce=0.1):
+                for message in batch:
+                    if isinstance(message, JobRequestMessage):
+                        await self._handle_job_request(message)
+                    elif isinstance(message, JobStatusMessage):
+                        await self._handle_job_status(message)
+                    else:
+                        logger.debug(f"Ignored message type: {message.message_type}")
         except Exception as e:
             logger.error(f"Transport listener error: {e}")
 
@@ -294,6 +296,10 @@ class Worker:
                 asyncio.create_task(self._active_jobs[job_id].abort())
         else:
             logger.debug(f"Received status update for unknown job {job_id}")
+            if status == "canceling":
+                # We don't have this job, but the coordinator expects an ACK
+                logger.info(f"Acking cancel request for unknown job {job_id}")
+                await self._report_job_failure(job_id, "canceled")
 
     def _cleanup_job(self, job_id: ULID):
         """

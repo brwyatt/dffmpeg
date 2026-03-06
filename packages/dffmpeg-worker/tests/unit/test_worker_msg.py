@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from ulid import ULID
@@ -46,6 +46,19 @@ async def test_handle_job_status_canceled(worker):
 
     mock_runner.abort.assert_called_once()
     mock_runner.cancel.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_job_status_canceling_unknown_job(worker):
+    job_id = ULID()
+    # Job not in _active_jobs
+    msg = JobStatusMessage(recipient_id="test-worker", job_id=job_id, payload=JobStatusPayload(status="canceling"))
+
+    with patch.object(worker, "_report_job_failure", new_callable=AsyncMock) as mock_report:
+        await worker._handle_job_status(msg)
+
+        # It should ack the cancellation so the coordinator doesn't hang waiting
+        mock_report.assert_called_once_with(job_id, "canceled")
 
 
 @pytest.mark.asyncio
