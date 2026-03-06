@@ -1,13 +1,12 @@
 import asyncio
 import logging
-import ssl
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 import aio_pika
-import dns.asyncresolver
 from ulid import ULID
 
 from dffmpeg.common.models import BaseMessage, ComponentHealth
+from dffmpeg.common.transports.utils.rabbitmq import RabbitMQConnectionManager
 from dffmpeg.coordinator.transports.base import BaseServerTransport
 
 logger = logging.getLogger(__name__)
@@ -35,129 +34,72 @@ class RabbitMQServerTransport(BaseServerTransport):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.host = host
-        self.port = port
-        self.username = username
-        self.password = password
-        self.use_tls = use_tls
-        self.use_srv = use_srv
-        self.verify_ssl = verify_ssl
         self.vhost = vhost
         self.workers_exchange_name = workers_exchange
         self.jobs_exchange_name = jobs_exchange
 
-        self._connection: Optional[aio_pika.abc.AbstractConnection] = None
+        self._manager = RabbitMQConnectionManager(
+            host=host,
+            port=port,
+            username=username,
+            password=password,
+            use_tls=use_tls,
+            use_srv=use_srv,
+            verify_ssl=verify_ssl,
+        )
+
         self._channel: Optional[aio_pika.abc.AbstractChannel] = None
         self._workers_exchange: Optional[aio_pika.abc.AbstractExchange] = None
         self._jobs_exchange: Optional[aio_pika.abc.AbstractExchange] = None
-        self._connect_event = asyncio.Event()
         self._loop_task: Optional[asyncio.Task] = None
 
     async def setup(self):
         """
         Connect to RabbitMQ and declare exchanges.
         """
-        self._loop_task = asyncio.create_task(self._server_loop())
+        self._loop_task = asyncio.create_task(self._connection_task())
 
-    async def _resolve_srv(self, host: str, use_tls: bool) -> Tuple[str, int]:
+    async def _connection_task(self):
         """
-        Resolve SRV record to get the actual host and port.
+        Background task to set up robust connection and await indefinitely.
         """
-        prefix = "_amqps._tcp" if use_tls else "_amqp._tcp"
-        srv_name = f"{prefix}.{host}"
-
         try:
-            # Use async resolver
-            answers = await dns.asyncresolver.resolve(srv_name, "SRV")
+            connection = await self._manager.connect(vhost=self.vhost)
 
-            sorted_answers = sorted(answers, key=lambda x: (x.priority, -x.weight))
-            best = sorted_answers[0]
-            target = str(best.target).rstrip(".")
-            logger.debug(f"Resolved SRV {srv_name} to {target}:{best.port}")
-            return target, best.port
+            self._channel = await connection.channel()
+
+            # Declare Exchanges
+            self._workers_exchange = await self._channel.declare_exchange(
+                self.workers_exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
+            )
+            self._jobs_exchange = await self._channel.declare_exchange(
+                self.jobs_exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
+            )
+
+            logger.info(
+                f"Connected to RabbitMQ and declared exchanges: "
+                f"{self.workers_exchange_name}, {self.jobs_exchange_name}"
+            )
+
+            # Keep task alive infinitely while aio_pika manages background I/O
+            await asyncio.Future()
+
+        except asyncio.CancelledError:
+            logger.info("RabbitMQ server loop cancelled.")
         except Exception as e:
-            logger.error(f"Failed to resolve SRV record {srv_name}: {e}")
-            return host, self.port
-
-    async def _server_loop(self):
-        """
-        Background task to maintain the RabbitMQ connection.
-        """
-        while True:
-            try:
-                connect_host = self.host
-                connect_port = self.port
-
-                if self.use_srv:
-                    connect_host, connect_port = await self._resolve_srv(self.host, self.use_tls)
-
-                logger.info(
-                    f"Connecting to RabbitMQ at {connect_host}:{connect_port} "
-                    f"(vhost: {self.vhost}, TLS: {self.use_tls}, Verify: {self.verify_ssl})"
-                )
-
-                ssl_context = None
-                if self.use_tls:
-                    if self.verify_ssl:
-                        ssl_context = ssl.create_default_context()
-                    else:
-                        ssl_context = ssl._create_unverified_context()
-
-                self._connection = await aio_pika.connect_robust(
-                    host=connect_host,
-                    port=connect_port,
-                    login=self.username,
-                    password=self.password,
-                    ssl=self.use_tls,
-                    virtualhost=self.vhost,
-                    ssl_context=ssl_context,
-                )
-
-                if not self._connection:
-                    logger.error("Failed to establish RabbitMQ connection.")
-                    continue
-
-                async with self._connection:
-                    self._channel = await self._connection.channel()
-
-                    if not self._channel:
-                        logger.error("Failed to create RabbitMQ channel.")
-                        continue
-
-                    # Declare Exchanges
-                    self._workers_exchange = await self._channel.declare_exchange(
-                        self.workers_exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
-                    )
-                    self._jobs_exchange = await self._channel.declare_exchange(
-                        self.jobs_exchange_name, aio_pika.ExchangeType.TOPIC, durable=True
-                    )
-
-                    self._connect_event.set()
-                    logger.info(
-                        f"Connected to RabbitMQ and declared exchanges: "
-                        f"{self.workers_exchange_name}, {self.jobs_exchange_name}"
-                    )
-
-                    # Keep connection alive
-                    while True:
-                        await asyncio.sleep(1)
-
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                self._connection = None
-                self._channel = None
-                self._workers_exchange = None
-                self._jobs_exchange = None
-                self._connect_event.clear()
-                logger.error(f"RabbitMQ server error: {e}. Retrying in 5 seconds...")
-                await asyncio.sleep(5)
+            logger.error(f"RabbitMQ server setup failed: {e}")
+            raise
+        finally:
+            await self._manager.close()
+            self._channel = None
+            self._workers_exchange = None
+            self._jobs_exchange = None
 
     async def send_message(self, message: BaseMessage, transport_metadata: Optional[Dict[str, Any]] = None) -> bool:
         """
         Publish a message to a RabbitMQ exchange.
         """
-        if not self._channel or not self._connect_event.is_set():
+        if not self._channel or not self._manager.is_connected.is_set():
             logger.warning(f"RabbitMQ not connected, cannot send message {message.message_id}.")
             return False
 
@@ -226,7 +168,7 @@ class RabbitMQServerTransport(BaseServerTransport):
         """
         Check the health of the RabbitMQ connection.
         """
-        if self._connection and self._connect_event.is_set() and not self._connection.is_closed:
+        if self._manager.is_connected.is_set():
             return ComponentHealth(status="online")
         else:
             return ComponentHealth(status="unhealthy", detail="Not connected to RabbitMQ")
