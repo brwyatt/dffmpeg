@@ -42,7 +42,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 *Goal: Expanded compatibility and features.*
 
 - [x] **RabbitMQ Transport**: Implement RabbitMQ transport.
-- [ ] **Improved Transport Negotiation**: Better/fairer selection of transport.
+- [ ] **Improved Transport Negotiation**: Better/fairer selection of transport. This should eventually include "pre-flight" health checks to maintain standby connections and prevent workers from registering as online if all their available transports are disconnected.
 
 ## Phase 4: Post-1.0
 *Goal: Advanced features and management tools.*

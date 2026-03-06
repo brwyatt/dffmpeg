@@ -80,7 +80,7 @@ Configure background cleanup tasks.
 | `interval` | integer | `10` | How often the janitor runs (seconds). |
 | `worker_threshold_factor` | float | `1.5` | Multiplier for registration interval to determine worker staleness. |
 | `job_heartbeat_threshold_factor` | float | `2.5` | Multiplier for heartbeat interval to determine job staleness. |
-| `job_assignment_timeout` | integer | `30` | Max time (seconds) a job stays in `assigned` state before retry. |
+| `job_assignment_timeout` | integer | `10` | Max time (seconds) a job stays in `assigned` state before retry. |
 | `job_pending_retry_delay` | integer | `5` | Delay before retrying a pending job. |
 | `job_pending_timeout` | integer | `30` | Max time a job stays in `pending` state. |
 
