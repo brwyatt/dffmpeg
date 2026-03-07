@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -118,11 +119,23 @@ async def test_listen_batch_integration():
         payload=JobStatusPayload(status="canceling"),
     )
 
-    async def mock_listen():
-        yield msg1
-        yield msg2
+    # Setup mock to return msg1 from receive(), then msg2 and QueueEmpty from
+    # receive_nowait(). We use a mutable list to ensure mock_receive_nowait()
+    # returns msg2 once, then QueueEmpty.
+    state = {"yielded_msg2": False}
 
-    mock_transport.listen = mock_listen
+    async def mock_receive():
+        return msg1
+
+    def mock_receive_nowait():
+        # Using a state on the mock to return msg2 then raise
+        if not state["yielded_msg2"]:
+            state["yielded_msg2"] = True
+            return msg2
+        raise asyncio.QueueEmpty()
+
+    mock_transport.receive = mock_receive
+    mock_transport.receive_nowait = mock_receive_nowait
 
     # Use a small debounce for fast test
     batch_iterator = manager.listen_batch(debounce=0.01)

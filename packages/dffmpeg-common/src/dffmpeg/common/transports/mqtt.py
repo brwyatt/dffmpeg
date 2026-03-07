@@ -1,7 +1,7 @@
 import asyncio
 import json
 import logging
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import Any, Dict, Optional
 
 import aiomqtt
 from pydantic import TypeAdapter
@@ -107,10 +107,10 @@ class MQTTClientTransport(BaseClientTransport):
             self._listen_task = None
         self._client = None
 
-    async def listen(self) -> AsyncIterator[BaseMessage]:
-        """
-        Yield messages from the internal queue.
-        """
-        while True:
-            msg = await self._message_queue.get()
-            yield msg
+    async def receive(self) -> BaseMessage:
+        """Wait for and return the next message."""
+        return await self._message_queue.get()
+
+    def receive_nowait(self) -> BaseMessage:
+        """Return the next message immediately if available, else raise asyncio.QueueEmpty."""
+        return self._message_queue.get_nowait()

@@ -107,8 +107,8 @@ class WorkerTransportManager:
     async def listen_batch(self, debounce: float = 0.1, max_batch_size: int = 100) -> AsyncIterator[List[BaseMessage]]:
         """
         Listens for messages and yields them in filtered batches.
-        When a message arrives, it pulls from the queue for up to `debounce` seconds
-        or until `max_batch_size` messages are collected. It then filters the batch
+        When a message arrives, it briefly waits (`debounce` seconds) to pull more
+        messages from the queue up to `max_batch_size`. It then filters the batch
         to keep only the most recent message per job.
         """
         import asyncio
@@ -116,32 +116,31 @@ class WorkerTransportManager:
         if not self._current_transport:
             return
 
-        iterator = self._current_transport.listen().__aiter__()
-
         while True:
             batch = []
             try:
                 # Block until we get at least one message
-                first_msg = await iterator.__anext__()
-
+                first_msg = await self._current_transport.receive()
                 batch.append(first_msg)
 
-                async def _drain():
-                    while len(batch) < max_batch_size:
-                        msg = await iterator.__anext__()
-                        batch.append(msg)
+                # Briefly yield to the event loop to allow concurrent messages to queue
+                if debounce > 0:
+                    await asyncio.sleep(debounce)
 
-                # Read from the queue for up to `debounce` seconds
-                try:
-                    await asyncio.wait_for(_drain(), timeout=debounce)
-                except asyncio.TimeoutError:
-                    pass
+                # Drain immediately available messages
+                while len(batch) < max_batch_size:
+                    try:
+                        msg = self._current_transport.receive_nowait()
+                        batch.append(msg)
+                    except asyncio.QueueEmpty:
+                        break
 
                 # Yield the filtered values
-                yield self.collapse_batch(batch)
-
-            except StopAsyncIteration:
-                # If the iterator ends and we have a batch in progress, yield it before stopping
                 if batch:
                     yield self.collapse_batch(batch)
+
+            except asyncio.CancelledError:
                 break
+            except Exception as e:
+                logger.error(f"Error in listen_batch: {e}")
+                await asyncio.sleep(1)
