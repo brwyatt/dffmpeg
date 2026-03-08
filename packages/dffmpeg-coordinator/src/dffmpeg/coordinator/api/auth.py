@@ -1,4 +1,3 @@
-import ipaddress
 from logging import getLogger
 from typing import Optional
 
@@ -6,6 +5,7 @@ from fastapi import Depends, Header, HTTPException, Request
 
 from dffmpeg.common.auth.request_signer import RequestSigner
 from dffmpeg.common.models import AuthenticatedIdentity
+from dffmpeg.coordinator.api.utils import is_ip_allowed
 from dffmpeg.coordinator.db.auth import AuthRepository
 
 logger = getLogger(__name__)
@@ -47,23 +47,15 @@ async def _get_verified_identity_from_request(
 
     # Validate IP against allowed CIDRs
     if request.client and request.client.host:
-        try:
-            client_ip = ipaddress.ip_address(request.client.host)
-            allowed = False
-            for cidr in client_identity.allowed_cidrs:
-                if client_ip in cidr:
-                    allowed = True
-                    break
-
-            if not allowed:
-                logger.warning(
-                    f"Client {request_client_id} blocked from IP {request.client.host} "
-                    f"(Allowed: {client_identity.allowed_cidrs})"
-                )
-                raise HTTPException(status_code=401, detail="Client IP not allowed")
-        except ValueError:
-            logger.warning(f"Invalid client IP address: {request.client.host}")
-            raise HTTPException(status_code=401, detail="Invalid client IP")
+        if not is_ip_allowed(request.client.host, client_identity.allowed_cidrs):
+            logger.warning(
+                f"Client {request_client_id} blocked from IP {request.client.host} "
+                f"(Allowed: {client_identity.allowed_cidrs})"
+            )
+            raise HTTPException(status_code=401, detail="Client IP not allowed")
+    else:
+        logger.warning(f"Client {request_client_id} blocked from unknown IP")
+        raise HTTPException(status_code=401, detail="Client IP not allowed")
 
     body = await request.body()
     signer = RequestSigner(client_identity.hmac_key)

@@ -39,6 +39,10 @@ To improve security, the API enforces network-based access controls. Each regist
 *   **Enforcement:** The Coordinator checks the source IP of every request against the allowed CIDRs for the authenticated user. If the IP matches, the request proceeds to HMAC verification. If not, it is rejected with a `401 Unauthorized` error.
 *   **Proxies:** If the Coordinator is behind a trusted reverse proxy (configured via `trusted_proxies`), it will respect the `X-Forwarded-For` header to determine the real client IP. Localhost (`127.0.0.1`) is trusted by default if unspecified.
 
+### Web Dashboard Access
+
+The built-in web status dashboard (`/status`) does not require HMAC authentication, as it is intended to be viewable in a standard web browser. However, access to the dashboard is also restricted by IP addresses using the `allowed_dashboard_ips` configuration. This defaults to allowing all IPs (`0.0.0.0/0`, `::/0`), but can be restricted to internal networks or management subnets.
+
 ## Key Management
 
 Keys are managed by the Coordinator.

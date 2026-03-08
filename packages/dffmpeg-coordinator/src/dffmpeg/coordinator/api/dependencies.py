@@ -1,11 +1,16 @@
-from fastapi import Request
+import logging
 
+from fastapi import Depends, HTTPException, Request
+
+from dffmpeg.coordinator.api.utils import is_ip_allowed
 from dffmpeg.coordinator.config import CoordinatorConfig
 from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
 from dffmpeg.coordinator.transports import TransportManager
+
+logger = logging.getLogger(__name__)
 
 
 def get_job_repo(request: Request) -> JobRepository:
@@ -48,3 +53,26 @@ def get_config(request: Request) -> CoordinatorConfig:
     Dependency to retrieve the CoordinatorConfig from the application state.
     """
     return request.app.state.config
+
+
+def verify_dashboard_enabled(config: CoordinatorConfig = Depends(get_config)):
+    """
+    Dependency to verify if the web dashboard is enabled.
+    """
+    if not config.web_dashboard_enabled:
+        raise HTTPException(status_code=404, detail="Dashboard disabled")
+
+
+def verify_dashboard_ip(request: Request, config: CoordinatorConfig = Depends(get_config)):
+    """
+    Dependency to verify if the client's IP is allowed to access the dashboard.
+    """
+    if request.client and request.client.host:
+        if is_ip_allowed(request.client.host, config.allowed_dashboard_ips):
+            return
+        logger.warning(
+            f"Dashboard access blocked from IP {request.client.host} (Allowed: {config.allowed_dashboard_ips})"
+        )
+    else:
+        logger.warning("Dashboard access blocked from unknown host")
+    raise HTTPException(status_code=403, detail="Forbidden")

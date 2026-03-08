@@ -1,4 +1,21 @@
+import ipaddress
 from typing import List
+
+from dffmpeg.common.models import CIDR
+
+
+def is_ip_allowed(client_host: str, allowed_cidrs: List[CIDR]) -> bool:
+    """
+    Checks if a given client host IP is within any of the allowed CIDRs.
+    """
+    try:
+        client_ip = ipaddress.ip_address(client_host)
+        for cidr in allowed_cidrs:
+            if client_ip in cidr:
+                return True
+        return False
+    except ValueError:
+        return False
 
 
 def get_negotiated_transport(client_transports: List[str], server_transports: List[str]) -> str:

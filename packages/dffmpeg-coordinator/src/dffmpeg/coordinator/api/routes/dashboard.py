@@ -2,16 +2,16 @@ import importlib.resources
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from dffmpeg.coordinator.api.dependencies import (
-    get_config,
     get_job_repo,
     get_worker_repo,
+    verify_dashboard_enabled,
+    verify_dashboard_ip,
 )
-from dffmpeg.coordinator.config import CoordinatorConfig
 from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
 
@@ -77,14 +77,14 @@ async def get_status_data(window: int, job_repo: JobRepository, worker_repo: Wor
     }
 
 
-@router.get("/status", response_class=HTMLResponse)
+@router.get(
+    "/status",
+    response_class=HTMLResponse,
+    dependencies=[Depends(verify_dashboard_enabled), Depends(verify_dashboard_ip)],
+)
 async def dashboard(
     request: Request,
-    config: CoordinatorConfig = Depends(get_config),
 ):
-    if not config.web_dashboard_enabled:
-        raise HTTPException(status_code=404, detail="Dashboard disabled")
-
     return templates.TemplateResponse(
         request=request,
         name="status.html",
@@ -92,14 +92,13 @@ async def dashboard(
     )
 
 
-@router.get("/status/data")
+@router.get(
+    "/status/data",
+    dependencies=[Depends(verify_dashboard_enabled), Depends(verify_dashboard_ip)],
+)
 async def dashboard_data(
     window: int = 3600,
-    config: CoordinatorConfig = Depends(get_config),
     job_repo: JobRepository = Depends(get_job_repo),
     worker_repo: WorkerRepository = Depends(get_worker_repo),
 ):
-    if not config.web_dashboard_enabled:
-        raise HTTPException(status_code=404, detail="Dashboard disabled")
-
     return await get_status_data(window, job_repo, worker_repo)

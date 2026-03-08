@@ -1,3 +1,4 @@
+import ipaddress
 import os
 from logging import getLogger
 from pathlib import Path
@@ -7,7 +8,7 @@ import yaml
 from pydantic import BaseModel, Field
 
 from dffmpeg.common.config_utils import find_config_file
-from dffmpeg.common.models import default_job_heartbeat_interval
+from dffmpeg.common.models import CIDR, default_job_heartbeat_interval
 from dffmpeg.coordinator.db import DBConfig
 from dffmpeg.coordinator.transports import TransportConfig
 
@@ -32,6 +33,12 @@ class CoordinatorConfig(BaseModel):
     janitor: JanitorConfig = Field(default_factory=JanitorConfig)
     default_job_heartbeat_interval: int = default_job_heartbeat_interval
     web_dashboard_enabled: bool = True
+    allowed_dashboard_ips: List[CIDR] = Field(
+        default_factory=lambda: [
+            ipaddress.ip_network("0.0.0.0/0"),
+            ipaddress.ip_network("::/0"),
+        ]
+    )
     dev_mode: bool = False
     allowed_binaries: List[str] = Field(default_factory=lambda: ["ffmpeg", "ffprobe"])
     trusted_proxies: List[str] = Field(default_factory=lambda: ["127.0.0.1"])
