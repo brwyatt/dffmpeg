@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Any, AsyncIterator, Dict, Optional
+from typing import Any, Dict, Optional
 
 import httpx
 from pydantic import TypeAdapter
@@ -23,6 +23,9 @@ class HTTPPollingClientTransport(BaseClientTransport):
         self._running = False
         self._client: Optional[httpx.AsyncClient] = None
         self._message_adapter = TypeAdapter(Message)
+        self._last_message_id: Optional[ULID] = None
+        self._message_queue: asyncio.Queue[BaseMessage] = asyncio.Queue()
+        self._listen_task: Optional[asyncio.Task] = None
 
     async def connect(self, metadata: Dict[str, Any]):
         self.poll_path = metadata.get("path")
@@ -31,20 +34,26 @@ class HTTPPollingClientTransport(BaseClientTransport):
 
         self._client = httpx.AsyncClient(base_url=self.base_url)
         self._running = True
+        self._listen_task = asyncio.create_task(self._poll_loop())
         logger.info(f"Connected to HTTP Polling transport at {self.base_url}{self.poll_path}")
 
     async def disconnect(self):
         self._running = False
+        if self._listen_task:
+            self._listen_task.cancel()
+            try:
+                await self._listen_task
+            except asyncio.CancelledError:
+                pass
+            self._listen_task = None
         if self._client:
             await self._client.aclose()
             self._client = None
         logger.info("Disconnected from HTTP Polling transport")
 
-    async def listen(self) -> AsyncIterator[BaseMessage]:  # type: ignore
+    async def _poll_loop(self):
         if not self._client or not self.poll_path:
-            raise RuntimeError("Transport not connected")
-
-        last_message_id: Optional[ULID] = None
+            return
 
         while self._running:
             try:
@@ -52,8 +61,8 @@ class HTTPPollingClientTransport(BaseClientTransport):
                 headers, _ = self.signer.sign_request(self.client_id, "GET", self.poll_path)
 
                 params: Dict[str, Any] = {"wait": self.poll_wait}
-                if last_message_id:
-                    params["last_message_id"] = str(last_message_id)
+                if self._last_message_id:
+                    params["last_message_id"] = str(self._last_message_id)
 
                 response = await self._client.get(self.poll_path, headers=headers, params=params, timeout=10.0)
 
@@ -62,9 +71,9 @@ class HTTPPollingClientTransport(BaseClientTransport):
                     messages = data.get("messages", [])
                     for msg_data in messages:
                         try:
-                            msg = self._message_adapter.validate_python(msg_data)
-                            last_message_id = msg.message_id
-                            yield msg
+                            msg: Message = self._message_adapter.validate_python(msg_data)
+                            self._last_message_id = msg.message_id
+                            await self._message_queue.put(msg)
                         except Exception as e:
                             logger.error(f"Failed to parse message: {e}")
                 else:
@@ -73,8 +82,18 @@ class HTTPPollingClientTransport(BaseClientTransport):
 
             except httpx.ReadTimeout:
                 continue
+            except asyncio.CancelledError:
+                break
             except Exception as e:
                 if not self._running:
                     break
                 logger.error(f"Error in HTTP polling loop: {e}")
                 await asyncio.sleep(1)
+
+    async def receive(self) -> BaseMessage:
+        """Wait for and return the next message."""
+        return await self._message_queue.get()
+
+    def receive_nowait(self) -> BaseMessage:
+        """Return the next message immediately if available, else raise asyncio.QueueEmpty."""
+        return self._message_queue.get_nowait()

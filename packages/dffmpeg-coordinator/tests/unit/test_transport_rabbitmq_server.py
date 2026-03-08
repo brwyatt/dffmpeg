@@ -35,14 +35,12 @@ async def test_rabbitmq_server_health_check():
     assert health.status == "unhealthy"
 
     # Mock connected state
-    transport._connection = MagicMock()
-    transport._connection.is_closed = False
-    transport._connect_event.set()
+    transport._manager.is_connected.set()
     health = await transport.health_check()
     assert health.status == "online"
 
     # Mock disconnected state
-    transport._connect_event.clear()
+    transport._manager.is_connected.clear()
     health = await transport.health_check()
     assert health.status == "unhealthy"
 
@@ -55,7 +53,7 @@ async def test_rabbitmq_server_send_message():
 
     mock_exchange = AsyncMock()
     transport._workers_exchange = mock_exchange
-    transport._connect_event.set()
+    transport._manager.is_connected.set()
     transport._channel = MagicMock()
 
     message = JobStatusMessage(recipient_id="client1", job_id=ULID(), payload=JobStatusPayload(status="running"))

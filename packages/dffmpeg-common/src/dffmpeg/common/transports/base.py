@@ -1,4 +1,4 @@
-from typing import Any, AsyncIterator, Dict, cast
+from typing import Any, AsyncIterator, Dict
 
 from dffmpeg.common.models import BaseMessage
 
@@ -24,6 +24,18 @@ class BaseClientTransport:
         """
         raise NotImplementedError()
 
+    async def receive(self) -> BaseMessage:
+        """
+        Wait for and return the next message from the transport.
+        """
+        raise NotImplementedError()
+
+    def receive_nowait(self) -> BaseMessage:
+        """
+        Return the next message immediately if available, else raise asyncio.QueueEmpty.
+        """
+        raise NotImplementedError()
+
     async def listen(self) -> AsyncIterator[BaseMessage]:
         """
         Listen for messages from the coordinator.
@@ -31,6 +43,5 @@ class BaseClientTransport:
         Yields:
             BaseMessage: Messages received from the coordinator.
         """
-        if False:
-            yield cast(BaseMessage, None)
-        raise NotImplementedError()
+        while True:
+            yield await self.receive()

@@ -53,6 +53,11 @@ async def process_job_assignment(
             logger.warning(f"No workers match requirements for job {job_id}")
             return
 
+        # Exclude the previously assigned worker if this is a reassignment
+        # to prevent immediate flapping back to a problematic worker.
+        if job.worker_id and len(candidates) > 1:
+            candidates = [w for w in candidates if w.worker_id != job.worker_id]
+
         # Get load
         worker_load = await job_repo.get_worker_load()
 
