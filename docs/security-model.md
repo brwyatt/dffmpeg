@@ -41,7 +41,7 @@ To improve security, the API enforces network-based access controls. Each regist
 
 ### Web Dashboard Access
 
-The built-in web status dashboard (`/status`) does not require HMAC authentication, as it is intended to be viewable in a standard web browser. However, access to the dashboard is also restricted by IP addresses using the `allowed_dashboard_ips` configuration. This defaults to allowing all IPs (`0.0.0.0/0`, `::/0`), but can be restricted to internal networks or management subnets.
+The built-in web status dashboard (`/status`) and the machine metrics endpoint (`/metrics`) do not require HMAC authentication, as they are intended to be viewable in a standard web browser or metrics scraper. However, access to these routes is restricted by IP addresses using the `allowed_dashboard_ips` and `allowed_metrics_ips` configurations. These default to allowing all IPs (`0.0.0.0/0`, `::/0`), but can be restricted to internal networks or management subnets.
 
 ## Key Management
 

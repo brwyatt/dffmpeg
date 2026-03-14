@@ -25,6 +25,7 @@ The Coordinator manages the cluster state, job queue, and worker registry.
 | `port` | integer | `8000` | The port to listen on. |
 | `web_dashboard_enabled` | boolean | `true` | Enable the built-in web dashboard at `/status`. |
 | `allowed_dashboard_ips` | list[string] | `["0.0.0.0/0", "::/0"]` | List of IP addresses or CIDR subnets allowed to access the web dashboard. |
+| `allowed_metrics_ips` | list[string] | `["0.0.0.0/0", "::/0"]` | List of IP addresses or CIDR subnets allowed to access the machine metrics endpoint. |
 | `default_job_heartbeat_interval` | integer | `5` | Default interval (seconds) for job heartbeats if not specified by the client. |
 | `dev_mode` | boolean | `false` | Enable development mode (auto-reload, verbose logging). Can be set via `DFFMPEG_COORDINATOR_DEV=1`. |
 | `allowed_binaries` | list[string] | `["ffmpeg", "ffprobe"]` | List of supported binary names that workers can register and clients can request. |

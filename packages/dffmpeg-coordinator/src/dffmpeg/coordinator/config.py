@@ -39,6 +39,12 @@ class CoordinatorConfig(BaseModel):
             ipaddress.ip_network("::/0"),
         ]
     )
+    allowed_metrics_ips: List[CIDR] = Field(
+        default_factory=lambda: [
+            ipaddress.ip_network("0.0.0.0/0"),
+            ipaddress.ip_network("::/0"),
+        ]
+    )
     dev_mode: bool = False
     allowed_binaries: List[str] = Field(default_factory=lambda: ["ffmpeg", "ffprobe"])
     trusted_proxies: List[str] = Field(default_factory=lambda: ["127.0.0.1"])

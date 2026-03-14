@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from dffmpeg.coordinator.api.routes import dashboard, health, job, worker
+from dffmpeg.coordinator.api.routes import dashboard, health, job, metrics, worker
 from dffmpeg.coordinator.config import CoordinatorConfig, load_config
 from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.janitor import Janitor
@@ -70,6 +70,7 @@ def create_app(config: Optional[CoordinatorConfig] = None) -> FastAPI:
     app.include_router(worker.router)
     app.include_router(job.router)
     app.include_router(dashboard.router)
+    app.include_router(metrics.router)
 
     @app.get("/", include_in_schema=False)
     async def root_redirect():

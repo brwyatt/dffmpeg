@@ -297,3 +297,50 @@ async def test_update_client_heartbeat(job_repo):
     # SQLite might lose some precision on timestamps during storage/retrieval,
     # but they should be effectively equal or very close.
     assert updated.client_last_seen is not None
+
+
+@pytest.mark.anyio
+async def test_get_recent_jobs(job_repo):
+    now = datetime.now(timezone.utc)
+
+    # Job 1: Running, active (should be returned)
+    j1 = JobRecord(
+        job_id=ULID(),
+        requester_id="client_1",
+        binary_name="ffmpeg",
+        status="running",
+        transport="http",
+        transport_metadata={},
+        last_update=now - timedelta(seconds=600),  # update is old, but status is active
+    )
+    # Job 2: Failed 2 mins ago (should be returned)
+    j2 = JobRecord(
+        job_id=ULID(),
+        requester_id="client_1",
+        binary_name="ffmpeg",
+        status="failed",
+        transport="http",
+        transport_metadata={},
+        last_update=now - timedelta(seconds=120),
+    )
+    # Job 3: Completed 10 mins ago (should NOT be returned)
+    j3 = JobRecord(
+        job_id=ULID(),
+        requester_id="client_1",
+        binary_name="ffmpeg",
+        status="completed",
+        transport="http",
+        transport_metadata={},
+        last_update=now - timedelta(seconds=600),
+    )
+
+    await job_repo.create_job(j1)
+    await job_repo.create_job(j2)
+    await job_repo.create_job(j3)
+
+    recent = await job_repo.get_recent_jobs(window_seconds=300, timestamp=now)
+    assert len(recent) == 2
+
+    job_ids = {str(j.job_id) for j in recent}
+    assert str(j1.job_id) in job_ids
+    assert str(j2.job_id) in job_ids

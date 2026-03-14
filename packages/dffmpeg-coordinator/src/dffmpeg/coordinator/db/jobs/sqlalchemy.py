@@ -284,3 +284,20 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
         sql, params = self.compile_query(query)
         rows = await self.get_rows(sql, params)
         return [self._row_to_job(row) for row in rows]
+
+    async def get_recent_jobs(self, window_seconds: int = 300, timestamp: Optional[datetime] = None) -> list[JobRecord]:
+        now = timestamp or datetime.now(timezone.utc)
+        cutoff = now - timedelta(seconds=window_seconds)
+
+        terminal_statuses = ["completed", "failed", "canceled"]
+
+        query = select(self.table).where(
+            or_(
+                self.table.c.status.not_in(terminal_statuses),
+                self.table.c.last_update >= cutoff,
+            )
+        )
+
+        sql, params = self.compile_query(query)
+        rows = await self.get_rows(sql, params)
+        return [self._row_to_job(row) for row in rows]

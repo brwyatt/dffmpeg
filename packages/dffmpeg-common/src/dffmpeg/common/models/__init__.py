@@ -336,3 +336,23 @@ class HealthResponse(BaseModel):
     version: Optional[str] = None
     databases: Optional[Dict[str, ComponentHealth]] = None
     transports: Optional[Dict[str, ComponentHealth]] = None
+
+
+class MetricCounts(BaseModel):
+    """
+    Standard count representation for metrics broken down by time.
+    """
+
+    current: int = 0
+    last_1m: int = 0
+    last_5m: int = 0
+
+
+class JobMetricsResponse(BaseModel):
+    """
+    Response model for the cluster's current job metrics.
+    """
+
+    total: MetricCounts
+    per_binary: Dict[str, MetricCounts]
+    per_worker: Dict[str, MetricCounts]
