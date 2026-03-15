@@ -23,9 +23,10 @@ from dffmpeg.common.formatting import (
     print_worker_details,
     print_worker_list,
 )
+from dffmpeg.common.http_client import AuthenticatedAsyncClient
 from dffmpeg.common.models import AuthenticatedIdentity, IdentityRole, JobLogsMessage
 from dffmpeg.common.version import get_package_version
-from dffmpeg.coordinator.config import load_config
+from dffmpeg.coordinator.config import CoordinatorConfig, load_config
 from dffmpeg.coordinator.db import DB
 
 
@@ -198,6 +199,27 @@ async def job_logs(db: DB, args: argparse.Namespace):
                 stream.flush()
 
 
+async def janitor_cmd(config: CoordinatorConfig, db: DB, args: argparse.Namespace):
+    action = args.action
+
+    # Need localadmin credentials
+    identity = await db.auth.get_identity("localadmin", include_hmac_key=True)
+    if not identity:
+        print(colorize("User 'localadmin' not found in database. Cannot run janitor command.", Colors.RED))
+        sys.exit(1)
+
+    base_url = f"http://127.0.0.1:{config.port}"
+    client = AuthenticatedAsyncClient(base_url, "localadmin", identity.hmac_key)
+    try:
+        response = await client.post("/admin/janitor", json={"action": action})
+        response.raise_for_status()
+        data = response.json()
+        print(colorize(data.get("message", "Success"), Colors.GREEN))
+    except Exception as e:
+        print(colorize(f"Failed to trigger janitor action '{action}': {e}", Colors.RED))
+        sys.exit(1)
+
+
 async def status_cmd(db: DB, args: argparse.Namespace):
     print(colorize("=== Workers ===", Colors.MAGENTA))
     # Default window for status view if not specified (handled by argparse defaults usually)
@@ -333,6 +355,14 @@ def main():
     # Job subcommands
     add_job_subcommand(subparsers, list_func=job_list, show_func=job_show, logs_func=job_logs)
 
+    # Janitor subcommands
+    janitor_parser = setup_subcommand(subparsers, "janitor", "Trigger background cleanup tasks")
+    janitor_subparsers = janitor_parser.add_subparsers(dest="action", required=True)
+
+    setup_subcommand(janitor_subparsers, "run_all", "Run all cleanup tasks", func=janitor_cmd)
+    setup_subcommand(janitor_subparsers, "clean_workers", "Clean stale workers", func=janitor_cmd)
+    setup_subcommand(janitor_subparsers, "clean_jobs", "Clean stale jobs", func=janitor_cmd)
+
     # Security subcommands
     security_parser = setup_subcommand(subparsers, "security", "Security management")
     security_subparsers = security_parser.add_subparsers(dest="subcommand", required=True)
@@ -383,7 +413,15 @@ def main():
         await db.auth.setup()
 
         if hasattr(args, "func"):
-            await args.func(db, args)
+            import inspect
+
+            sig = inspect.signature(args.func)
+            params = {"args": args}
+            if "config" in sig.parameters:
+                params["config"] = config
+            if "db" in sig.parameters:
+                params["db"] = db
+            await args.func(**params)
 
     try:
         asyncio.run(run())

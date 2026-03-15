@@ -9,6 +9,7 @@ from dffmpeg.coordinator.db.auth import AuthRepository
 from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
+from dffmpeg.coordinator.janitor import Janitor
 from dffmpeg.coordinator.transports import TransportManager
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,13 @@ def get_transports(request: Request) -> TransportManager:
     Dependency to retrieve the Transports manager from the application state.
     """
     return request.app.state.transports
+
+
+def get_janitor(request: Request) -> Janitor:
+    """
+    Dependency to retrieve the Janitor manager from the application state.
+    """
+    return request.app.state.janitor
 
 
 def get_config(request: Request) -> CoordinatorConfig:

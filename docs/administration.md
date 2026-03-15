@@ -265,3 +265,20 @@ The Coordinator runs a background "Janitor" task to clean up stale records.
 *   **Stale Jobs**: Jobs that haven't received a heartbeat (if active) are marked as `failed` or canceled.
 
 Configuration for the Janitor can be found in the [Configuration Reference](configuration.md#janitor-configuration-janitor).
+
+You can also trigger these Janitor actions manually on-demand using the `janitor` command group. This uses the local `localadmin` credentials to authenticate with the Coordinator's HTTP API.
+
+```bash
+dffmpeg-admin janitor <action>
+```
+
+**Actions:**
+*   **`run_all`**: Run all cleanup tasks immediately.
+*   **`clean_workers`**: Clean only stale worker records.
+*   **`clean_jobs`**: Clean only stale job records.
+
+**Example:**
+```bash
+dffmpeg-admin janitor clean_workers
+# Output: Action accepted
+```

@@ -356,3 +356,11 @@ class JobMetricsResponse(BaseModel):
     total: MetricCounts
     per_binary: Dict[str, MetricCounts]
     per_worker: Dict[str, MetricCounts]
+
+
+class JanitorActionRequest(BaseModel):
+    """
+    Payload for submitting a manual janitor action.
+    """
+
+    action: Literal["run_all", "clean_workers", "clean_jobs"]

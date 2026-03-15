@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
-from dffmpeg.coordinator.api.routes import dashboard, health, job, metrics, worker
+from dffmpeg.coordinator.api.routes import admin, dashboard, health, job, metrics, worker
 from dffmpeg.coordinator.config import CoordinatorConfig, load_config
 from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.janitor import Janitor
@@ -35,13 +35,13 @@ async def lifespan(app: FastAPI):
         transports=app.state.transports,
         config=config.janitor,
     )
-    janitor_task = asyncio.create_task(janitor.start())
+    app.state.janitor = janitor
+    await janitor.start()
 
     yield
 
-    janitor_task.cancel()
     try:
-        await janitor_task
+        await janitor.stop()
     except asyncio.CancelledError:
         pass
 
@@ -71,6 +71,7 @@ def create_app(config: Optional[CoordinatorConfig] = None) -> FastAPI:
     app.include_router(job.router)
     app.include_router(dashboard.router)
     app.include_router(metrics.router)
+    app.include_router(admin.router)
 
     @app.get("/", include_in_schema=False)
     async def root_redirect():

@@ -29,7 +29,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
     - [x] **Admin Job List**: Add `job list` and `job status` to Admin CLI, matching Client capabilities.
 - [ ] **Operational Health**:
     - [ ] **Coordinator Health Table**: Track coordinator instances in the DB for HA visibility.
-    - [ ] **Janitor & Cleanup**: Implement on-demand cleanup tasks in Admin CLI (e.g., `dffmpeg-admin janitor clean-jobs`).
+    - [x] **Janitor & Cleanup**: Implement on-demand cleanup tasks in Admin CLI (e.g., `dffmpeg-admin janitor clean-jobs`).
     - [x] **Dynamic Binary Validation**: Move allowed binaries list to Coordinator configuration.
 - [x] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
 - [ ] **HTTP Polling Transport Proxy**: Optionally leverage Transport as a backend for HTTP Polling, allowing for Clients/Workers to benefit from message bus notifications, without needing to directly connect to the message bus directly themselves. Useful for cases where the message bus is unreachable by the Workers or Clients directly.

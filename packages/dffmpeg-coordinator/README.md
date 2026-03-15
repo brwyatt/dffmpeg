@@ -78,5 +78,6 @@ dffmpeg-admin [global options] <command> [subcommand] [options]
 *   **`worker show <worker_id>`**: Display detailed status, binaries, and capabilities for a specific worker.
 *   **`job list`**: List recent jobs.
 *   **`job show <job_id>`**: Display detailed status for a specific job.
+*   **`janitor <action>`**: Manually trigger background cleanup tasks via the local API (`run_all`, `clean_workers`, `clean_jobs`).
 
 > **Note:** The `add` and `rotate-key` commands will display the newly generated HMAC key. This key must be securely provided to the client or worker.
