@@ -22,7 +22,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 ## Phase 2: Version 1.0 (Production Ready)
 *Goal: A stable, well-tested, and documented release.*
 
-- [ ] **Observability / Metrics**: Implement structured metrics (e.g., Prometheus) for queue depth, worker status, etc.
+- [x] **Observability / Metrics**: Implement structured metrics (e.g., Prometheus) for queue depth, worker status, etc.
 - [x] **Database Migrations**: Establish a formal strategy for schema evolution (custom dynamically compiled schema generation).
 - [ ] **Graceful Shutdown Review**: Verify signal handling (SIGTERM/SIGINT) for Coordinator and Worker (should be good, but let's make sure and be extra defensive here).
 - [x] **CLI Parity (Part 2)**:
@@ -33,7 +33,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
     - [x] **Dynamic Binary Validation**: Move allowed binaries list to Coordinator configuration.
 - [x] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
 - [ ] **HTTP Polling Transport Proxy**: Optionally leverage Transport as a backend for HTTP Polling, allowing for Clients/Workers to benefit from message bus notifications, without needing to directly connect to the message bus directly themselves. Useful for cases where the message bus is unreachable by the Workers or Clients directly.
-- [ ] **IP Restrictions for Web Status**: Allow IP restrictions for the Web Status dashboard (optional, global default)
+- [x] **IP Restrictions for Web Status**: Allow IP restrictions for the Web Status dashboard (optional, global default)
 - [ ] **Dynamic Configuration (DB-backed)**: Move configuration settings to the database with Admin CLI management (Config table).
 - [ ] **Automated End-to-End Testing**: Robust `pytest` suite covering the full job lifecycle.
 - [ ] **Security Audit**: Final review of HMAC implementation and path signing.
