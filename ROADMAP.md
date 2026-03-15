@@ -32,6 +32,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
     - [x] **Janitor & Cleanup**: Implement on-demand cleanup tasks in Admin CLI (e.g., `dffmpeg-admin janitor clean-jobs`).
     - [x] **Dynamic Binary Validation**: Move allowed binaries list to Coordinator configuration.
 - [x] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
+- [ ] **CLI Consolidation & Refactoring**: Move the vast majority of CLI parsing, formatting, and HTTP API interaction logic into `dffmpeg-common`. `dffmpeg-coordinator` (Admin CLI) and `dffmpeg-client` (Client CLI) packages will primarily provide lightweight entry points. The Admin CLI should eventually evolve to support *all* operations exclusively via the HTTP API, removing reliance on direct database access for operational tasks.
 - [ ] **HTTP Polling Transport Proxy**: Optionally leverage Transport as a backend for HTTP Polling, allowing for Clients/Workers to benefit from message bus notifications, without needing to directly connect to the message bus directly themselves. Useful for cases where the message bus is unreachable by the Workers or Clients directly.
 - [x] **IP Restrictions for Web Status**: Allow IP restrictions for the Web Status dashboard (optional, global default)
 - [ ] **Dynamic Configuration (DB-backed)**: Move configuration settings to the database with Admin CLI management (Config table).
