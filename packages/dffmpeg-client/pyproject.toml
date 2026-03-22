@@ -1,6 +1,6 @@
 [project]
 name = "dffmpeg-client"
-version = "0.1.1"
+version = "0.2.0"
 authors = [
     { name="Bryan Wyatt", email="brwyatt@gmail.com" },
 ]
@@ -15,7 +15,7 @@ classifiers = [
 ]
 urls = { Homepage = "https://github.com/brwyatt/dffmpeg", Repository = "https://github.com/brwyatt/dffmpeg" }
 dependencies = [
-    "dffmpeg-common~=0.1.1",
+    "dffmpeg-common~=0.2.0",
     "httpx>=0.28.0, <1.0.0",
     "pyyaml>=6.0.0, <7.0.0",
 ]
