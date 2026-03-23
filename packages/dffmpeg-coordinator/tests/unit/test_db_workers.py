@@ -57,14 +57,48 @@ async def test_get_stale_workers(worker_repo):
         registration_interval=10,
     )
 
+    # Worker 4: Stale Registering (last_registration_attempt 20s ago)
+    worker4 = WorkerRecord(
+        worker_id="worker4",
+        status="registering",
+        last_seen=now - timedelta(seconds=5),  # Should be ignored, using registration attempt instead
+        last_registration_attempt=now - timedelta(seconds=20),
+        capabilities=[],
+        binaries=[],
+        paths=[],
+        transport="http",
+        transport_metadata={},
+        registration_interval=10,
+    )
+
+    # Worker 5: Active Registering (last_registration_attempt 10s ago)
+    worker5 = WorkerRecord(
+        worker_id="worker5",
+        status="registering",
+        last_seen=now - timedelta(seconds=100),  # Should be ignored
+        last_registration_attempt=now - timedelta(seconds=10),
+        capabilities=[],
+        binaries=[],
+        paths=[],
+        transport="http",
+        transport_metadata={},
+        registration_interval=10,
+    )
+
     await worker_repo.add_or_update(worker1)
     await worker_repo.add_or_update(worker2)
     await worker_repo.add_or_update(worker3)
+    await worker_repo.add_or_update(worker4)
+    await worker_repo.add_or_update(worker5)
 
     stale = await worker_repo.get_stale_workers(threshold_factor=1.5, timestamp=now)
+    stale_ids = [w.worker_id for w in stale]
 
-    assert len(stale) == 1
-    assert stale[0].worker_id == "worker1"
+    assert "worker1" in stale_ids
+    assert "worker2" not in stale_ids
+    assert "worker3" not in stale_ids
+    assert "worker4" in stale_ids
+    assert "worker5" not in stale_ids
 
 
 @pytest.mark.anyio

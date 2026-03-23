@@ -12,8 +12,10 @@ from dffmpeg.common.models import (
     JobStatusMessage,
     JobStatusUpdate,
     JobStatusUpdateStatus,
+    VerifyRegistrationMessage,
     WorkerDeregistration,
     WorkerRegistration,
+    WorkerVerifyRequest,
 )
 from dffmpeg.common.version import get_package_version
 from dffmpeg.worker.config import WorkerConfig
@@ -61,9 +63,13 @@ class Worker:
         self._registration_task: Optional[asyncio.Task] = None
         self._transport_task: Optional[asyncio.Task] = None
 
+        self._verified_event = asyncio.Event()
+        self._verification_timeout_task: Optional[asyncio.Task] = None
+
         self.coordinator_paths = {
             "register": "/worker/register",
             "deregister": "/worker/deregister",
+            "verify": f"/worker/{self.client_id}/verify",
         }
 
         self._active_jobs: Dict[ULID, JobRunner] = {}
@@ -145,6 +151,15 @@ class Worker:
                         f"Transport changed from {self.transport_manager.current_transport_name} to {new_transport}"
                     )
                     await self._update_transport(new_transport, metadata)
+
+                # We registered, now wait for the verification message over the transport
+                self._verified_event.clear()
+
+                if self._verification_timeout_task:
+                    self._verification_timeout_task.cancel()
+
+                self._verification_timeout_task = asyncio.create_task(self._verification_timeout())
+
             else:
                 logger.warning(f"Registration failed: {resp.status_code} - {resp.text}")
                 resp.raise_for_status()
@@ -157,6 +172,19 @@ class Worker:
             jitter_bound=jitter_bound,
             first_immediate=True,
         )
+
+    async def _verification_timeout(self, timeout: float = 15.0):
+        """Waits for verification. If it times out, tears down the transport to force a retry."""
+        try:
+            await asyncio.wait_for(self._verified_event.wait(), timeout=timeout)
+            logger.info(f"[{self.client_id}] Handshake verification completed successfully.")
+        except asyncio.TimeoutError:
+            logger.error(
+                f"[{self.client_id}] Did not receive verification message within {timeout}s. Tearing down transport."
+            )
+            await self._stop_transport()
+        except asyncio.CancelledError:
+            pass
 
     async def _update_transport(self, transport_name: str, metadata: dict):
         """
@@ -198,10 +226,30 @@ class Worker:
                         await self._handle_job_request(message)
                     elif isinstance(message, JobStatusMessage):
                         await self._handle_job_status(message)
+                    elif isinstance(message, VerifyRegistrationMessage):
+                        await self._handle_verify_registration(message)
                     else:
                         logger.debug(f"Ignored message type: {message.message_type}")
         except Exception as e:
             logger.error(f"Transport listener error: {e}")
+
+    async def _handle_verify_registration(self, message: VerifyRegistrationMessage):
+        """
+        Handles the verification message from the coordinator.
+        """
+        token = message.payload.registration_token
+        logger.info(f"[{self.client_id}] Received verification token via transport. Echoing to coordinator...")
+
+        try:
+            payload = WorkerVerifyRequest(registration_token=token)
+            path = self.coordinator_paths["verify"]
+
+            resp = await self.client.post(path, json=payload.model_dump(mode="json"))
+            resp.raise_for_status()
+
+            self._verified_event.set()
+        except Exception as e:
+            logger.error(f"[{self.client_id}] Failed to echo verification token: {e}")
 
     async def _handle_job_request(self, message: JobRequestMessage):
         """

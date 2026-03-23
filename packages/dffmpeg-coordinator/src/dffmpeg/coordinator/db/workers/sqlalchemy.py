@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import TextClause, and_, or_, select, update
 
 from dffmpeg.common.formatting import ensure_utc
 from dffmpeg.common.models import TransportRecord
@@ -28,6 +28,8 @@ class SQLAlchemyWorkerRepository(WorkerRepository, SQLAlchemyDB):
             transport_metadata=parse_json(row["transport_metadata"]),
             registration_interval=row["registration_interval"],
             version=row["version"],
+            registration_token=row["registration_token"],
+            last_registration_attempt=ensure_utc(row["last_registration_attempt"]),
         )
 
     async def get_worker(self, worker_id: str) -> Optional[WorkerRecord]:
@@ -70,8 +72,8 @@ class SQLAlchemyWorkerRepository(WorkerRepository, SQLAlchemyDB):
         rows = await self.get_rows(sql, params)
         return [self._row_to_worker(row) for row in rows]
 
-    def _get_stale_clause(self, threshold_factor: float, timestamp: datetime):
-        raise NotImplementedError("Subclasses must implement _get_stale_clause")
+    def _get_stale_clauses(self, threshold_factor: float, timestamp: datetime) -> tuple[TextClause, TextClause]:
+        raise NotImplementedError("Subclasses must implement _get_stale_clauses")
 
     async def get_stale_workers(
         self, threshold_factor: float = 1.5, timestamp: Optional[datetime] = None
@@ -79,9 +81,14 @@ class SQLAlchemyWorkerRepository(WorkerRepository, SQLAlchemyDB):
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
 
-        condition = self._get_stale_clause(threshold_factor, timestamp)
+        stale_online_clause, stale_registering_clause = self._get_stale_clauses(threshold_factor, timestamp)
 
-        query = select(self.table).where(and_(self.table.c.status == "online", condition))
+        stale_online = and_(self.table.c.status == "online", stale_online_clause)
+        stale_registering = and_(self.table.c.status == "registering", stale_registering_clause)
+
+        condition = or_(stale_online, stale_registering)
+
+        query = select(self.table).where(condition)
         sql, params = self.compile_query(query)
         rows = await self.get_rows(sql, params)
         return [self._row_to_worker(row) for row in rows]
@@ -104,6 +111,8 @@ class SQLAlchemyWorkerRepository(WorkerRepository, SQLAlchemyDB):
             transport_metadata=safe_worker["transport_metadata"],
             registration_interval=worker_record.registration_interval,
             version=worker_record.version,
+            registration_token=worker_record.registration_token,
+            last_registration_attempt=worker_record.last_registration_attempt,
         )
 
         if exists:

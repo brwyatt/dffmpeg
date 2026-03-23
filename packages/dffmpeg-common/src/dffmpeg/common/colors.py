@@ -16,6 +16,7 @@ def colorize(text: str, color: str) -> str:
 STATUS_COLORS = {
     "online": Colors.GREEN,
     "offline": Colors.RED,
+    "registering": Colors.YELLOW,
     "running": Colors.BLUE,
     "completed": Colors.GREEN,
     "failed": Colors.RED,

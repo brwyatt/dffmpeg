@@ -213,7 +213,15 @@ class JobLogsResponse(BaseModel):
     last_message_id: ULID | None = None
 
 
-type MessageType = Literal["job_status", "job_request", "job_logs"]
+class VerifyRegistrationPayload(BaseModel):
+    """
+    Payload for registration verification messages over transport.
+    """
+
+    registration_token: str = Field(min_length=1)
+
+
+type MessageType = Literal["job_status", "job_request", "job_logs", "verify_registration"]
 
 
 class BaseMessage(BaseModel):
@@ -246,11 +254,17 @@ class JobLogsMessage(BaseMessage):
     payload: JobLogsPayload
 
 
+class VerifyRegistrationMessage(BaseMessage):
+    message_type: Literal["verify_registration"] = "verify_registration"
+    payload: VerifyRegistrationPayload
+
+
 type Message = Annotated[
     Union[
         Annotated[JobStatusMessage, Tag("job_status")],
         Annotated[JobRequestMessage, Tag("job_request")],
         Annotated[JobLogsMessage, Tag("job_logs")],
+        Annotated[VerifyRegistrationMessage, Tag("verify_registration")],
     ],
     Discriminator("message_type"),
 ]
@@ -277,7 +291,7 @@ class WorkerBase(BaseModel):
     version: Optional[str] = None
 
 
-type WorkerStatus = Literal["online", "offline", "error"]
+type WorkerStatus = Literal["online", "offline", "error", "registering"]
 
 
 class Worker(WorkerBase):
@@ -304,8 +318,20 @@ class WorkerRegistration(WorkerBase):
     supported_transports: List[str] = Field(min_length=1)
 
 
+class WorkerVerifyRequest(BaseModel):
+    """
+    Payload for worker verification handshake.
+
+    Attributes:
+        registration_token (str): The verification token issued by the coordinator.
+    """
+
+    registration_token: str = Field(min_length=1)
+
+
 class WorkerRecord(Worker, TransportRecord):
-    pass
+    registration_token: Optional[str] = None
+    last_registration_attempt: Optional[datetime] = None
 
 
 class ComponentHealth(BaseModel):

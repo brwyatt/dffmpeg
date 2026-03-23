@@ -27,6 +27,8 @@ class WorkerRepository(BaseDB):
         Column("transport_metadata", JSON, nullable=False),
         Column("registration_interval", Integer, nullable=False),
         Column("version", String(50), nullable=True),
+        Column("registration_token", String(255), nullable=True),
+        Column("last_registration_attempt", TIMESTAMP(timezone=True), nullable=True),
     )
 
     def __new__(cls, *args, engine: str, **kwargs):

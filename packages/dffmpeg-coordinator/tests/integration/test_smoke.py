@@ -38,14 +38,29 @@ async def test_worker_registration_and_polling(test_app, sign_request, create_au
             # Verify DB state
             worker = await test_app.state.db.workers.get_worker(worker_id)
             assert worker is not None
+            assert worker.status == "registering"
+            assert worker.registration_token is not None
+
+            # Complete Handshake
+            verify_path = f"/worker/{worker_id}/verify"
+            verify_body = {"registration_token": worker.registration_token}
+            verify_body_str = json.dumps(verify_body)
+            verify_headers = await sign_request(signer, worker_id, "POST", verify_path, verify_body_str)
+
+            resp = await client.post(verify_path, content=verify_body_str, headers=verify_headers)
+            assert resp.status_code == 200
+
+            worker = await test_app.state.db.workers.get_worker(worker_id)
             assert worker.status == "online"
 
-            # 2. Poll for work
+            # 2. Poll for work (we expect to receive the verify_registration message)
             poll_path = "/poll/worker"
             headers = await sign_request(signer, worker_id, "GET", poll_path)
             resp = await client.get(poll_path, headers=headers)
             assert resp.status_code == 200
-            assert resp.json()["messages"] == []
+            messages = resp.json()["messages"]
+            assert len(messages) == 1
+            assert messages[0]["message_type"] == "verify_registration"
 
 
 @pytest.mark.anyio
@@ -80,6 +95,13 @@ async def test_client_job_submission_flow(test_app, sign_request, create_auth_id
                 content=reg_body_str,
                 headers=await sign_request(worker_signer, worker_id, "POST", reg_path, reg_body_str),
             )
+
+            worker = await test_app.state.db.workers.get_worker(worker_id)
+            verify_path = f"/worker/{worker_id}/verify"
+            verify_body = {"registration_token": worker.registration_token}
+            verify_body_str = json.dumps(verify_body)
+            verify_headers = await sign_request(worker_signer, worker_id, "POST", verify_path, verify_body_str)
+            await client.post(verify_path, content=verify_body_str, headers=verify_headers)
 
             # 2. Submit Job
             submit_path = "/jobs/submit"
