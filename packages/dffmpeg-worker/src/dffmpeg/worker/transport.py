@@ -88,12 +88,17 @@ class WorkerTransportManager:
             job_id = getattr(msg, "job_id", getattr(getattr(msg, "payload", None), "job_id", None))
 
             if not job_id:
-                # If it's not a job message (e.g. some future worker-level command), just pass it through
-                # Using the message_id to ensure it doesn't collide with job_ids
-                latest_by_job[str(msg.message_id)] = msg
-                continue
-
-            job_id_str = str(job_id)
+                # If it's not a job message, check if it's a registration verification message.
+                # Registration verification messages should be collapsed to the most recent one.
+                if getattr(msg, "message_type", None) == "verify_registration":
+                    job_id_str = "registration_verify"
+                else:
+                    # If it's not a job message and not a registration verify (e.g. some future worker-level command),
+                    # just pass it through using the message_id to ensure it doesn't collide with job_ids.
+                    latest_by_job[str(msg.message_id)] = msg
+                    continue
+            else:
+                job_id_str = str(job_id)
 
             if job_id_str not in latest_by_job:
                 latest_by_job[job_id_str] = msg

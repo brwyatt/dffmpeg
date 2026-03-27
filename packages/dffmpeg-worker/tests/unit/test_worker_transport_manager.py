@@ -4,7 +4,14 @@ from unittest.mock import AsyncMock
 import pytest
 from ulid import ULID
 
-from dffmpeg.common.models import JobRequestMessage, JobRequestPayload, JobStatusMessage, JobStatusPayload
+from dffmpeg.common.models import (
+    JobRequestMessage,
+    JobRequestPayload,
+    JobStatusMessage,
+    JobStatusPayload,
+    VerifyRegistrationMessage,
+    VerifyRegistrationPayload,
+)
 from dffmpeg.common.transports import ClientTransportConfig
 from dffmpeg.worker.transport import WorkerTransportManager
 
@@ -91,6 +98,35 @@ def test_collapse_batch_filters_multiple_jobs():
     assert msg_b1 in collapsed
     assert msg_a2 in collapsed
     assert msg_a1 not in collapsed
+
+
+def test_collapse_batch_filters_registration_pings():
+    """
+    Test that multiple registration verification messages are collapsed
+    to the most recent one.
+    """
+    msg1 = VerifyRegistrationMessage(
+        message_id=M_ULIDS[0],
+        recipient_id="worker1",
+        payload=VerifyRegistrationPayload(registration_token="token1"),
+    )
+    msg2 = VerifyRegistrationMessage(
+        message_id=M_ULIDS[1],
+        recipient_id="worker1",
+        payload=VerifyRegistrationPayload(registration_token="token2"),
+    )
+    msg3 = VerifyRegistrationMessage(
+        message_id=M_ULIDS[2],
+        recipient_id="worker1",
+        payload=VerifyRegistrationPayload(registration_token="token3"),
+    )
+
+    messages = [msg1, msg2, msg3]
+    collapsed = WorkerTransportManager.collapse_batch(messages)
+
+    # We expect them to be collapsed to exactly 1 (the latest).
+    assert len(collapsed) == 1
+    assert collapsed[0] == msg3
 
 
 @pytest.mark.asyncio
