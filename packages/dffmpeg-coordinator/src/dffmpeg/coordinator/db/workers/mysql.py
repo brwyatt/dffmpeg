@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import text
+from sqlalchemy import TextClause, text
 
 from dffmpeg.coordinator.db.engines.mysql import MySQLDB
 from dffmpeg.coordinator.db.workers.sqlalchemy import SQLAlchemyWorkerRepository
@@ -16,7 +16,13 @@ class MySQLWorkerRepository(SQLAlchemyWorkerRepository, MySQLDB):
         # Initialize engine
         MySQLDB.__init__(self, tablename=tablename, **kwargs)
 
-    def _get_stale_clause(self, threshold_factor: float, timestamp: datetime):
-        return text("last_seen < DATE_SUB(:ts, INTERVAL (registration_interval * :factor) SECOND)").bindparams(
-            ts=timestamp, factor=threshold_factor
-        )
+    def _get_stale_clauses(self, threshold_factor: float, timestamp: datetime) -> tuple[TextClause, TextClause]:
+        stale_online_clause = text(
+            "last_seen < DATE_SUB(:ts, INTERVAL (registration_interval * :factor) SECOND)"
+        ).bindparams(ts=timestamp, factor=threshold_factor)
+
+        stale_registering_clause = text(
+            "last_registration_attempt < DATE_SUB(:ts, INTERVAL (registration_interval * :factor) SECOND)"
+        ).bindparams(ts=timestamp, factor=threshold_factor)
+
+        return stale_online_clause, stale_registering_clause

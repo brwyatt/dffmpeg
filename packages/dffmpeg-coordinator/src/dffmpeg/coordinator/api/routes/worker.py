@@ -1,14 +1,20 @@
+import asyncio
+import secrets
+from datetime import datetime, timezone
 from logging import getLogger
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from dffmpeg.common.models import (
     AuthenticatedIdentity,
     TransportRecord,
+    VerifyRegistrationMessage,
+    VerifyRegistrationPayload,
     Worker,
     WorkerDeregistration,
     WorkerRegistration,
+    WorkerVerifyRequest,
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import get_config, get_transports, get_worker_repo
@@ -22,9 +28,16 @@ router = APIRouter()
 logger = getLogger(__name__)
 
 
+async def _send_verify_ping(transports: TransportManager, msg: VerifyRegistrationMessage, delay: float = 0.0):
+    if delay > 0:
+        await asyncio.sleep(delay)
+    await transports.send_message(msg)
+
+
 @router.post("/worker/register")
 async def worker_register(
     payload: WorkerRegistration,
+    background_tasks: BackgroundTasks,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     transports: TransportManager = Depends(get_transports),
     worker_repo: WorkerRepository = Depends(get_worker_repo),
@@ -65,16 +78,73 @@ async def worker_register(
     payload_dict = payload.model_dump(mode="python", exclude={"supported_transports"})
     payload_dict["binaries"] = filtered_binaries
 
+    # Check existing worker status
+    # If it was already online, we leave it online, otherwise, it becomes "registering".
+    existing_worker = await worker_repo.get_worker(payload.worker_id)
+    new_status = "online" if (existing_worker and existing_worker.status == "online") else "registering"
+    new_last_seen = existing_worker.last_seen if existing_worker else datetime.now(timezone.utc)
+
+    # Generate the verification token
+    verification_token = secrets.token_urlsafe(32)
+
     record = WorkerRecord(
         **payload_dict,
-        status="online",
+        status=new_status,
         transport=negotiated_transport,
         transport_metadata=transports[negotiated_transport].get_metadata(payload.worker_id),
+        registration_token=verification_token,
+        last_registration_attempt=datetime.now(timezone.utc),
+        last_seen=new_last_seen,
     )
 
     await worker_repo.add_or_update(record)
 
+    # Determine if we should delay the handshake message.
+    delay = 0.0
+    if not (existing_worker and existing_worker.transport == negotiated_transport):
+        delay = config.handshake_delay_seconds
+
+    # Dispatch the verify message in the background, allowing the response to complete first
+    verify_msg = VerifyRegistrationMessage(
+        recipient_id=payload.worker_id, payload=VerifyRegistrationPayload(registration_token=verification_token)
+    )
+    background_tasks.add_task(_send_verify_ping, transports, verify_msg, delay)
+
     return TransportRecord(transport=record.transport, transport_metadata=record.transport_metadata)
+
+
+@router.post("/worker/{worker_id}/verify")
+async def worker_verify(
+    worker_id: str,
+    payload: WorkerVerifyRequest,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    worker_repo: WorkerRepository = Depends(get_worker_repo),
+):
+    """
+    Verifies a worker's registration token, completing the handshake and marking it online.
+    """
+    if identity.client_id != worker_id:
+        raise HTTPException(status_code=403, detail="WorkerID does not match authenticated ClientID")
+
+    worker = await worker_repo.get_worker(worker_id)
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+
+    if not worker.registration_token:
+        # It's possible the worker already verified or the token was cleared.
+        raise HTTPException(status_code=400, detail="No pending registration to verify")
+
+    if worker.registration_token != payload.registration_token:
+        raise HTTPException(status_code=400, detail="Invalid registration token")
+
+    # Validation passed. Update state to online, update last_seen, clear token.
+    worker.status = "online"
+    worker.last_seen = datetime.now(timezone.utc)
+    worker.registration_token = None
+
+    await worker_repo.add_or_update(worker)
+
+    return {"status": "ok"}
 
 
 @router.post("/worker/deregister")
@@ -136,11 +206,12 @@ async def list_workers(
     # While the dashboard is unauthenticated, this API returns a lot more information
 
     online = await worker_repo.get_workers_by_status("online")
+    registering = await worker_repo.get_workers_by_status("registering")
     # For offline, maybe limit to recent ones? Or all?
     # Admin CLI limits to 24h. Let's do the same for API to avoid massive lists.
     offline = await worker_repo.get_workers_by_status("offline", since_seconds=window)
 
-    workers = online + offline
+    workers = online + registering + offline
     # Sort by status (online first), then last seen (desc), then ID
     workers.sort(key=lambda w: (w.status != "online", -(w.last_seen.timestamp() if w.last_seen else 0), w.worker_id))
 

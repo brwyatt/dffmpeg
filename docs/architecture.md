@@ -166,10 +166,13 @@ graph TD
 ```mermaid
 stateDiagram-v2
     [*] --> Offline
-    Offline --> Online: Register
+    Offline --> Registering: Register
+    Registering --> Online: Transport Handshake Success
+    Registering --> Offline: Handshake Timeout (Janitor)
+    Registering --> Offline: Deregister
     Online --> Offline: Deregister
     Online --> Offline: Timeout (Janitor)
-    Online --> Online: Heartbeat / Activity
+    Online --> Online: Transport Handshake Success
 ```
 
 ### Job Lifecycle

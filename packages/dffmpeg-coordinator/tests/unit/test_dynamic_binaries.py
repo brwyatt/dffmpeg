@@ -93,6 +93,7 @@ async def test_worker_register_filtering(mock_config, mock_deps):
 
     await worker_register(
         payload=payload,
+        background_tasks=mock_deps["background_tasks"],
         identity=mock_deps["identity"],
         transports=mock_deps["transports"],
         worker_repo=mock_deps["worker_repo"],

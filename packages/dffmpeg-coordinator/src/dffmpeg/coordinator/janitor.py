@@ -155,7 +155,7 @@ class Janitor:
         """
         stale_workers = await self.worker_repo.get_stale_workers(threshold_factor=self.config.worker_threshold_factor)
         for worker in stale_workers:
-            logger.warning(f"Worker {worker.worker_id} is stale. Marking as offline.")
+            logger.warning(f"Worker {worker.worker_id} is stale (status: {worker.status}). Marking as offline.")
             worker.status = "offline"
             # Clear capabilities and transport info, similar to deregister
             worker.capabilities = []
@@ -165,6 +165,7 @@ class Janitor:
             worker.transport_metadata = {}
             worker.registration_interval = 0
             worker.version = None
+            worker.registration_token = None
             await self.worker_repo.add_or_update(worker)
 
     async def reap_running_jobs(self):

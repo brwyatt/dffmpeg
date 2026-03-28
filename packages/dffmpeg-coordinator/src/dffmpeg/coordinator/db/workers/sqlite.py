@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import text
+from sqlalchemy import TextClause, text
 from sqlalchemy.dialects.sqlite import insert
 
 from dffmpeg.coordinator.db.engines.sqlite import SQLiteDB
@@ -12,10 +12,17 @@ class SQLiteWorkerRepository(SQLAlchemyWorkerRepository, SQLiteDB):
     def __init__(self, *args, path: str, tablename: str = "workers", **kwargs):
         SQLiteDB.__init__(self, path=path, tablename=tablename)
 
-    def _get_stale_clause(self, threshold_factor: float, timestamp: datetime):
-        return text(
+    def _get_stale_clauses(self, threshold_factor: float, timestamp: datetime) -> tuple[TextClause, TextClause]:
+        stale_online_clause = text(
             "datetime(last_seen) < datetime(:ts, '-' || (registration_interval * :factor) || ' seconds')"
         ).bindparams(ts=timestamp, factor=threshold_factor)
+
+        stale_registering_clause = text(
+            "datetime(last_registration_attempt) < "
+            "datetime(:ts, '-' || (registration_interval * :factor) || ' seconds')"
+        ).bindparams(ts=timestamp, factor=threshold_factor)
+
+        return stale_online_clause, stale_registering_clause
 
     async def _upsert_worker(self, worker_record: WorkerRecord):
         # Serialize fields that might contain complex types (like datetime) to be JSON-safe
@@ -34,6 +41,8 @@ class SQLiteWorkerRepository(SQLAlchemyWorkerRepository, SQLiteDB):
                 transport_metadata=safe_worker["transport_metadata"],
                 registration_interval=worker_record.registration_interval,
                 version=worker_record.version,
+                registration_token=worker_record.registration_token,
+                last_registration_attempt=worker_record.last_registration_attempt,
             )
             .on_conflict_do_update(
                 index_elements=["worker_id"],
@@ -47,6 +56,8 @@ class SQLiteWorkerRepository(SQLAlchemyWorkerRepository, SQLiteDB):
                     transport_metadata=safe_worker["transport_metadata"],
                     registration_interval=worker_record.registration_interval,
                     version=worker_record.version,
+                    registration_token=worker_record.registration_token,
+                    last_registration_attempt=worker_record.last_registration_attempt,
                 ),
             )
         )
