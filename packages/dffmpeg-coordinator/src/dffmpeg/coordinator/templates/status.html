@@ -5,43 +5,126 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DFFmpeg Status</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; padding-top: 5px; }
-        h1, h2 { color: #333; }
-        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background-color: #f2f2f2; }
-        tr:nth-child(even) { background-color: #f9f9f9; }
-        .status-online { color: green; font-weight: bold; }
-        .status-offline { color: red; font-weight: bold; }
-        .status-registering { color: #f39c12; font-weight: bold; } /* Orange/Amber */
-        .status-running { color: blue; }
-        .status-completed { color: green; }
-        .status-failed { color: red; }
-        .controls { margin-bottom: 15px; }
-        .controls a { margin-right: 5px; color: #0066cc; text-decoration: none; border: 1px solid #ccc; padding: 2px 8px; border-radius: 4px; font-size: 0.9em; }
-        .controls a:hover { background-color: #f0f0f0; }
-        .controls .active { background-color: #0066cc; color: white; border-color: #0066cc; }
-        
-        .help-tip { cursor: help; border-bottom: 1px dotted #666; position: relative; display: inline-block; margin-left: 4px; font-size: 0.8em; color: #666; }
-        .help-tip:hover:after { content: attr(data-title); position: absolute; left: 0; top: 100%; margin-top: 5px; background: #333; color: #fff; padding: 5px 10px; border-radius: 4px; white-space: nowrap; z-index: 100; font-weight: normal; font-size: 0.9em; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --table-border: #dddddd;
+            --th-bg: #f2f2f2;
+            --tr-even-bg: #f9f9f9;
+            --controls-bg: #f8f9fa;
+            --controls-border: #eeeeee;
+            --btn-border: #cccccc;
+            --btn-bg: #ffffff;
+            --btn-hover: #f0f0f0;
+            --active-bg: #0066cc;
+            --active-text: #ffffff;
+            --link-color: #0066cc;
+            --help-text: #666666;
+            --status-online: green;
+            --status-offline: red;
+            --status-registering: #f39c12;
+            --status-running: blue;
+            --status-completed: green;
+            --status-failed: red;
+            --progress-bg: transparent;
+            --toast-bg: #333333;
+            --toast-text: #ffffff;
+            --toast-error: #d32f2f;
+        }
 
-        #progress-bar-container { position: fixed; top: 0; left: 0; width: 100%; height: 3px; background-color: transparent; z-index: 1000; }
-        #progress-bar { width: 0%; height: 100%; background-color: #0066cc; transition: width 0.1s linear; }
-        #progress-bar.paused { background-color: #999; }
+        html[data-theme="dark"] {
+            --bg-color: #121212;
+            --text-color: #e0e0e0;
+            --table-border: #333333;
+            --th-bg: #1e1e1e;
+            --tr-even-bg: #1a1a1a;
+            --controls-bg: #1e1e1e;
+            --controls-border: #333333;
+            --btn-border: #444444;
+            --btn-bg: #2d2d2d;
+            --btn-hover: #3d3d3d;
+            --active-bg: #3b82f6;
+            --active-text: #ffffff;
+            --link-color: #60a5fa;
+            --help-text: #aaaaaa;
+            --status-online: #4ade80;
+            --status-offline: #f87171;
+            --status-registering: #fbbf24;
+            --status-running: #60a5fa;
+            --status-completed: #4ade80;
+            --status-failed: #f87171;
+            --progress-bg: transparent;
+            --toast-bg: #2d2d2d;
+            --toast-text: #e0e0e0;
+            --toast-error: #ef4444;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            html:not([data-theme="light"]) {
+                --bg-color: #121212;
+                --text-color: #e0e0e0;
+                --table-border: #333333;
+                --th-bg: #1e1e1e;
+                --tr-even-bg: #1a1a1a;
+                --controls-bg: #1e1e1e;
+                --controls-border: #333333;
+                --btn-border: #444444;
+                --btn-bg: #2d2d2d;
+                --btn-hover: #3d3d3d;
+                --active-bg: #3b82f6;
+                --active-text: #ffffff;
+                --link-color: #60a5fa;
+                --help-text: #aaaaaa;
+                --status-online: #4ade80;
+                --status-offline: #f87171;
+                --status-registering: #fbbf24;
+                --status-running: #60a5fa;
+                --status-completed: #4ade80;
+                --status-failed: #f87171;
+                --progress-bg: transparent;
+                --toast-bg: #2d2d2d;
+                --toast-text: #e0e0e0;
+                --toast-error: #ef4444;
+            }
+        }
+
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 20px; padding-top: 5px; background-color: var(--bg-color); color: var(--text-color); transition: background-color 0.3s, color 0.3s; }
+        h1, h2 { color: var(--text-color); }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+        th, td { border: 1px solid var(--table-border); padding: 8px; text-align: left; }
+        th { background-color: var(--th-bg); }
+        tr:nth-child(even) { background-color: var(--tr-even-bg); }
+        .status-online { color: var(--status-online); font-weight: bold; }
+        .status-offline { color: var(--status-offline); font-weight: bold; }
+        .status-registering { color: var(--status-registering); font-weight: bold; }
+        .status-running { color: var(--status-running); }
+        .status-completed { color: var(--status-completed); }
+        .status-failed { color: var(--status-failed); }
+        .controls { margin-bottom: 15px; }
+        .controls a { margin-right: 5px; color: var(--link-color); text-decoration: none; border: 1px solid var(--btn-border); padding: 2px 8px; border-radius: 4px; font-size: 0.9em; background-color: var(--btn-bg); }
+        .controls a:hover { background-color: var(--btn-hover); }
+        .controls .active { background-color: var(--active-bg); color: var(--active-text); border-color: var(--active-bg); }
+        
+        .help-tip { cursor: help; border-bottom: 1px dotted var(--help-text); position: relative; display: inline-block; margin-left: 4px; font-size: 0.8em; color: var(--help-text); }
+        .help-tip:hover:after { content: attr(data-title); position: absolute; left: 0; top: 100%; margin-top: 5px; background: var(--toast-bg); color: var(--toast-text); padding: 5px 10px; border-radius: 4px; white-space: nowrap; z-index: 100; font-weight: normal; font-size: 0.9em; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+
+        #progress-bar-container { position: fixed; top: 0; left: 0; width: 100%; height: 3px; background-color: var(--progress-bg); z-index: 1000; }
+        #progress-bar { width: 0%; height: 100%; background-color: var(--active-bg); transition: width 0.1s linear; }
+        #progress-bar.paused { background-color: var(--help-text); }
         
         #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 1001; }
-        .toast { background-color: #333; color: white; padding: 12px 24px; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); margin-top: 10px; opacity: 0; transition: opacity 0.3s ease-in-out; }
+        .toast { background-color: var(--toast-bg); color: var(--toast-text); padding: 12px 24px; border-radius: 4px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); margin-top: 10px; opacity: 0; transition: opacity 0.3s ease-in-out; }
         .toast.show { opacity: 1; }
-        .toast.error { background-color: #d32f2f; }
+        .toast.error { background-color: var(--toast-error); }
         
-        button { cursor: pointer; padding: 4px 12px; border: 1px solid #ccc; border-radius: 4px; background-color: #fff; font-size: 0.9em; }
-        button:hover { background-color: #f0f0f0; }
-        button#toggle-refresh.paused { color: #d32f2f; }
+        button { cursor: pointer; padding: 4px 12px; border: 1px solid var(--btn-border); border-radius: 4px; background-color: var(--btn-bg); color: var(--text-color); font-size: 0.9em; }
+        button:hover { background-color: var(--btn-hover); }
+        button#toggle-refresh.paused { color: var(--status-offline); }
         
-        .global-controls { background-color: #f8f9fa; padding: 10px; border-radius: 4px; margin-bottom: 20px; border: 1px solid #eee; display: flex; align-items: center; flex-wrap: wrap; gap: 15px; }
+        .global-controls { background-color: var(--controls-bg); padding: 10px; border-radius: 4px; margin-bottom: 20px; border: 1px solid var(--controls-border); display: flex; align-items: center; flex-wrap: wrap; gap: 15px; }
         .control-group { display: flex; align-items: center; gap: 8px; }
-        .control-label { font-weight: bold; font-size: 0.9em; color: #555; }
-        .last-updated { font-size: 0.85em; color: #666; margin-left: auto; }
+        .control-label { font-weight: bold; font-size: 0.9em; color: var(--text-color); }
+        .last-updated { font-size: 0.85em; color: var(--help-text); margin-left: auto; }
     </style>
 </head>
 <body>
@@ -67,11 +150,19 @@
                     <a href="javascript:void(0)" onclick="setRefreshInterval(300000)" id="re-300000">5m</a>
                 </div>
             </div>
+            <div class="control-group" style="margin-left: auto;">
+                <span class="control-label">Theme:</span>
+                <div class="controls" id="theme-controls" style="margin-bottom: 0;">
+                    <a href="javascript:void(0)" onclick="setTheme('auto')" id="theme-auto">Auto</a>
+                    <a href="javascript:void(0)" onclick="setTheme('light')" id="theme-light">Light</a>
+                    <a href="javascript:void(0)" onclick="setTheme('dark')" id="theme-dark">Dark</a>
+                </div>
+            </div>
             <div class="last-updated">
                 Last Updated: <span id="last-updated-time">-</span>
             </div>
         </div>
-        <div style="display: flex; gap: 15px; width: 100%; margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0; align-items: center;">
+        <div style="display: flex; gap: 15px; width: 100%; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--table-border); align-items: center;">
             <div class="control-group">
                 <span class="control-label">Window<span class="help-tip" data-title="Time window for including recently offline workers and completed jobs">(?)</span>:</span>
                 <div class="controls" style="margin-bottom: 0;">
@@ -126,7 +217,8 @@
         const DEFAULT_STATE = {
             window: 3600,
             refresh: 5000,
-            paused: false
+            paused: false,
+            theme: 'auto'
         };
 
         function getParamsFromHash() {
@@ -135,7 +227,8 @@
             return {
                 window: parseInt(params.get('window')) || DEFAULT_STATE.window,
                 refresh: parseInt(params.get('refresh')) || DEFAULT_STATE.refresh,
-                paused: params.get('paused') === 'true'
+                paused: params.get('paused') === 'true',
+                theme: params.get('theme') || localStorage.getItem('dffmpeg-theme') || DEFAULT_STATE.theme
             };
         }
 
@@ -146,9 +239,25 @@
             if (next.window !== DEFAULT_STATE.window) params.set('window', next.window);
             if (next.refresh !== DEFAULT_STATE.refresh) params.set('refresh', next.refresh);
             if (next.paused) params.set('paused', 'true');
+            if (next.theme !== 'auto') params.set('theme', next.theme);
             
             const newHash = params.toString();
             window.location.hash = newHash ? '#' + newHash : '';
+        }
+
+        // Theme Management
+        function applyTheme() {
+            const state = getParamsFromHash();
+            if (state.theme === 'auto') {
+                document.documentElement.removeAttribute('data-theme');
+            } else {
+                document.documentElement.setAttribute('data-theme', state.theme);
+            }
+        }
+
+        function setTheme(theme) {
+            localStorage.setItem('dffmpeg-theme', theme);
+            updateHash({ theme: theme });
         }
 
         let lastRefreshTime = Date.now();
@@ -173,7 +282,7 @@
             return date.toISOString().replace('T', ' ').substring(0, 19) + ' UTC';
         }
 
-        function renderDashboard(data) {
+        function updateActiveControls() {
             const state = getParamsFromHash();
             
             // Update active links
@@ -182,6 +291,8 @@
             if (winLink) winLink.classList.add('active');
             const refLink = document.getElementById('re-' + state.refresh);
             if (refLink) refLink.classList.add('active');
+            const themeLink = document.getElementById('theme-' + state.theme);
+            if (themeLink) themeLink.classList.add('active');
             
             // Update button state
             const btn = document.getElementById('toggle-refresh');
@@ -192,7 +303,9 @@
                 btn.textContent = 'Pause Refresh';
                 btn.classList.remove('paused');
             }
+        }
 
+        function renderDashboard(data) {
             // Render Workers
             const workerBody = document.querySelector('#workers-table tbody');
             workerBody.innerHTML = '';
@@ -301,10 +414,14 @@
         }
 
         window.addEventListener('hashchange', () => {
+            updateActiveControls();
+            applyTheme();
             refreshDashboard();
         });
         
         // Initial load
+        updateActiveControls();
+        applyTheme();
         refreshDashboard();
         
         // Timer for progress bar animation
