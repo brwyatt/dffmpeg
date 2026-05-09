@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-09
+
+### Upgrade Note
+- **2-Stage Worker Registration**: This release introduces a "Reachability Check" where workers must verify their transport connection before being marked as fully online. To ensure a smooth transition, **update all workers to 0.3.0 before updating the coordinator**. Old workers connecting to a new coordinator will fail to complete the registration handshake and remain offline.
+
+### Added
+- 2-step worker registration (Reachability Check / Transport Handshake Verification) (#20).
+- Dark Mode to Web UI.
+
+### Changed
+- Updated cryptography requirement.
+
 ## [0.2.0] - 2026-03-22
 
 ### Added
