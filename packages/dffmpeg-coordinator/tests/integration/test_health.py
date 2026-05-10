@@ -60,3 +60,36 @@ async def test_deep_health_check_unhealthy(test_app):
                 assert data["status"] == "unhealthy"
                 assert data["databases"]["auth"]["status"] == "unhealthy"
                 assert data["databases"]["auth"]["detail"] == "Database connection lost"
+
+
+@pytest.mark.anyio
+async def test_health_shutting_down(test_app):
+    async with test_app.router.lifespan_context(test_app):
+        test_app.state.shutting_down = True
+
+        transport = ASGITransport(app=test_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.get("/health")
+            assert resp.status_code == 503
+            data = resp.json()
+            assert data["status"] == "shutdown"
+
+
+@pytest.mark.anyio
+async def test_health_shutting_down_deep_fails(test_app):
+    async with test_app.router.lifespan_context(test_app):
+        test_app.state.shutting_down = True
+
+        # Mock auth repository to be unhealthy
+        unhealthy_status = ComponentHealth(status="unhealthy", detail="Database connection lost")
+        with patch.object(test_app.state.db.auth, "health_check", new_callable=AsyncMock) as mock_health:
+            mock_health.return_value = unhealthy_status
+
+            transport = ASGITransport(app=test_app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                resp = await client.get("/health?deep=true")
+                # Deep check failure prioritizes 500 unhealthy over 503 shutdown
+                assert resp.status_code == 500
+                data = resp.json()
+                assert data["status"] == "unhealthy"
+                assert data["databases"]["auth"]["status"] == "unhealthy"

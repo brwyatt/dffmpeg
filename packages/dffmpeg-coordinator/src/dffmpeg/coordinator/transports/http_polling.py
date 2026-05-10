@@ -1,5 +1,6 @@
 import asyncio
 from collections import defaultdict
+from itertools import chain
 from logging import getLogger
 from typing import Any, Dict, Optional, Set
 
@@ -88,7 +89,7 @@ class HTTPPollingTransport(BaseServerTransport):
                 if messages:
                     return {"messages": messages}
 
-                if asyncio.get_event_loop().time() >= end_time:
+                if self.app.state.shutting_down or asyncio.get_event_loop().time() >= end_time:
                     return {"messages": []}
 
                 # Wait for a "poke" from the send_message call or a system-wide Janitor event
@@ -186,3 +187,13 @@ class HTTPPollingTransport(BaseServerTransport):
         For now, this just means the transport is initialized.
         """
         return ComponentHealth(status="online")
+
+    async def drain(self):
+        """
+        Wakes up all waiting pollers so they can return and cleanly disconnect.
+        """
+        waiter_events = set(chain.from_iterable(self._recipient_waiters.values())).union(
+            set(chain.from_iterable(self._job_waiters.values()))
+        )
+        for event in waiter_events:
+            event.set()

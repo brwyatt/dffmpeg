@@ -339,11 +339,11 @@ class ComponentHealth(BaseModel):
     Represents the health status of a single component.
 
     Attributes:
-        status (Literal["online", "unhealthy"]): The status of the component.
+        status (Literal["online", "unhealthy", "shutdown"]): The status of the component.
         detail (Optional[str]): Additional details about the status.
     """
 
-    status: Literal["online", "unhealthy"]
+    status: Literal["online", "unhealthy", "shutdown"]
     detail: Optional[str] = None
 
 
@@ -352,13 +352,13 @@ class HealthResponse(BaseModel):
     Standardized response for health check endpoints.
 
     Attributes:
-        status (Literal["online", "unhealthy"]): Overall status of the service.
+        status (Literal["online", "unhealthy", "shutdown"]): Overall status of the service.
         version (Optional[str]): The version of the service.
         databases (Optional[Dict[str, ComponentHealth]]): Health status of database repositories.
         transports (Optional[Dict[str, ComponentHealth]]): Health status of transport implementations.
     """
 
-    status: Literal["online", "unhealthy"]
+    status: Literal["online", "unhealthy", "shutdown"]
     version: Optional[str] = None
     databases: Optional[Dict[str, ComponentHealth]] = None
     transports: Optional[Dict[str, ComponentHealth]] = None

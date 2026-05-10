@@ -104,3 +104,56 @@ async def test_http_polling_transport_client_send_receive(
             assert messages[0]["message_type"] == "job_status"
             assert messages[0]["job_id"] == str(job_id)
             assert messages[0]["payload"]["status"] == "running"
+
+
+@pytest.mark.anyio
+async def test_http_polling_transport_drain(test_app, sign_request, create_auth_identity, create_worker_record):
+    """
+    Test that calling drain() on the HTTP Polling transport immediately wakes up
+    and terminates long-polling requests when shutting down.
+    """
+    import asyncio
+
+    worker_id = "worker01"
+    worker_key = RequestSigner.generate_key()
+    signer = RequestSigner(worker_key)
+
+    async with test_app.router.lifespan_context(test_app):
+        # 1. Setup Identity & Record
+        await create_auth_identity(test_app, worker_id, "worker", worker_key)
+        transport_manager = test_app.state.transports
+        transport_metadata = transport_manager["http_polling"].get_metadata(worker_id)
+        record = await create_worker_record(
+            test_app, worker_id, transport="http_polling", transport_metadata=transport_metadata
+        )
+
+        poll_path = record.transport_metadata.get("path")
+        assert poll_path is not None
+
+        # 2. Prepare background polling task that waits for 5 seconds
+        transport = ASGITransport(app=test_app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            headers = await sign_request(signer, worker_id, "GET", poll_path)
+
+            async def do_poll():
+                return await client.get(poll_path, headers=headers, params={"wait": 5})
+
+            poll_task = asyncio.create_task(do_poll())
+
+            # Give the server loop a tiny moment to process the request and block
+            await asyncio.sleep(0.1)
+
+            # 3. Initiate Drain (simulating shutdown)
+            test_app.state.shutting_down = True
+            await transport_manager.drain_all()
+
+            # 4. The poll_task should complete almost instantly, well before 5 seconds
+            try:
+                resp = await asyncio.wait_for(poll_task, timeout=0.5)
+            except asyncio.TimeoutError:
+                pytest.fail("Poll request was not awoken by drain()")
+
+            assert resp.status_code == 200
+            data = resp.json()
+            # It should return empty messages because we're shutting down
+            assert data["messages"] == []

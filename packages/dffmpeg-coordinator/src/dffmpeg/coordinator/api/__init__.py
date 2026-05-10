@@ -23,6 +23,9 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown events, including database and transport setup.
     """
     config: CoordinatorConfig = app.state.config
+
+    app.state.shutting_down = False
+
     app.state.db = DB(config=config.database)
     await app.state.db.setup_all()
 
@@ -40,10 +43,22 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    app.state.shutting_down = True
+    delay = app.state.config.shutdown_delay_seconds
+
+    # Stop Janitor immediately
     try:
         await janitor.stop()
     except asyncio.CancelledError:
         pass
+
+    # Wait for new inbound connections to stop/slow (e.g. load balancer health checks to fail)
+    if delay > 0:
+        logger.info(f"Draining coordinator. Sleeping for {delay} seconds...")
+        await asyncio.sleep(delay)
+
+    # Drain transports to ensure all connections are closed after delay
+    await app.state.transports.drain_all()
 
 
 def create_app(config: Optional[CoordinatorConfig] = None) -> FastAPI:
