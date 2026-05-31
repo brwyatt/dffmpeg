@@ -170,9 +170,15 @@ stateDiagram-v2
     Registering --> Online: Transport Handshake Success
     Registering --> Offline: Handshake Timeout (Janitor)
     Registering --> Offline: Deregister
+    Registering --> Draining: Register (Draining)
+    Offline --> Draining: Register (Draining)
+    Online --> Draining: Register (Draining)
     Online --> Offline: Deregister
     Online --> Offline: Timeout (Janitor)
     Online --> Online: Transport Handshake Success
+    Draining --> Offline: Deregister
+    Draining --> Offline: Timeout (Janitor)
+    Draining --> Draining: Transport Handshake Success
 ```
 
 ### Job Lifecycle
@@ -186,6 +192,7 @@ stateDiagram-v2
     Pending --> Canceled: User Cancel
 
     Assigned --> Running: Worker Accepts
+    Assigned --> Pending: Worker Rejects (Draining)
     Assigned --> Pending: Timeout (Retry)
     Assigned --> Canceled: User Cancel
 

@@ -11,6 +11,7 @@ multi_line_output = 3
 [tool.pytest.ini_options]
 testpaths = ["packages"]
 addopts = "--strict-markers"
+timeout = 10
 pythonpath = [
     "packages/dffmpeg-common/src",
     "packages/dffmpeg-coordinator/src",

@@ -192,6 +192,60 @@ async def job_accept(
     return CommandResponse(status="ok")
 
 
+@router.post("/jobs/{job_id}/reject")
+async def job_reject(
+    job_id: str,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    transports: TransportManager = Depends(get_transports),
+    job_repo: JobRepository = Depends(get_job_repo),
+) -> CommandResponse:
+    """
+    Endpoint for a worker to reject an assigned job (e.g., if shutting down/draining).
+    This immediately puts the job back to the 'pending' state for another worker.
+
+    Args:
+        job_id (str): The ID of the job to reject.
+        identity (AuthenticatedIdentity): The authenticated worker identity.
+        transports (TransportManager): Transport manager.
+        job_repo (JobRepository): Job repository.
+
+    Returns:
+        CommandResponse: Status OK if successful.
+
+    Raises:
+        HTTPException: If job not found or not assigned to this worker.
+    """
+    try:
+        j_id = ULID.from_str(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    job = await job_repo.get_job(j_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.worker_id != identity.client_id:
+        raise HTTPException(status_code=403, detail="Not assigned to this job")
+
+    timestamp = datetime.now(timezone.utc)
+
+    # Revert to pending and strip the worker ID
+    await job_repo.update_status(j_id, "pending", worker_id=None, timestamp=timestamp)
+
+    # We do not necessarily need to notify the client of the 'pending' revert since it's an internal
+    # scheduling state, but doing so keeps their local state accurate.
+    await transports.send_message(
+        JobStatusMessage(
+            recipient_id=job.requester_id,
+            job_id=j_id,
+            sender_id="coordinator",
+            payload=JobStatusPayload(status="pending", last_update=timestamp),
+        )
+    )
+
+    return CommandResponse(status="ok")
+
+
 @router.post("/jobs/{job_id}/cancel")
 async def job_cancel(
     job_id: str,

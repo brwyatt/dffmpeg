@@ -224,3 +224,81 @@ async def test_worker_verify_no_token_pending(mock_deps):
 
     assert exc.value.status_code == 400
     assert "No pending registration" in exc.value.detail
+
+
+@pytest.mark.anyio
+async def test_worker_register_draining(mock_config, mock_deps, registration_payload):
+    # Setup mocks
+    mock_deps["transports"].get_healthy_transports.return_value = {"http_polling"}
+    mock_transport = MagicMock()
+    mock_transport.get_metadata.return_value = {}
+    mock_deps["transports"].__getitem__.return_value = mock_transport
+
+    # Set registration payload to draining
+    registration_payload.status = "draining"
+
+    # Simulate worker already existing
+    existing_worker = WorkerRecord(
+        worker_id="worker_01",
+        status="online",
+        capabilities=[],
+        binaries=[],
+        paths=[],
+        registration_interval=30,
+        transport="http_polling",
+        transport_metadata={},
+        last_seen=datetime.now(timezone.utc),
+    )
+    mock_deps["worker_repo"].get_worker.return_value = existing_worker
+
+    # Call the endpoint
+    await worker_register(
+        payload=registration_payload,
+        background_tasks=mock_deps["background_tasks"],
+        identity=mock_deps["identity"],
+        transports=mock_deps["transports"],
+        worker_repo=mock_deps["worker_repo"],
+        config=mock_config,
+    )
+
+    # Verify status was updated to draining in the DB
+    assert mock_deps["worker_repo"].add_or_update.called
+    record: WorkerRecord = mock_deps["worker_repo"].add_or_update.call_args[0][0]
+    assert record.status == "draining"
+
+
+@pytest.mark.anyio
+async def test_worker_verify_preserves_draining(mock_deps):
+    # Simulate a draining worker that is completing its handshake
+    pending_worker = WorkerRecord(
+        worker_id="worker_01",
+        status="draining",  # Draining, not registering!
+        capabilities=[],
+        binaries=[],
+        paths=[],
+        registration_interval=30,
+        transport="http_polling",
+        transport_metadata={},
+        registration_token="secret_token_123",
+        last_registration_attempt=datetime.now(timezone.utc),
+        last_seen=datetime.now(timezone.utc),
+    )
+    mock_deps["worker_repo"].get_worker.return_value = pending_worker
+
+    payload = WorkerVerifyRequest(registration_token="secret_token_123")
+
+    result = await worker_verify(
+        worker_id="worker_01",
+        payload=payload,
+        identity=mock_deps["identity"],
+        worker_repo=mock_deps["worker_repo"],
+    )
+
+    assert result == {"status": "ok"}
+
+    assert mock_deps["worker_repo"].add_or_update.called
+    updated_record: WorkerRecord = mock_deps["worker_repo"].add_or_update.call_args[0][0]
+
+    # Verify status stays "draining" and isn't overwritten with "online"
+    assert updated_record.status == "draining"
+    assert updated_record.registration_token is None  # Token cleared

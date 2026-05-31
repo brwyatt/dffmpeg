@@ -17,6 +17,7 @@ STATUS_COLORS = {
     "online": Colors.GREEN,
     "offline": Colors.RED,
     "registering": Colors.YELLOW,
+    "draining": Colors.YELLOW,
     "running": Colors.BLUE,
     "completed": Colors.GREEN,
     "failed": Colors.RED,

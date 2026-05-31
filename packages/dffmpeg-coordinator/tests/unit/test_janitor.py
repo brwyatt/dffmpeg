@@ -62,6 +62,31 @@ async def test_reap_workers(janitor, worker_repo):
 
 
 @pytest.mark.anyio
+async def test_reap_draining_workers(janitor, worker_repo):
+    worker = WorkerRecord(
+        worker_id="w1", status="draining", registration_interval=10, transport="http", transport_metadata={}
+    )
+    worker.capabilities = ["h264"]
+    worker.binaries = ["ffmpeg"]
+    worker.paths = ["/tmp"]
+
+    worker_repo.get_stale_workers.return_value = [worker]
+
+    await janitor.reap_workers()
+
+    # Check if draining worker is successfully marked offline when stale
+    assert worker.status == "offline"
+    assert worker.capabilities == []
+    assert worker.binaries == []
+    assert worker.paths == []
+    assert worker.transport == "none"
+    assert worker.transport_metadata == {}
+    assert worker.registration_interval == 0
+
+    worker_repo.add_or_update.assert_called_once_with(worker)
+
+
+@pytest.mark.anyio
 async def test_reap_running_jobs(janitor, job_repo, transports):
     job = JobRecord(
         job_id=ULID(),

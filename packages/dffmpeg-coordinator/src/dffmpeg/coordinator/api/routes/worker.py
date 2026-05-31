@@ -75,13 +75,19 @@ async def worker_register(
     # Filter reported binaries against allowed binaries (intersection)
     filtered_binaries = list(set(config.allowed_binaries).intersection(payload.binaries))
 
-    payload_dict = payload.model_dump(mode="python", exclude={"supported_transports"})
+    payload_dict = payload.model_dump(mode="python", exclude={"supported_transports", "status"})
     payload_dict["binaries"] = filtered_binaries
 
     # Check existing worker status
-    # If it was already online, we leave it online, otherwise, it becomes "registering".
+    # If it was already online or draining, we maintain its desired state, otherwise, it becomes "registering".
     existing_worker = await worker_repo.get_worker(payload.worker_id)
-    new_status = "online" if (existing_worker and existing_worker.status == "online") else "registering"
+    if payload.status == "draining":
+        new_status = "draining"
+    else:
+        new_status = (
+            "online" if (existing_worker and existing_worker.status in ["online", "draining"]) else "registering"
+        )
+
     new_last_seen = existing_worker.last_seen if existing_worker else datetime.now(timezone.utc)
 
     # Generate the verification token
@@ -137,8 +143,10 @@ async def worker_verify(
     if worker.registration_token != payload.registration_token:
         raise HTTPException(status_code=400, detail="Invalid registration token")
 
-    # Validation passed. Update state to online, update last_seen, clear token.
-    worker.status = "online"
+    # Validation passed. Update state to online if it was registering, update last_seen, clear token.
+    if worker.status == "registering":
+        worker.status = "online"
+
     worker.last_seen = datetime.now(timezone.utc)
     worker.registration_token = None
 
@@ -206,14 +214,21 @@ async def list_workers(
     # While the dashboard is unauthenticated, this API returns a lot more information
 
     online = await worker_repo.get_workers_by_status("online")
+    draining = await worker_repo.get_workers_by_status("draining")
     registering = await worker_repo.get_workers_by_status("registering")
     # For offline, maybe limit to recent ones? Or all?
     # Admin CLI limits to 24h. Let's do the same for API to avoid massive lists.
     offline = await worker_repo.get_workers_by_status("offline", since_seconds=window)
 
-    workers = online + registering + offline
-    # Sort by status (online first), then last seen (desc), then ID
-    workers.sort(key=lambda w: (w.status != "online", -(w.last_seen.timestamp() if w.last_seen else 0), w.worker_id))
+    workers = online + draining + registering + offline
+    # Sort by status (online & draining first), then last seen (desc), then ID
+    workers.sort(
+        key=lambda w: (
+            w.status not in ("online", "draining"),
+            -(w.last_seen.timestamp() if w.last_seen else 0),
+            w.worker_id,
+        )
+    )
 
     return workers
 

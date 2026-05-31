@@ -38,6 +38,10 @@ class TransportManager:
         for key in self.loaded_transports.keys():
             await self[key].setup()
 
+    async def drain_all(self):
+        names = list(self.loaded_transports.keys())
+        await asyncio.gather(*(self[name].drain() for name in names), return_exceptions=True)
+
     async def get_healthy_transports(self) -> List[str]:
         """
         Get a list of currently healthy transport names by leveraging the existing health check.

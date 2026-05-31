@@ -27,6 +27,7 @@ The Coordinator manages the cluster state, job queue, and worker registry.
 | `allowed_dashboard_ips` | list[string] | `["0.0.0.0/0", "::/0"]` | List of IP addresses or CIDR subnets allowed to access the web dashboard. |
 | `allowed_metrics_ips` | list[string] | `["0.0.0.0/0", "::/0"]` | List of IP addresses or CIDR subnets allowed to access the machine metrics endpoint. |
 | `default_job_heartbeat_interval` | integer | `5` | Default interval (seconds) for job heartbeats if not specified by the client. |
+| `shutdown_delay_seconds` | float | `0.0` | Delay (seconds) to wait after failing `/health` check before draining transports and shutting down, allowing load balancers time to remove the node. |
 | `dev_mode` | boolean | `false` | Enable development mode (auto-reload, verbose logging). Can be set via `DFFMPEG_COORDINATOR_DEV=1`. |
 | `allowed_binaries` | list[string] | `["ffmpeg", "ffprobe"]` | List of supported binary names that workers can register and clients can request. |
 | `trusted_proxies` | list[string] | `["127.0.0.1"]` | List of trusted proxy IPs/CIDRs. If set, the Coordinator will respect `X-Forwarded-For` headers from these addresses. |
@@ -108,6 +109,8 @@ The Worker executes FFmpeg jobs.
 | `registration_interval` | integer | `15` | How often (seconds) to send heartbeat/registration to Coordinator. |
 | `log_batch_size` | integer | `100` | Max number of log lines to batch before sending. |
 | `log_batch_delay` | float | `0.25` | Max delay (seconds) before sending a partial log batch. |
+| `enable_job_draining` | boolean | `true` | Enable graceful drain on SIGINT/SIGTERM (wait for active jobs to finish). |
+| `min_drain_time_seconds` | float | `5.0` | Minimum time (seconds) to wait in draining state to safely reject in-flight assignments. |
 
 ### Coordinator Connection (`coordinator`)
 

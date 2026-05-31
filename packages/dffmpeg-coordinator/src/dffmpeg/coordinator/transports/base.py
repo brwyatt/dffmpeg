@@ -61,3 +61,9 @@ class BaseServerTransport:
             ComponentHealth: The health status of the transport.
         """
         raise NotImplementedError()
+
+    async def drain(self):
+        """
+        Gracefully drain the transport during shutdown.
+        """
+        pass

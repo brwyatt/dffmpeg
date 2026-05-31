@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 
 from dffmpeg.common.models import HealthResponse
 from dffmpeg.common.version import get_package_version
@@ -11,6 +11,7 @@ router = APIRouter()
 
 @router.get("/health", response_model=HealthResponse)
 async def health(
+    request: Request,
     response: Response,
     deep: bool = False,
     db: DB = Depends(get_db),
@@ -20,6 +21,7 @@ async def health(
     Health check endpoint.
 
     Args:
+        request (Request): The request object.
         response (Response): The response object.
         deep (bool): Whether to perform a deep health check of all components.
         db (DB): The database manager.
@@ -29,15 +31,20 @@ async def health(
         HealthResponse: The health status of the service.
     """
     version = get_package_version("dffmpeg-coordinator")
+    shutting_down = request.app.state.shutting_down
+
+    status = "online"
+    if shutting_down:
+        status = "shutdown"
+        response.status_code = 503
 
     if not deep:
-        return HealthResponse(status="online", version=version)
+        return HealthResponse(status=status, version=version)
 
     db_health = await db.health_check()
     transport_health = await transports.health_check()
 
     # Determine overall status
-    status = "online"
     if any(h.status == "unhealthy" for h in db_health.values()) or any(
         h.status == "unhealthy" for h in transport_health.values()
     ):

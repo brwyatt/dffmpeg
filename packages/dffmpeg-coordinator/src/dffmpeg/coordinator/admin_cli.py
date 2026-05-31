@@ -138,9 +138,10 @@ async def user_set_scope(db: DB, args: argparse.Namespace):
 async def worker_list(db: DB, args: argparse.Namespace):
     window = args.window if hasattr(args, "window") else 3600 * 24
     online = await db.workers.get_workers_by_status("online")
+    draining = await db.workers.get_workers_by_status("draining")
     registering = await db.workers.get_workers_by_status("registering")
     offline = await db.workers.get_workers_by_status("offline", since_seconds=window)
-    workers = online + registering + offline
+    workers = online + draining + registering + offline
     print_worker_list(workers)
 
 

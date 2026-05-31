@@ -33,6 +33,7 @@ class CoordinatorConfig(BaseModel):
     janitor: JanitorConfig = Field(default_factory=JanitorConfig)
     default_job_heartbeat_interval: int = default_job_heartbeat_interval
     handshake_delay_seconds: float = 1.0
+    shutdown_delay_seconds: float = 0.0
     web_dashboard_enabled: bool = True
     allowed_dashboard_ips: List[CIDR] = Field(
         default_factory=lambda: [
