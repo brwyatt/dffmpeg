@@ -32,6 +32,8 @@ class WorkerConfig(BaseModel):
     hmac_key_file: str | None = None
     registration_interval: int = 15
     jitter: float = 0.5
+    enable_job_draining: bool = True
+    min_drain_time_seconds: float = 5.0
     log_batch_size: int = 100
     log_batch_delay: float = 0.25
     coordinator: CoordinatorConnectionConfig = Field(default_factory=CoordinatorConnectionConfig)

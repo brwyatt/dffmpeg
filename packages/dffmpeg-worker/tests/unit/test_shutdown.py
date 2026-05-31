@@ -7,6 +7,7 @@ from ulid import ULID
 from dffmpeg.common.http_client import AuthenticatedAsyncClient
 from dffmpeg.worker.config import WorkerConfig
 from dffmpeg.worker.job import JobRunner
+from dffmpeg.worker.worker import Worker
 
 
 @pytest.mark.asyncio
@@ -148,3 +149,154 @@ async def test_normal_cancel_behavior():
         # It should have tried 6 times (1 initial + 5 retries)
         assert len(status_calls) == 6
         assert mock_sleep.call_count == 5
+
+
+@pytest.mark.asyncio
+async def test_worker_drain_behavior():
+    """
+    Test Worker.drain() behavior:
+    1. Sets status to draining.
+    2. Cancels registration task and updates transport.
+    3. Waits min_drain_time_seconds.
+    4. Deregisters and waits for jobs if active.
+    5. Cleans up HTTP client if empty.
+    """
+    config = WorkerConfig(
+        client_id="test-worker", hmac_key="dummy-key", enable_job_draining=True, min_drain_time_seconds=0.1
+    )
+    worker = Worker(config=config, http_client_cls=AsyncMock)
+    worker._registration_task = asyncio.create_task(asyncio.sleep(10))
+    worker.transport_manager = AsyncMock()
+    worker.transport_manager.transport_names = ["http_polling"]
+    worker.client = AsyncMock()
+
+    # Mock active jobs
+    mock_runner = AsyncMock(spec=JobRunner)
+    # We mock _main_task to be a real, awaiting task so wait() doesn't fail
+    mock_runner._main_task = asyncio.create_task(asyncio.sleep(0.2))
+    job_id = ULID()
+    worker._active_jobs[job_id] = mock_runner
+
+    async def drain_jobs_after_delay():
+        await asyncio.sleep(0.1)
+        worker._active_jobs.clear()
+
+    asyncio.create_task(drain_jobs_after_delay())
+
+    await worker.drain()
+
+    assert worker._draining is True
+    assert not worker.transport_manager.disconnect.called
+    assert not worker.client.aclose.called
+
+
+@pytest.mark.asyncio
+async def test_worker_drain_disabled():
+    """
+    Test Worker.drain() does nothing if disable_job_draining is true.
+    """
+    config = WorkerConfig(client_id="test-worker", hmac_key="dummy-key", enable_job_draining=False)
+    worker = Worker(config=config, http_client_cls=AsyncMock)
+    worker.transport_manager = MagicMock()
+    worker.client = AsyncMock()
+
+    await worker.drain()
+
+    assert worker._draining is False  # Didn't change
+    assert not worker.transport_manager.disconnect.called
+    assert not worker.client.post.called
+
+
+@pytest.mark.asyncio
+async def test_worker_stop_cancels_jobs():
+    """
+    Test Worker.stop() calls cancel(fast_shutdown=True) on all jobs.
+    """
+    config = WorkerConfig(client_id="test-worker", hmac_key="dummy-key")
+    worker = Worker(config=config, http_client_cls=AsyncMock)
+    worker._registration_task = asyncio.create_task(asyncio.sleep(10))
+    worker.transport_manager = AsyncMock()
+    worker.client = AsyncMock()
+    worker.client.is_closed = False
+
+    mock_runner = AsyncMock(spec=JobRunner)
+    job_id = ULID()
+    worker._active_jobs[job_id] = mock_runner
+
+    await worker.stop()
+
+    assert not worker._running
+    assert worker.transport_manager.disconnect.called
+    assert worker.client.post.call_count > 0  # Should call deregister
+    assert worker.client.aclose.called
+
+    # Should call cancel(fast_shutdown=True) on the runner
+    mock_runner.cancel.assert_called_once_with(fast_shutdown=True)
+
+
+@pytest.mark.asyncio
+async def test_worker_drain_rejects_job():
+    """
+    Test that if worker is in draining state, it explicitly rejects new job requests.
+    """
+    from dffmpeg.common.models import JobRequestMessage, JobRequestPayload
+
+    config = WorkerConfig(client_id="test-worker", hmac_key="dummy-key")
+    worker = Worker(config=config, http_client_cls=AsyncMock)
+    worker.client = AsyncMock()
+
+    worker._draining = True
+
+    job_id = ULID()
+    msg = JobRequestMessage(
+        recipient_id="test-worker",
+        job_id=job_id,
+        payload=JobRequestPayload(job_id=str(job_id), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+
+    await worker._handle_job_request(msg)
+
+    # Should explicitly reject the job via API
+    worker.client.post.assert_called_once_with(f"/jobs/{job_id}/reject")
+    assert job_id not in worker._active_jobs
+
+
+@pytest.mark.asyncio
+async def test_worker_drain_cancelled_and_stopped():
+    """
+    Test that if Worker.drain() is cancelled while waiting on jobs,
+    and then Worker.stop() is immediately called, everything cleans up gracefully without errors.
+    """
+    config = WorkerConfig(
+        client_id="test-worker",
+        hmac_key="dummy-key",
+        enable_job_draining=True,
+        min_drain_time_seconds=10.0,  # long sleep to ensure we can cancel it
+    )
+    worker = Worker(config=config, http_client_cls=AsyncMock)
+    worker._registration_task = asyncio.create_task(asyncio.sleep(10))
+    worker.transport_manager = AsyncMock()
+    worker.transport_manager.transport_names = ["http_polling"]
+    worker.client = AsyncMock()
+    worker.client.is_closed = False
+
+    # Start drain in background
+    drain_task = asyncio.create_task(worker.drain())
+    await asyncio.sleep(0.1)  # let it set self._draining and sleep
+
+    assert worker._draining is True
+
+    # Simulate signal handler cancelling drain and calling stop
+    drain_task.cancel()
+    try:
+        await drain_task
+    except asyncio.CancelledError:
+        pass
+
+    await worker.stop()
+
+    # Verify everything cleaned up
+    assert not worker._running
+    assert worker.transport_manager.disconnect.called
+    assert worker.client.post.call_count > 0  # Should call deregister
+    assert worker.client.aclose.called

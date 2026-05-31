@@ -108,6 +108,8 @@ The Worker executes FFmpeg jobs.
 | `registration_interval` | integer | `15` | How often (seconds) to send heartbeat/registration to Coordinator. |
 | `log_batch_size` | integer | `100` | Max number of log lines to batch before sending. |
 | `log_batch_delay` | float | `0.25` | Max delay (seconds) before sending a partial log batch. |
+| `enable_job_draining` | boolean | `true` | Enable graceful drain on SIGINT/SIGTERM (wait for active jobs to finish). |
+| `min_drain_time_seconds` | float | `5.0` | Minimum time (seconds) to wait in draining state to safely reject in-flight assignments. |
 
 ### Coordinator Connection (`coordinator`)
 

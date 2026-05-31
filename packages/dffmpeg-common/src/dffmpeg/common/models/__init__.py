@@ -291,7 +291,7 @@ class WorkerBase(BaseModel):
     version: Optional[str] = None
 
 
-type WorkerStatus = Literal["online", "offline", "error", "registering"]
+type WorkerStatus = Literal["online", "offline", "error", "registering", "draining"]
 
 
 class Worker(WorkerBase):
@@ -299,7 +299,7 @@ class Worker(WorkerBase):
     Represents a Worker's full state.
 
     Attributes:
-        status (Literal): Connection status (online, offline, error).
+        status (Literal): Connection status (online, offline, error, draining).
         last_seen (datetime): Timestamp when the worker was last seen.
     """
 
@@ -313,9 +313,11 @@ class WorkerRegistration(WorkerBase):
 
     Attributes:
         supported_transports (List[str]): List of transports supported by the worker.
+        status (Literal): The worker's current desired state (e.g. online, draining).
     """
 
     supported_transports: List[str] = Field(min_length=1)
+    status: Literal["online", "draining"] = "online"
 
 
 class WorkerVerifyRequest(BaseModel):

@@ -60,6 +60,7 @@ class Worker:
         logger.info(f"ClientID: {config.client_id} HMAC: {config.hmac_key}")
 
         self._running = False
+        self._draining: bool = False
         self._registration_task: Optional[asyncio.Task] = None
         self._transport_task: Optional[asyncio.Task] = None
 
@@ -84,24 +85,56 @@ class Worker:
         while self._running:
             await asyncio.sleep(1)
 
-    async def stop(self):
-        """Stops the worker gracefully."""
-        logger.info(f"[{self.client_id}] Stopping worker...")
-        self._running = False
+    async def drain(self):
+        """Phase 1: Graceful Drain."""
+        logger.info(f"[{self.client_id}] Entering graceful drain state...")
 
-        # Cancel registration
+        if not self.config.enable_job_draining:
+            logger.info(f"[{self.client_id}] Job draining is disabled by config. Skipping Phase 1.")
+            return
+
+        self._draining = True
+
+        # Trigger immediate registration to push draining status to coordinator
         if self._registration_task:
             self._registration_task.cancel()
 
-        # Cancel transport
+        # Restart registration loop so it immediately sends the "draining" status
+        self._registration_task = asyncio.create_task(self._registration_loop())
+
+        logger.info(
+            f"[{self.client_id}] Waiting at least {self.config.min_drain_time_seconds}s "
+            "to catch in-flight assignments..."
+        )
+        await asyncio.sleep(self.config.min_drain_time_seconds)
+
+        active_tasks = [
+            j._main_task
+            for j in self._active_jobs.values()
+            if getattr(j, "_main_task", None) is not None and j._main_task is not None
+        ]
+        if active_tasks:
+            logger.info(f"[{self.client_id}] Draining: Waiting for {len(active_tasks)} active jobs to complete...")
+            await asyncio.wait(active_tasks)
+
+        logger.info(
+            f"[{self.client_id}] Minimum drain time elapsed and no active jobs remaining. Proceeding to teardown."
+        )
+
+    async def stop(self):
+        """Phase 2: Fast teardown."""
+        logger.info(f"[{self.client_id}] Fast teardown triggered. Killing jobs...")
+        self._running = False
+
+        if self._registration_task:
+            self._registration_task.cancel()
+
         await self._stop_transport()
 
-        # Cancel all jobs
         tasks = [job_runner.cancel(fast_shutdown=True) for job_runner in list(self._active_jobs.values())]
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
 
-        # De-register
         try:
             logger.info(f"[{self.client_id}] Deregistering...")
             payload_model = WorkerDeregistration(worker_id=self.client_id)
@@ -112,7 +145,8 @@ class Worker:
         except Exception as e:
             logger.warning(f"Failed to deregister: {e}")
 
-        await self.client.aclose()
+        if not self.client.is_closed:
+            await self.client.aclose()
 
     async def _registration_loop(self):
         """Periodically registers with the coordinator."""
@@ -134,6 +168,7 @@ class Worker:
                 supported_transports=self.transport_manager.transport_names,
                 registration_interval=self.config.registration_interval,
                 version=WORKER_VERSION,
+                status="online" if not self._draining else "draining",
             )
 
             path = self.coordinator_paths["register"]
@@ -267,6 +302,16 @@ class Worker:
 
         if job_id in self._active_jobs:
             logger.warning(f"Job {job_id} already exists, ignoring duplicate request.")
+            return
+
+        # Explicit reject if draining
+        if self._draining:
+            logger.info(f"[{self.client_id}] Rejecting job {job_id} because worker is draining")
+            try:
+                path = f"/jobs/{job_id}/reject"
+                await self.client.post(path)
+            except Exception as e:
+                logger.error(f"Failed to reject job {job_id}: {e}")
             return
 
         # Validation

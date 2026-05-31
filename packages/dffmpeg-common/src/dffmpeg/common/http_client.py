@@ -23,6 +23,7 @@ class AuthenticatedAsyncClient:
         self.client_id = client_id
         self.signer = RequestSigner(hmac_key)
         self._client = http_client_cls(base_url=base_url)
+        self.is_closed = False
 
     async def request(self, method: str, url: str, json: Optional[Dict[str, Any]] = None, **kwargs) -> httpx.Response:
         """
@@ -59,3 +60,4 @@ class AuthenticatedAsyncClient:
     async def aclose(self):
         """Closes the underlying client."""
         await self._client.aclose()
+        self.is_closed = True

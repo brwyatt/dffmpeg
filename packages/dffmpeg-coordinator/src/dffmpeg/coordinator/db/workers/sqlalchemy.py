@@ -83,7 +83,7 @@ class SQLAlchemyWorkerRepository(WorkerRepository, SQLAlchemyDB):
 
         stale_online_clause, stale_registering_clause = self._get_stale_clauses(threshold_factor, timestamp)
 
-        stale_online = and_(self.table.c.status == "online", stale_online_clause)
+        stale_online = and_(self.table.c.status.in_(["online", "draining"]), stale_online_clause)
         stale_registering = and_(self.table.c.status == "registering", stale_registering_clause)
 
         condition = or_(stale_online, stale_registering)
