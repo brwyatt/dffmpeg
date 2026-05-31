@@ -12,6 +12,9 @@ Environment="PATH=/opt/dffmpeg/worker/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=/opt/dffmpeg/worker/bin/dffmpeg-worker
 Restart=on-failure
 RestartSec=5s
+# Graceful Shutdown Settings
+KillMode=process
+TimeoutStopSec=1800
 
 [Install]
 WantedBy=multi-user.target
