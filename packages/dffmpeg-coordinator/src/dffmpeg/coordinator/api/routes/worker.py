@@ -214,14 +214,21 @@ async def list_workers(
     # While the dashboard is unauthenticated, this API returns a lot more information
 
     online = await worker_repo.get_workers_by_status("online")
+    draining = await worker_repo.get_workers_by_status("draining")
     registering = await worker_repo.get_workers_by_status("registering")
     # For offline, maybe limit to recent ones? Or all?
     # Admin CLI limits to 24h. Let's do the same for API to avoid massive lists.
     offline = await worker_repo.get_workers_by_status("offline", since_seconds=window)
 
-    workers = online + registering + offline
-    # Sort by status (online first), then last seen (desc), then ID
-    workers.sort(key=lambda w: (w.status != "online", -(w.last_seen.timestamp() if w.last_seen else 0), w.worker_id))
+    workers = online + draining + registering + offline
+    # Sort by status (online & draining first), then last seen (desc), then ID
+    workers.sort(
+        key=lambda w: (
+            w.status not in ("online", "draining"),
+            -(w.last_seen.timestamp() if w.last_seen else 0),
+            w.worker_id,
+        )
+    )
 
     return workers
 

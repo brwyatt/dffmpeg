@@ -37,13 +37,20 @@ def format_utc(dt: Optional[datetime]) -> Optional[str]:
 async def get_status_data(window: int, job_repo: JobRepository, worker_repo: WorkerRepository):
     # Use the same window for offline workers as for recent jobs
     online_workers = await worker_repo.get_workers_by_status("online")
+    draining_workers = await worker_repo.get_workers_by_status("draining")
     registering_workers = await worker_repo.get_workers_by_status("registering")
     offline_workers = await worker_repo.get_workers_by_status("offline", since_seconds=window)
-    workers = online_workers + registering_workers + offline_workers
+    workers = online_workers + draining_workers + registering_workers + offline_workers
 
-    # Sort workers: Online first, then by last seen (desc), then by ID (asc)
+    # Sort workers: Online & Draining first, then by last seen (desc), then by ID (asc)
     # Using python sort for simplicity in the route
-    workers.sort(key=lambda w: (w.status != "online", -(w.last_seen.timestamp() if w.last_seen else 0), w.worker_id))
+    workers.sort(
+        key=lambda w: (
+            w.status not in ("online", "draining"),
+            -(w.last_seen.timestamp() if w.last_seen else 0),
+            w.worker_id,
+        )
+    )
 
     worker_load = await job_repo.get_worker_load()
 
