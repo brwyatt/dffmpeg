@@ -1,10 +1,12 @@
 import asyncio
+import json
 from collections import defaultdict
 from itertools import chain
 from logging import getLogger
 from typing import Any, Dict, Optional, Set
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Header
+from fastapi.responses import StreamingResponse
 from ulid import ULID
 
 from dffmpeg.common.models import (
@@ -118,24 +120,92 @@ class HTTPPollingTransport(BaseServerTransport):
                     if not self._recipient_waiters[cid]:
                         del self._recipient_waiters[cid]
 
+    async def _stream_loop(
+        self,
+        identity: AuthenticatedIdentity,
+        last_message_id: Optional[ULID] = None,
+        wait: Optional[int] = None,
+        job_id: Optional[ULID] = None,
+    ):
+        if wait is None or wait <= 0:
+            wait = 15  # Default keepalive interval
+
+        repo: MessageRepository = self.app.state.db.messages
+        event = asyncio.Event()
+
+        if job_id:
+            self._job_waiters[str(job_id)].add(event)
+        else:
+            self._recipient_waiters[identity.client_id].add(event)
+
+        try:
+            while not self.app.state.shutting_down:
+                messages = await repo.retrieve_messages(
+                    recipient_id=identity.client_id,
+                    last_message_id=last_message_id,
+                    job_id=job_id,
+                )
+
+                if messages:
+                    last_message_id = messages[-1].message_id
+                    msgs_dump = [msg.model_dump(mode="json") for msg in messages]
+                    yield json.dumps({"messages": msgs_dump}) + "\n"
+
+                try:
+                    await asyncio.wait_for(event.wait(), timeout=wait)
+                    event.clear()
+                except asyncio.TimeoutError:
+                    yield "\n"
+        except asyncio.CancelledError:
+            logger.info(f"Streaming connection closed by {identity.client_id}")
+            raise
+        finally:
+            if job_id:
+                jid = str(job_id)
+                if jid in self._job_waiters:
+                    self._job_waiters[jid].discard(event)
+                    if not self._job_waiters[jid]:
+                        del self._job_waiters[jid]
+            else:
+                cid = identity.client_id
+                if cid in self._recipient_waiters:
+                    self._recipient_waiters[cid].discard(event)
+                    if not self._recipient_waiters[cid]:
+                        del self._recipient_waiters[cid]
+
     async def handle_job_poll(
         self,
         job_id: ULID,
         last_message_id: Optional[ULID] = None,
         wait: Optional[int] = None,
+        accept: Optional[str] = Header(None),
         identity=Depends(required_hmac_auth),
     ):
         """
         Endpoint handler for job-specific polling.
         """
+        if accept and "application/x-ndjson" in accept:
+            return StreamingResponse(
+                self._stream_loop(identity, last_message_id=last_message_id, wait=wait, job_id=job_id),
+                media_type="application/x-ndjson",
+            )
         return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait, job_id=job_id)
 
     async def handle_worker_poll(
-        self, last_message_id: Optional[ULID] = None, wait: Optional[int] = None, identity=Depends(required_hmac_auth)
+        self,
+        last_message_id: Optional[ULID] = None,
+        wait: Optional[int] = None,
+        accept: Optional[str] = Header(None),
+        identity=Depends(required_hmac_auth),
     ):
         """
         Endpoint handler for worker polling (general messages).
         """
+        if accept and "application/x-ndjson" in accept:
+            return StreamingResponse(
+                self._stream_loop(identity, last_message_id=last_message_id, wait=wait),
+                media_type="application/x-ndjson",
+            )
         return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait)
 
     async def send_message(self, message: BaseMessage, transport_metadata: Optional[TransportMetadata] = None) -> bool:

@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from typing import Any, Dict, Optional
 
@@ -14,11 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 class HTTPPollingClientTransport(BaseClientTransport):
-    def __init__(self, client_id: str, hmac_key: str, coordinator_url: str, poll_wait: int = 5, **kwargs):
+    def __init__(
+        self, client_id: str, hmac_key: str, coordinator_url: str, poll_wait: int = 5, streaming: bool = True, **kwargs
+    ):
         self.client_id = client_id
         self.signer = RequestSigner(hmac_key)
         self.base_url = coordinator_url
         self.poll_wait = poll_wait
+        self.streaming = streaming
         self.poll_path: Optional[str] = None
         self._running = False
         self._client: Optional[httpx.AsyncClient] = None
@@ -51,34 +55,61 @@ class HTTPPollingClientTransport(BaseClientTransport):
             self._client = None
         logger.info("Disconnected from HTTP Polling transport")
 
+    async def _process_message_payload(self, data: Dict[str, Any]):
+        messages = data.get("messages", [])
+        for msg_data in messages:
+            try:
+                msg: Message = self._message_adapter.validate_python(msg_data)
+                self._last_message_id = msg.message_id
+                await self._message_queue.put(msg)
+            except Exception as e:
+                logger.error(f"Failed to parse message: {e}")
+
     async def _poll_loop(self):
         if not self._client or not self.poll_path:
             return
+
+        accept_header = "application/json"
+        if self.streaming:
+            accept_header = "application/x-ndjson,application/json;q=0.9"
 
         while self._running:
             try:
                 # Sign the request (path only, params are handled separately)
                 headers, _ = self.signer.sign_request(self.client_id, "GET", self.poll_path)
 
+                headers["Accept"] = accept_header
+
                 params: Dict[str, Any] = {"wait": self.poll_wait}
                 if self._last_message_id:
                     params["last_message_id"] = str(self._last_message_id)
 
-                response = await self._client.get(self.poll_path, headers=headers, params=params, timeout=10.0)
+                timeout = httpx.Timeout(10.0, read=self.poll_wait + 5.0)
 
-                if response.status_code == 200:
-                    data = response.json()
-                    messages = data.get("messages", [])
-                    for msg_data in messages:
-                        try:
-                            msg: Message = self._message_adapter.validate_python(msg_data)
-                            self._last_message_id = msg.message_id
-                            await self._message_queue.put(msg)
-                        except Exception as e:
-                            logger.error(f"Failed to parse message: {e}")
-                else:
-                    logger.warning(f"Poll failed with status {response.status_code}: {response.text}")
-                    await asyncio.sleep(1)
+                async with self._client.stream(
+                    "GET", self.poll_path, headers=headers, params=params, timeout=timeout
+                ) as response:
+                    if response.status_code == 200:
+                        content_type = response.headers.get("Content-Type", "")
+                        if "application/x-ndjson" in content_type:
+                            async for line in response.aiter_lines():
+                                if not self._running:
+                                    break
+                                if not line.strip():
+                                    continue
+                                try:
+                                    data = json.loads(line)
+                                    await self._process_message_payload(data)
+                                except Exception as e:
+                                    logger.error(f"Failed to parse stream line: {e}")
+                        else:
+                            await response.aread()
+                            data = response.json()
+                            await self._process_message_payload(data)
+                    else:
+                        await response.aread()
+                        logger.warning(f"Poll failed with status {response.status_code}: {response.text}")
+                        await asyncio.sleep(1)
 
             except httpx.ReadTimeout:
                 continue

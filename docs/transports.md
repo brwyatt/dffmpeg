@@ -6,6 +6,28 @@ Transports are used for asynchronous communication between the Coordinator and W
 
 For a full list of configuration options, see the [Configuration Reference](configuration.md).
 
+## HTTP Polling & Streaming
+
+HTTP Polling is the default fallback transport mechanism. It requires no external message broker, routing messages purely via the Coordinator's database and API. 
+
+DFFmpeg's HTTP Polling supports **HTTP Streaming (NDJSON)**. When a client enables streaming, instead of opening a connection, timing out, and reconnecting (long-polling), the client opens a single persistent connection. The Coordinator will immediately yield new messages over this stream as they arrive.
+
+### Configuration
+
+Add the following to your `dffmpeg-*.yaml` configuration file to configure HTTP polling explicitly:
+
+```yaml
+transports:
+  enabled_transports:
+    - "http_polling"
+  transport_settings:
+    http_polling:
+      streaming: true  # (Client/Worker Only) Enable HTTP streaming. Defaults to true.
+      poll_wait: 5     # (Client/Worker Only) Timeout for long-polling. In streaming mode, dictates the keep-alive ping interval.
+```
+
+If `streaming` is enabled, the client sends an `Accept: application/x-ndjson` header. The Coordinator will respect this header and hold the connection open indefinitely, sending a keep-alive ping (a blank line) every `poll_wait` seconds to prevent load balancers from closing the idle connection. If `streaming` is false, it falls back to standard HTTP long-polling.
+
 ## RabbitMQ
 
 RabbitMQ is a supported transport backend. It uses AMQP 0-9-1.
