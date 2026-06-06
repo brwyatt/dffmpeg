@@ -96,6 +96,7 @@ class HTTPPollingClientTransport(BaseClientTransport):
                                 if not self._running:
                                     break
                                 if not line.strip():
+                                    logger.info("Received keep-alive from server")
                                     continue
                                 try:
                                     data = json.loads(line)

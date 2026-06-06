@@ -1,9 +1,10 @@
 import asyncio
+import contextlib
 import json
 from collections import defaultdict
 from itertools import chain
 from logging import getLogger
-from typing import Any, Dict, Optional, Set
+from typing import Any, AsyncIterator, Dict, Optional, Set
 
 from fastapi import Depends, FastAPI, Header
 from fastapi.responses import StreamingResponse
@@ -45,6 +46,40 @@ class HTTPPollingTransport(BaseServerTransport):
         self.app.add_api_route(self.job_path, self.handle_job_poll, methods=["GET"])
         self.app.add_api_route(self.worker_path, self.handle_worker_poll, methods=["GET"])
 
+    @contextlib.asynccontextmanager
+    async def _wait_context(
+        self, identity: AuthenticatedIdentity, job_id: Optional[ULID] = None
+    ) -> AsyncIterator[asyncio.Event]:
+        """
+        Manages the registration of an asyncio.Event for a polling or streaming connection.
+        Yields the event and ensures it is properly unregistered when the context closes.
+        """
+        event = asyncio.Event()
+
+        if job_id:
+            self._job_waiters[str(job_id)].add(event)
+        else:
+            self._recipient_waiters[identity.client_id].add(event)
+
+        try:
+            yield event
+        except asyncio.CancelledError:
+            logger.info(f"Connection closed by {identity.client_id}")
+            raise
+        finally:
+            if job_id:
+                jid = str(job_id)
+                if jid in self._job_waiters:
+                    self._job_waiters[jid].discard(event)
+                    if not self._job_waiters[jid]:
+                        del self._job_waiters[jid]
+            else:
+                cid = identity.client_id
+                if cid in self._recipient_waiters:
+                    self._recipient_waiters[cid].discard(event)
+                    if not self._recipient_waiters[cid]:
+                        del self._recipient_waiters[cid]
+
     async def _poll_loop(
         self,
         identity: AuthenticatedIdentity,
@@ -67,21 +102,12 @@ class HTTPPollingTransport(BaseServerTransport):
         """
         if wait is None:
             wait = 0
+
         repo: MessageRepository = self.app.state.db.messages
         end_time = asyncio.get_event_loop().time() + wait
 
-        # Create an event for this connection
-        event = asyncio.Event()
-
-        # Register the event
-        if job_id:
-            self._job_waiters[str(job_id)].add(event)
-        else:
-            self._recipient_waiters[identity.client_id].add(event)
-
-        try:
+        async with self._wait_context(identity, job_id) as event:
             while True:
-                # Fetch logic: logic changes slightly if a job_id is provided
                 messages = await repo.retrieve_messages(
                     recipient_id=identity.client_id,
                     last_message_id=last_message_id,
@@ -94,31 +120,12 @@ class HTTPPollingTransport(BaseServerTransport):
                 if self.app.state.shutting_down or asyncio.get_event_loop().time() >= end_time:
                     return {"messages": []}
 
-                # Wait for a "poke" from the send_message call or a system-wide Janitor event
                 wait_timeout = min(5, max(0, end_time - asyncio.get_event_loop().time()))
                 try:
                     await asyncio.wait_for(event.wait(), timeout=wait_timeout)
                     event.clear()  # Reset for next loop iteration
                 except asyncio.TimeoutError:
                     continue  # Regular interval check
-        except asyncio.CancelledError:
-            # Handle sudden disconnects
-            logger.info(f"Connection closed by {identity.client_id}")
-            raise
-        finally:
-            # Unregister the event
-            if job_id:
-                jid = str(job_id)
-                if jid in self._job_waiters:
-                    self._job_waiters[jid].discard(event)
-                    if not self._job_waiters[jid]:
-                        del self._job_waiters[jid]
-            else:
-                cid = identity.client_id
-                if cid in self._recipient_waiters:
-                    self._recipient_waiters[cid].discard(event)
-                    if not self._recipient_waiters[cid]:
-                        del self._recipient_waiters[cid]
 
     async def _stream_loop(
         self,
@@ -131,14 +138,8 @@ class HTTPPollingTransport(BaseServerTransport):
             wait = 15  # Default keepalive interval
 
         repo: MessageRepository = self.app.state.db.messages
-        event = asyncio.Event()
 
-        if job_id:
-            self._job_waiters[str(job_id)].add(event)
-        else:
-            self._recipient_waiters[identity.client_id].add(event)
-
-        try:
+        async with self._wait_context(identity, job_id) as event:
             while not self.app.state.shutting_down:
                 messages = await repo.retrieve_messages(
                     recipient_id=identity.client_id,
@@ -155,23 +156,8 @@ class HTTPPollingTransport(BaseServerTransport):
                     await asyncio.wait_for(event.wait(), timeout=wait)
                     event.clear()
                 except asyncio.TimeoutError:
+                    logger.debug("Stream keep-alive timeout, sending keep-alive")
                     yield "\n"
-        except asyncio.CancelledError:
-            logger.info(f"Streaming connection closed by {identity.client_id}")
-            raise
-        finally:
-            if job_id:
-                jid = str(job_id)
-                if jid in self._job_waiters:
-                    self._job_waiters[jid].discard(event)
-                    if not self._job_waiters[jid]:
-                        del self._job_waiters[jid]
-            else:
-                cid = identity.client_id
-                if cid in self._recipient_waiters:
-                    self._recipient_waiters[cid].discard(event)
-                    if not self._recipient_waiters[cid]:
-                        del self._recipient_waiters[cid]
 
     async def handle_job_poll(
         self,
