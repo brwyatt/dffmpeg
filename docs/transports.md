@@ -8,7 +8,7 @@ For a full list of configuration options, see the [Configuration Reference](conf
 
 ## HTTP Polling & Streaming
 
-HTTP Polling is the default fallback transport mechanism. It requires no external message broker, routing messages purely via the Coordinator's database and API. 
+HTTP Polling is the default fallback transport mechanism. It requires no external message broker, routing messages purely via the Coordinator's database and API.
 
 DFFmpeg's HTTP Polling supports **HTTP Streaming (NDJSON)**. When a client enables streaming, instead of opening a connection, timing out, and reconnecting (long-polling), the client opens a single persistent connection. The Coordinator will immediately yield new messages over this stream as they arrive.
 
