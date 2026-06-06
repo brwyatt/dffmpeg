@@ -73,7 +73,7 @@ async def test_stream_loop_keepalive(transport, identity):
     assert line == "\n"
 
     # Force shutdown so the generator closes
-    transport.app.state.shutting_down = True
+    await transport.drain()
 
     with pytest.raises(StopAsyncIteration):
         await generator.__anext__()
@@ -107,7 +107,7 @@ async def test_stream_loop_messages(transport, identity, mock_app):
     line2 = await generator.__anext__()
     assert line2 == "\n"
 
-    transport.app.state.shutting_down = True
+    await transport.drain()
     with pytest.raises(StopAsyncIteration):
         await generator.__anext__()
 
@@ -154,9 +154,8 @@ async def test_drain_wakes_all(transport, identity):
     await asyncio.sleep(0.01)
 
     # Simulate a shutdown
-    transport.app.state.shutting_down = True
     await transport.drain()
 
-    # The poll loop should wake up and return empty messages immediately because shutting_down=True
+    # The poll loop should wake up and return empty messages immediately because _draining=True
     result = await asyncio.wait_for(poll_task, timeout=1.0)
     assert result == {"messages": []}

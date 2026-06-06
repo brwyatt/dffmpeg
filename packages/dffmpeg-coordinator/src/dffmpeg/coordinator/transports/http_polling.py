@@ -34,6 +34,7 @@ class HTTPPollingTransport(BaseServerTransport):
         self.base_path = base_path
         self.job_path = f"{base_path}/jobs/{{job_id}}"
         self.worker_path = f"{base_path}/worker"
+        self._draining = False
 
         # Registry for waiting poll connections
         self._job_waiters: Dict[str, Set[asyncio.Event]] = defaultdict(set)
@@ -117,7 +118,7 @@ class HTTPPollingTransport(BaseServerTransport):
                 if messages:
                     return {"messages": messages}
 
-                if self.app.state.shutting_down or asyncio.get_event_loop().time() >= end_time:
+                if self._draining or asyncio.get_event_loop().time() >= end_time:
                     return {"messages": []}
 
                 wait_timeout = min(5, max(0, end_time - asyncio.get_event_loop().time()))
@@ -140,7 +141,7 @@ class HTTPPollingTransport(BaseServerTransport):
         repo: MessageRepository = self.app.state.db.messages
 
         async with self._wait_context(identity, job_id) as event:
-            while not self.app.state.shutting_down:
+            while True:
                 messages = await repo.retrieve_messages(
                     recipient_id=identity.client_id,
                     last_message_id=last_message_id,
@@ -151,6 +152,9 @@ class HTTPPollingTransport(BaseServerTransport):
                     last_message_id = messages[-1].message_id
                     msgs_dump = [msg.model_dump(mode="json") for msg in messages]
                     yield json.dumps({"messages": msgs_dump}) + "\n"
+
+                if self._draining:
+                    return
 
                 try:
                     await asyncio.wait_for(event.wait(), timeout=wait)
@@ -248,6 +252,7 @@ class HTTPPollingTransport(BaseServerTransport):
         """
         Wakes up all waiting pollers so they can return and cleanly disconnect.
         """
+        self._draining = True
         waiter_events = set(chain.from_iterable(self._recipient_waiters.values())).union(
             set(chain.from_iterable(self._job_waiters.values()))
         )
