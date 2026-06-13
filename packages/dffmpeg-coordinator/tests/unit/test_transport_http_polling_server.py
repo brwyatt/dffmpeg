@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from ulid import ULID
 
 from dffmpeg.common.auth.request_signer import RequestSigner
-from dffmpeg.common.models import AuthenticatedIdentity, JobRequestMessage, JobRequestPayload
+from dffmpeg.common.models import AuthenticatedIdentity, ComponentHealth, JobRequestMessage, JobRequestPayload
 from dffmpeg.coordinator.transports.http_polling import HTTPPollingTransport
 
 
@@ -18,6 +18,14 @@ def mock_app():
     app.state.db = MagicMock()
     app.state.db.messages = AsyncMock()
     app.state.db.messages.retrieve_messages.return_value = []
+    app.state.db.workers = AsyncMock()
+    app.state.db.workers.get_worker.return_value = None
+    app.state.db.jobs = AsyncMock()
+    app.state.db.jobs.get_job.return_value = None
+    # Mock config
+    mock_config = MagicMock()
+    mock_config.transports.get_transport_config.return_value = {}
+    app.state.config = mock_config
     return app
 
 
@@ -159,3 +167,114 @@ async def test_drain_wakes_all(transport, identity):
     # The poll loop should wake up and return empty messages immediately because _draining=True
     result = await asyncio.wait_for(poll_task, timeout=1.0)
     assert result == {"messages": []}
+
+
+@pytest.mark.asyncio
+async def test_poll_loop_proxy_rabbitmq(identity, mock_app):
+    """
+    Test that _poll_loop cleanly proxies through RabbitMQClientTransport if backend_transport is set.
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
+
+    mock_client = AsyncMock()
+    mock_client_cls = MagicMock(return_value=mock_client)
+
+    # Mock backend server transport and client instance
+    mock_backend = MagicMock()
+    mock_backend.get_metadata.return_value = {"routing_key": "test_rk"}
+    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_app.state.transports = {"rabbitmq": mock_backend}
+
+    msg = JobRequestMessage(
+        recipient_id=identity.client_id,
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+    mock_client.receive.return_value = msg
+
+    result = await transport._poll_loop(identity, wait=1)
+
+    assert result == {"messages": [msg]}
+    mock_client_cls.assert_called_once()
+    mock_client.connect.assert_called_once_with({"routing_key": "test_rk"})
+    mock_client.disconnect.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_stream_loop_proxy_mqtt(identity, mock_app):
+    """
+    Test that _stream_loop cleanly proxies through MQTTClientTransport if backend_transport is set.
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="mqtt")
+
+    mock_client = AsyncMock()
+    mock_client_cls = MagicMock(return_value=mock_client)
+
+    mock_backend = MagicMock()
+    mock_backend.get_metadata.return_value = {"topic": "test_topic"}
+    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_app.state.transports = {"mqtt": mock_backend}
+
+    msg = JobRequestMessage(
+        recipient_id=identity.client_id,
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+    mock_client.receive.return_value = msg
+
+    generator = transport._stream_loop(identity, wait=1)
+
+    # First yield should be the proxied message
+    line = await generator.__anext__()
+    data = json.loads(line)
+    assert len(data["messages"]) == 1
+    assert data["messages"][0]["message_id"] == str(msg.message_id)
+
+    # Drain should trigger exit
+    await transport.drain()
+
+    with pytest.raises(StopAsyncIteration):
+        await generator.__anext__()
+
+    mock_client_cls.assert_called_once()
+    mock_client.connect.assert_called_once_with({"topic": "test_topic"})
+    mock_client.disconnect.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_send_message_proxy(mock_app):
+    """
+    Test that send_message directly proxies to the backend transport if configured.
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
+
+    mock_backend = MagicMock()
+    mock_backend.get_metadata.return_value = {"routing_key": "test"}
+    mock_backend.send_message = AsyncMock()
+    mock_app.state.transports = {"rabbitmq": mock_backend}
+
+    msg = JobRequestMessage(
+        recipient_id="test",
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+
+    await transport.send_message(msg)
+
+    mock_backend.send_message.assert_called_once_with(msg, transport_metadata={"routing_key": "test"})
+
+
+@pytest.mark.asyncio
+async def test_health_check_proxy(mock_app):
+    """
+    Test that health_check delegates to the backend transport if configured.
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
+
+    mock_backend = AsyncMock()
+    mock_backend.health_check.return_value = ComponentHealth(status="unhealthy", detail="Broker offline")
+    mock_app.state.transports = {"rabbitmq": mock_backend}
+
+    health = await transport.health_check()
+    assert health.status == "unhealthy"
+    assert "Backed by rabbitmq: Broker offline" in health.detail

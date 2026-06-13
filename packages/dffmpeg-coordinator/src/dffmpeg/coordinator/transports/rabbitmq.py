@@ -172,3 +172,11 @@ class RabbitMQServerTransport(BaseServerTransport):
             return ComponentHealth(status="online")
         else:
             return ComponentHealth(status="unhealthy", detail="Not connected to RabbitMQ")
+
+    def get_client_transport_class(self):
+        """
+        Returns the RabbitMQClientTransport class.
+        """
+        from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
+
+        return RabbitMQClientTransport

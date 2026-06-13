@@ -67,3 +67,10 @@ class BaseServerTransport:
         Gracefully drain the transport during shutdown.
         """
         pass
+
+    def get_client_transport_class(self):
+        """
+        Returns the client transport class (from dffmpeg-common) corresponding
+        to this server transport.
+        """
+        raise NotImplementedError("This transport does not support client proxying")

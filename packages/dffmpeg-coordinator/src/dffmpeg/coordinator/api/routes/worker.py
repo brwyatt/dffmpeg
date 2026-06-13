@@ -18,7 +18,7 @@ from dffmpeg.common.models import (
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import get_config, get_transports, get_worker_repo
-from dffmpeg.coordinator.api.utils import get_negotiated_transport
+from dffmpeg.coordinator.api.utils import get_negotiated_transport, sanitize_transport_metadata
 from dffmpeg.coordinator.config import CoordinatorConfig
 from dffmpeg.coordinator.db.workers import WorkerRecord, WorkerRepository
 from dffmpeg.coordinator.transports import TransportManager
@@ -116,7 +116,9 @@ async def worker_register(
     )
     background_tasks.add_task(_send_verify_ping, transports, verify_msg, delay)
 
-    return TransportRecord(transport=record.transport, transport_metadata=record.transport_metadata)
+    return TransportRecord(
+        transport=record.transport, transport_metadata=sanitize_transport_metadata(record.transport_metadata)
+    )
 
 
 @router.post("/worker/{worker_id}/verify")

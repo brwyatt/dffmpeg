@@ -131,3 +131,11 @@ class MQTTServerTransport(BaseServerTransport):
             return ComponentHealth(status="online")
         else:
             return ComponentHealth(status="unhealthy", detail="Not connected to MQTT broker")
+
+    def get_client_transport_class(self):
+        """
+        Returns the MQTTClientTransport class.
+        """
+        from dffmpeg.common.transports.mqtt import MQTTClientTransport
+
+        return MQTTClientTransport
