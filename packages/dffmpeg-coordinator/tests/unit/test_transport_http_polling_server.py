@@ -263,7 +263,7 @@ async def test_send_message_proxy(mock_app):
 
     await transport.send_message(msg)
 
-    mock_backend.send_message.assert_called_once_with(msg, transport_metadata={"routing_key": "test"})
+    mock_backend.send_message.assert_called_once_with(msg, transport_metadata={"routing_key": "test"}, mark_sent=False)
 
 
 @pytest.mark.asyncio

@@ -24,7 +24,12 @@ class BaseServerTransport:
         """
         raise NotImplementedError()
 
-    async def send_message(self, message: BaseMessage, transport_metadata: Optional[TransportMetadata] = None) -> bool:
+    async def send_message(
+        self,
+        message: BaseMessage,
+        transport_metadata: Optional[TransportMetadata] = None,
+        mark_sent: bool = True,
+    ) -> bool:
         """
         Send a message to a recipient.
 
@@ -32,6 +37,7 @@ class BaseServerTransport:
             message (Message): The message object to send.
             transport_metadata (Optional[TransportMetadata]): Transport-specific metadata
                 for the recipient (e.g., connection ID, polling path).
+            mark_sent (bool): Whether to automatically mark the message as sent in the DB.
 
         Returns:
             bool: True if the message was successfully sent (or queued/notified), False otherwise.

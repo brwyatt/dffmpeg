@@ -345,7 +345,12 @@ class HTTPPollingTransport(BaseServerTransport):
             )
         return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait)
 
-    async def send_message(self, message: BaseMessage, transport_metadata: Optional[TransportMetadata] = None) -> bool:
+    async def send_message(
+        self,
+        message: BaseMessage,
+        transport_metadata: Optional[TransportMetadata] = None,
+        mark_sent: bool = False,
+    ) -> bool:
         """
         Notifies polling clients that a new message might be available.
         Does not actually 'send' the message payload directly, but triggers a poll check.
@@ -353,6 +358,7 @@ class HTTPPollingTransport(BaseServerTransport):
         Args:
             message (Message): The message object (already saved to DB).
             transport_metadata (Optional[TransportMetadata]): Metadata for the transport.
+            mark_sent (bool): Whether to mark the message as sent in the DB.
 
         Returns:
             bool: Always True (notification sent).
@@ -365,7 +371,7 @@ class HTTPPollingTransport(BaseServerTransport):
                 is_worker_msg = message.message_type in ("job_request", "verify_registration")
                 job_id = None if is_worker_msg else message.job_id
                 metadata = backend.get_metadata(message.recipient_id, job_id)
-            return await backend.send_message(message, transport_metadata=metadata)
+            return await backend.send_message(message, transport_metadata=metadata, mark_sent=mark_sent)
 
         # Notify recipient-specific listeners (e.g. workers)
         if message.recipient_id in self._recipient_waiters:
