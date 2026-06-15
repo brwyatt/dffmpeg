@@ -9,18 +9,16 @@
     ],
     "settings": {
         "python.defaultInterpreterPath": "${workspaceFolder:workspace}/.venv/bin/python",
-        "python.analysis.extraPaths": [
-            "${workspaceFolder:workspace}/packages/dffmpeg-client/src",
-            "${workspaceFolder:workspace}/packages/dffmpeg-common/src",
-            "${workspaceFolder:workspace}/packages/dffmpeg-coordinator/src",
-            "${workspaceFolder:workspace}/packages/dffmpeg-worker/src",
+        "basedpyright.analysis.extraPaths": [
+            "../dffmpeg-common/src"
         ],
-        "python.analysis.packageIndexDepths": [
-            { "name": "dffmpeg", "depth": 2, "includeAllSymbols": true}
-        ],
-        "python.analysis.indexing": true,
+        "basedpyright.analysis.diagnosticSeverityOverrides": {
+            "reportUnannotatedClassAttribute": "none",
+            "reportUnusedCallResult": "none",
+            "reportUnknownMemberType": "none",
+            "reportAny": "none",
+        },
         "python.terminal.activateEnvInCurrentTerminal": true,
         "python.terminal.activateEnvironment": true,
-        "python.analysis.diagnosticMode": "workspace",
     }
 }
