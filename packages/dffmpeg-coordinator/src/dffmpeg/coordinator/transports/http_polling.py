@@ -191,12 +191,16 @@ class HTTPPollingTransport(BaseServerTransport):
                 receive_task = asyncio.create_task(client.receive())
                 drain_task = asyncio.create_task(self._drain_event.wait())
 
-                done, pending = await asyncio.wait(
-                    [receive_task, drain_task], timeout=wait if wait > 0 else 0.001, return_when=asyncio.FIRST_COMPLETED
-                )
-
-                for t in pending:
-                    t.cancel()
+                try:
+                    done, pending = await asyncio.wait(
+                        [receive_task, drain_task],
+                        timeout=wait if wait > 0 else 0.001,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                finally:
+                    receive_task.cancel()
+                    drain_task.cancel()
+                    await asyncio.gather(receive_task, drain_task, return_exceptions=True)
 
                 if drain_task in done:
                     return {"messages": []}
@@ -259,12 +263,14 @@ class HTTPPollingTransport(BaseServerTransport):
                     receive_task = asyncio.create_task(client.receive())
                     drain_task = asyncio.create_task(self._drain_event.wait())
 
-                    done, pending = await asyncio.wait(
-                        [receive_task, drain_task], timeout=wait, return_when=asyncio.FIRST_COMPLETED
-                    )
-
-                    for t in pending:
-                        t.cancel()
+                    try:
+                        done, pending = await asyncio.wait(
+                            [receive_task, drain_task], timeout=wait, return_when=asyncio.FIRST_COMPLETED
+                        )
+                    finally:
+                        receive_task.cancel()
+                        drain_task.cancel()
+                        await asyncio.gather(receive_task, drain_task, return_exceptions=True)
 
                     if drain_task in done:
                         return
