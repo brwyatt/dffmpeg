@@ -11,6 +11,7 @@ from dffmpeg.common.models import (
     JobLogsMessage,
     JobLogsPayload,
     JobLogsResponse,
+    JobRecord,
     JobRequest,
     JobStatusMessage,
     JobStatusPayload,
@@ -27,7 +28,7 @@ from dffmpeg.coordinator.api.dependencies import (
 )
 from dffmpeg.coordinator.api.utils import get_negotiated_transport, sanitize_transport_metadata
 from dffmpeg.coordinator.config import CoordinatorConfig
-from dffmpeg.coordinator.db.jobs import JobRecord, JobRepository
+from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
 from dffmpeg.coordinator.scheduler import process_job_assignment

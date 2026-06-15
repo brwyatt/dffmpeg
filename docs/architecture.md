@@ -110,6 +110,71 @@ graph TD
     C1 & C2 -- AMQP --> MQ_VIP
 ```
 
+### 2b. High Availability (HA) with Message Bus-Backed HTTP Polling/Streaming
+This setup is a variation of the HA Reference Architecture where the Clients and Workers do **not** have direct network access to the message broker (e.g. RabbitMQ) and instead use HTTP Long Polling or HTTP Streaming (NDJSON). The Coordinator proxies all message subscription and polling operations to the underlying broker.
+
+*   **Load Balancing**: Redundant HAProxy pairs (Active/Passive via Keepalived) providing Virtual IPs (VIPs) for the Coordinator and Database tiers. Note that the Message Broker VIP (`MQ_VIP`) is only accessible internally by the Coordinator instances.
+*   **Message Broker**: 3x RabbitMQ hosts (Clustered) behind an HAProxy VIP, accessed strictly by the Coordinators.
+*   **Database**: 3x MariaDB/Galera Cluster hosts behind an HAProxy VIP.
+*   **Coordinator**: 2x `dffmpeg-coordinator` instances (Active/Active) behind an HAProxy VIP.
+*   **Transport**: HTTP Polling/Streaming on the client/worker side, proxied to RabbitMQ/MQTT by the Coordinator backend.
+
+```mermaid
+graph TD
+    subgraph "Clients"
+        Client1[Client CLI]
+        Client2[Client CLI]
+    end
+
+    subgraph "Workers"
+        Worker1[Worker Agent]
+        Worker2[Worker Agent]
+        Worker3[Worker Agent]
+        Worker4[Worker Agent]
+    end
+
+    subgraph "Coordinator HAProxy Pair"
+        APP_VIP("Coordinator VIP (Active)")
+        APP_VIP_stby("Coordinator VIP (Standby)")
+    end
+    subgraph "MQ HAProxy Pair (Internal Only)"
+        MQ_VIP("MQ VIP (Active)")
+        MQ_VIP_stby("MQ VIP (Standby)")
+    end
+    subgraph "DB HAProxy Pair"
+        DB_VIP("DB VIP (Active)")
+        DB_VIP_stby("DB VIP (Standby)")
+    end
+
+    subgraph "Coordinators"
+        C1[Coordinator 1]
+        C2[Coordinator 2]
+    end
+
+    subgraph "Transport Layer"
+        MQ1[RabbitMQ 1]
+        MQ2[RabbitMQ 2]
+        MQ3[RabbitMQ 3]
+    end
+
+    subgraph "Database Layer"
+        DB1[(MariaDB Galera 1)]
+        DB2[(MariaDB Galera 2)]
+        DB3[(MariaDB Galera 3)]
+    end
+
+    %% External Traffic (HTTP Only!)
+    Client1 & Client2 & Worker1 & Worker2 & Worker3 & Worker4 -- HTTP / NDJSON --> APP_VIP
+    APP_VIP --> C1 & C2
+
+    %% Internal Traffic
+    C1 & C2 -- SQL --> DB_VIP
+    DB_VIP --> DB1 & DB2 & DB3
+
+    C1 & C2 -- AMQP --> MQ_VIP
+    MQ_VIP --> MQ1 & MQ2 & MQ3
+```
+
 ### 3. Real-Time Updates with MQTT
 MQTT is ideal for lightweight status updates to clients and workers, especially in IoT-like networks.
 

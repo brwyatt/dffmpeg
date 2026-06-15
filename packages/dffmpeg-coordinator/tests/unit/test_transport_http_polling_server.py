@@ -1,3 +1,5 @@
+# pyright: reportPrivateUsage = false
+
 import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock
@@ -277,4 +279,293 @@ async def test_health_check_proxy(mock_app):
 
     health = await transport.health_check()
     assert health.status == "unhealthy"
-    assert "Backed by rabbitmq: Broker offline" in health.detail
+    assert "Backed by rabbitmq: Broker offline" == health.detail
+
+
+@pytest.mark.asyncio
+async def test_setup_raises_on_missing_backend(mock_app):
+    """
+    Test that setup() raises a ValueError when the backend transport is configured but missing.
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
+
+    # Mock transports manager on state
+    mock_transports_mgr = MagicMock()
+    mock_transports_mgr.loaded_transports = {}  # Empty loaded transports
+    mock_app.state.transports = mock_transports_mgr
+
+    with pytest.raises(ValueError, match="http_polling configured to use backend transport"):
+        await transport.setup()
+
+
+@pytest.mark.asyncio
+async def test_setup_succeeds_with_loaded_backend(mock_app):
+    """
+    Test that setup() succeeds when the backend transport is configured and loaded.
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
+
+    # Mock transports manager on state
+    mock_transports_mgr = MagicMock()
+    mock_transports_mgr.loaded_transports = {"rabbitmq": MagicMock()}
+    mock_app.state.transports = mock_transports_mgr
+
+    # Should not raise ValueError
+    await transport.setup()
+
+
+@pytest.mark.asyncio
+async def test_hybrid_poll_no_messages(identity, mock_app):
+    """
+    Scenario 1: No Messages anywhere.
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
+    mock_client = AsyncMock()
+    mock_client_cls = MagicMock(return_value=mock_client)
+    mock_backend = MagicMock()
+    mock_backend.get_metadata.return_value = {}
+    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_app.state.transports = {"rabbitmq": mock_backend}
+
+    mock_app.state.db.messages.retrieve_messages.return_value = []
+
+    # Define an async function that sleeps to trigger the wait timeout
+    async def mock_sleep(*args, **kwargs):
+        await asyncio.sleep(10)
+
+    mock_client.receive.side_effect = mock_sleep
+
+    result = await transport._poll_loop(identity, last_message_id=ULID(), wait=0.1)
+    assert result == {"messages": []}
+
+
+@pytest.mark.asyncio
+async def test_hybrid_poll_db_gaps_only(identity, mock_app):
+    """
+    Scenario 2: DB contains a message, but the broker queue is currently empty.
+    The coordinator should fetch Y from the DB and ignore the broker queue entirely for this poll.
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
+    mock_client = AsyncMock()
+    mock_client_cls = MagicMock(return_value=mock_client)
+    mock_backend = MagicMock()
+    mock_backend.get_metadata.return_value = {}
+    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_app.state.transports = {"rabbitmq": mock_backend}
+
+    last_id = ULID()
+    msg_y = JobRequestMessage(
+        message_id=ULID(),
+        recipient_id=identity.client_id,
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+    mock_app.state.db.messages.retrieve_messages.return_value = [msg_y]
+
+    result = await transport._poll_loop(identity, last_message_id=last_id, wait=1)
+    assert result == {"messages": [msg_y]}
+    # _backend_client should not have been connected because we successfully drained DB history
+    mock_client_cls.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_hybrid_stream_duplicate_overlap(identity, mock_app):
+    """
+    Scenario 3: DB has message Y, and broker queue also delivers message Y.
+    The stream delivers Y from the DB history, and when the broker queue subsequently delivers Y,
+    it is discarded as a duplicate inside the same stream connection.
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
+    mock_client = AsyncMock()
+    mock_client_cls = MagicMock(return_value=mock_client)
+    mock_backend = MagicMock()
+    mock_backend.get_metadata.return_value = {}
+    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_app.state.transports = {"rabbitmq": mock_backend}
+
+    last_id = ULID()
+    msg_y = JobRequestMessage(
+        message_id=ULID(),
+        recipient_id=identity.client_id,
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+
+    # DB has msg_y
+    mock_app.state.db.messages.retrieve_messages.side_effect = [[msg_y], []]
+
+    # Configure mock client receive to yield msg_y, then hang (sleep) to simulate idle state
+    msg_queue = asyncio.Queue()
+    await msg_queue.put(msg_y)
+
+    async def mock_receive():
+        try:
+            return await msg_queue.get()
+        except asyncio.CancelledError:
+            raise
+
+    mock_client.receive.side_effect = mock_receive
+
+    generator = transport._stream_loop(identity, last_message_id=last_id, wait=0.1)
+
+    # 1. The first yield should be the DB drained message Y
+    line1 = await generator.__anext__()
+    data1 = json.loads(line1)
+    assert len(data1["messages"]) == 1
+    assert data1["messages"][0]["message_id"] == str(msg_y.message_id)
+
+    # 2. Since msg_y is already drained and tracker is updated,
+    # the broker-delivered copy of msg_y is discarded.
+    # The next yield should be a keepalive timeout newline instead of msg_y again.
+    line2 = await generator.__anext__()
+    assert line2 == "\n"
+
+    await transport.drain()
+    with pytest.raises(StopAsyncIteration):
+        await generator.__anext__()
+
+
+@pytest.mark.asyncio
+async def test_hybrid_poll_interleaved(identity, mock_app):
+    """
+    Scenario 4: DB has Y, broker queue has Z (where Z > Y).
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
+    mock_client = AsyncMock()
+    mock_client_cls = MagicMock(return_value=mock_client)
+    mock_backend = MagicMock()
+    mock_backend.get_metadata.return_value = {}
+    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_app.state.transports = {"rabbitmq": mock_backend}
+
+    last_id = ULID()
+    msg_y = JobRequestMessage(
+        message_id=ULID(),
+        recipient_id=identity.client_id,
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+    # Ensure Z > Y by generating Z after Y
+    msg_z = JobRequestMessage(
+        message_id=ULID(),
+        recipient_id=identity.client_id,
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+
+    # First poll drains Y
+    mock_app.state.db.messages.retrieve_messages.side_effect = [[msg_y], []]
+    result1 = await transport._poll_loop(identity, last_message_id=last_id, wait=1)
+    assert result1 == {"messages": [msg_y]}
+
+    # Second poll gets Z from the broker (DB is empty)
+    mock_client.receive.return_value = msg_z
+    result2 = await transport._poll_loop(identity, last_message_id=last_id, wait=1)
+    assert result2 == {"messages": [msg_z]}
+
+
+@pytest.mark.asyncio
+async def test_hybrid_poll_no_last_message_id(identity, mock_app):
+    """
+    Scenario 5: No last_message_id passed.
+    The coordinator should query the DB for unsent messages (retrieve_messages(last_message_id=None)),
+    and since none are found, retrieve msg_z from broker queue.
+    """
+    transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
+    mock_client = AsyncMock()
+    mock_client_cls = MagicMock(return_value=mock_client)
+    mock_backend = MagicMock()
+    mock_backend.get_metadata.return_value = {}
+    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_app.state.transports = {"rabbitmq": mock_backend}
+
+    msg_z = JobRequestMessage(
+        message_id=ULID(),
+        recipient_id=identity.client_id,
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+    mock_client.receive.return_value = msg_z
+
+    result = await transport._poll_loop(identity, last_message_id=None, wait=1)
+    assert result == {"messages": [msg_z]}
+
+    # DB retrieve_messages should have been called with last_message_id=None to check for unsent messages
+    mock_app.state.db.messages.retrieve_messages.assert_called_once_with(
+        recipient_id=identity.client_id,
+        last_message_id=None,
+        job_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_drain_db_history_none_last_id_with_unsent_messages(identity, mock_app):
+    """
+    Test that _drain_db_history queries the DB with last_message_id=None and returns unsent messages if found.
+    """
+    transport = HTTPPollingTransport(app=mock_app)
+    msg1 = JobRequestMessage(
+        message_id=ULID(),
+        recipient_id=identity.client_id,
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+    mock_app.state.db.messages.retrieve_messages.return_value = [msg1]
+
+    max_id, messages = await transport._drain_db_history(mock_app.state.db.messages, identity, last_message_id=None)
+    assert max_id == msg1.message_id
+    assert messages == [msg1]
+    mock_app.state.db.messages.retrieve_messages.assert_called_once_with(
+        recipient_id=identity.client_id,
+        last_message_id=None,
+        job_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_drain_db_history_empty_db(identity, mock_app):
+    """
+    Test that _drain_db_history returns last_message_id and empty list if DB has no messages.
+    """
+    transport = HTTPPollingTransport(app=mock_app)
+    last_id = ULID()
+    mock_app.state.db.messages.retrieve_messages.return_value = []
+
+    max_id, messages = await transport._drain_db_history(mock_app.state.db.messages, identity, last_message_id=last_id)
+    assert max_id == last_id
+    assert messages == []
+    mock_app.state.db.messages.retrieve_messages.assert_called_once_with(
+        recipient_id=identity.client_id,
+        last_message_id=last_id,
+        job_id=None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_drain_db_history_with_messages(identity, mock_app):
+    """
+    Test that _drain_db_history returns the maximum message_id and the messages.
+    """
+    transport = HTTPPollingTransport(app=mock_app)
+    last_id = ULID()
+    msg1 = JobRequestMessage(
+        message_id=ULID(),
+        recipient_id=identity.client_id,
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+    msg2 = JobRequestMessage(
+        message_id=ULID(),
+        recipient_id=identity.client_id,
+        job_id=ULID(),
+        payload=JobRequestPayload(job_id=str(ULID()), binary_name="ffmpeg", arguments=[], paths=[]),
+    )
+
+    # Ensure msg2 > msg1
+    assert msg2.message_id > msg1.message_id
+
+    mock_app.state.db.messages.retrieve_messages.return_value = [msg1, msg2]
+
+    max_id, messages = await transport._drain_db_history(mock_app.state.db.messages, identity, last_message_id=last_id)
+    assert max_id == msg2.message_id
+    assert messages == [msg1, msg2]

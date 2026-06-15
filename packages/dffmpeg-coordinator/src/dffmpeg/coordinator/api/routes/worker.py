@@ -13,6 +13,7 @@ from dffmpeg.common.models import (
     VerifyRegistrationPayload,
     Worker,
     WorkerDeregistration,
+    WorkerRecord,
     WorkerRegistration,
     WorkerVerifyRequest,
 )
@@ -20,7 +21,7 @@ from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import get_config, get_transports, get_worker_repo
 from dffmpeg.coordinator.api.utils import get_negotiated_transport, sanitize_transport_metadata
 from dffmpeg.coordinator.config import CoordinatorConfig
-from dffmpeg.coordinator.db.workers import WorkerRecord, WorkerRepository
+from dffmpeg.coordinator.db.workers import WorkerRepository
 from dffmpeg.coordinator.transports import TransportManager
 
 router = APIRouter()

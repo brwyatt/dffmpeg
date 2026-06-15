@@ -28,6 +28,24 @@ transports:
 
 If `streaming` is enabled, the client sends an `Accept: application/x-ndjson` header. The Coordinator will respect this header and hold the connection open indefinitely, sending a keep-alive ping (a blank line) every `poll_wait` seconds to prevent load balancers from closing the idle connection. If `streaming` is false, it falls back to standard HTTP long-polling.
 
+### Connection Footprint & Message Broker Proxying Risks
+
+When HTTP polling is configured with a `backend_transport` (such as `rabbitmq` or `mqtt`), the Coordinator acts as an intermediary, proxying poll operations to the central message broker. Depending on whether **streaming** or **standard long-polling** is used, this has a significant impact on network connections and broker resource usage:
+
+1. **Standard HTTP Polling (Non-Streaming)**:
+   * **Behavior**: Each time a worker or client performs a poll request, the Coordinator instantiates a backing client transport, establishes a fresh TCP and TLS handshake/connection to the message broker, subscribes/declares the queue, checks for a message, closes the subscription, and disconnects from the broker when the HTTP request completes.
+   * **Scaling Risk**: This consumes broker connection slots and CPU cycles extremely rapidly. The footprint grows at a rate of `(number of workers) * (polling frequency)`. In clusters with dozens of workers polling every 5 seconds, this creates massive connection churn on the message broker.
+
+2. **HTTP Streaming (NDJSON)**:
+   * **Behavior**: The worker or client opens a single persistent connection. The Coordinator opens one connection to the broker for that stream and holds it open. Messages are yielded live as they arrive, and keep-alive pings are sent across the same TCP connection.
+   * **Footprint**: Only 1 connection per active streaming worker is maintained, eliminating connection churn entirely.
+
+### Best Practices & Load Balancer Recommendations
+
+For any production multi-node setup behind load balancers (such as HAProxy pairs):
+* **Prioritize Streaming**: Always configure workers and clients with `streaming: true` (default). This uses the `application/x-ndjson` content type and avoids exhausting message broker connection pools.
+* **Configure Keep-Alives**: Ensure the load balancer's client and server timeouts are slightly larger than the Coordinator's configured `poll_wait` keep-alive interval (e.g., if `poll_wait` is 5 seconds, set HAProxy's `timeout client` and `timeout server` to at least 10–15 seconds) to prevent the load balancer from prematurely cutting silent streams.
+
 ## RabbitMQ
 
 RabbitMQ is a supported transport backend. It uses AMQP 0-9-1.

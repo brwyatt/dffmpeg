@@ -48,6 +48,13 @@ class HTTPPollingTransport(BaseServerTransport):
         """
         Sets up the polling endpoints on the FastAPI application.
         """
+        if self.backend_transport:
+            loaded_transports = getattr(self.app.state, "transports", None)
+            if not loaded_transports or self.backend_transport not in loaded_transports.loaded_transports:
+                raise ValueError(
+                    f"http_polling configured to use backend transport '{self.backend_transport}', "
+                    f"but it is not loaded in TransportManager!"
+                )
         self.app.add_api_route(self.job_path, self.handle_job_poll, methods=["GET"])
         self.app.add_api_route(self.worker_path, self.handle_worker_poll, methods=["GET"])
 
@@ -127,6 +134,29 @@ class HTTPPollingTransport(BaseServerTransport):
         finally:
             await client.disconnect()
 
+    async def _drain_db_history(
+        self,
+        repo: MessageRepository,
+        identity: AuthenticatedIdentity,
+        last_message_id: Optional[ULID] = None,
+        job_id: Optional[ULID] = None,
+    ) -> tuple[Optional[ULID], list[BaseMessage]]:
+        """
+        Drains historical messages from the database.
+        - If last_message_id is provided, fetches messages > last_message_id.
+        - If last_message_id is None, fetches unsent messages (sent_at IS NULL).
+        Returns a tuple of: (highest_message_id_seen, fetched_messages)
+        """
+        db_messages = await repo.retrieve_messages(
+            recipient_id=identity.client_id,
+            last_message_id=last_message_id,
+            job_id=job_id,
+        )
+        if db_messages:
+            max_id = max(msg.message_id for msg in db_messages)
+            return max_id, db_messages
+        return last_message_id, []
+
     async def _poll_loop(
         self,
         identity: AuthenticatedIdentity,
@@ -150,7 +180,13 @@ class HTTPPollingTransport(BaseServerTransport):
         if wait is None:
             wait = 0
 
+        repo: MessageRepository = self.app.state.db.messages
+
         if self.backend_transport:
+            current_last_message_id, db_messages = await self._drain_db_history(repo, identity, last_message_id, job_id)
+            if db_messages:
+                return {"messages": db_messages}
+
             async with self._backend_client(identity, job_id) as client:
                 receive_task = asyncio.create_task(client.receive())
                 drain_task = asyncio.create_task(self._drain_event.wait())
@@ -167,12 +203,17 @@ class HTTPPollingTransport(BaseServerTransport):
 
                 if receive_task in done:
                     msg = receive_task.result()
+                    if current_last_message_id is not None and msg.message_id <= current_last_message_id:
+                        logger.info(
+                            f"Discarding duplicate queue message {msg.message_id} (<= {current_last_message_id})"
+                        )
+                        return {"messages": []}
                     return {"messages": [msg]}
                 else:
                     return {"messages": []}
 
-        repo: MessageRepository = self.app.state.db.messages
-        end_time = asyncio.get_event_loop().time() + wait
+        loop = asyncio.get_running_loop()
+        end_time = loop.time() + wait
 
         async with self._wait_context(identity, job_id) as event:
             while True:
@@ -185,10 +226,10 @@ class HTTPPollingTransport(BaseServerTransport):
                 if messages:
                     return {"messages": messages}
 
-                if self._draining or asyncio.get_event_loop().time() >= end_time:
+                if self._draining or loop.time() >= end_time:
                     return {"messages": []}
 
-                wait_timeout = min(5, max(0, end_time - asyncio.get_event_loop().time()))
+                wait_timeout = min(5, max(0, end_time - loop.time()))
                 try:
                     await asyncio.wait_for(event.wait(), timeout=wait_timeout)
                     event.clear()  # Reset for next loop iteration
@@ -205,7 +246,14 @@ class HTTPPollingTransport(BaseServerTransport):
         if wait is None or wait <= 0:
             wait = 15  # Default keepalive interval
 
+        repo: MessageRepository = self.app.state.db.messages
+
         if self.backend_transport:
+            current_last_message_id, db_messages = await self._drain_db_history(repo, identity, last_message_id, job_id)
+            if db_messages:
+                msgs_dump = [msg.model_dump(mode="json") for msg in db_messages]
+                yield json.dumps({"messages": msgs_dump}) + "\n"
+
             async with self._backend_client(identity, job_id) as client:
                 while not self._draining:
                     receive_task = asyncio.create_task(client.receive())
@@ -223,14 +271,21 @@ class HTTPPollingTransport(BaseServerTransport):
 
                     if receive_task in done:
                         msg = receive_task.result()
+                        if current_last_message_id is not None and msg.message_id <= current_last_message_id:
+                            logger.info(
+                                f"Discarding duplicate queue message {msg.message_id} (<= {current_last_message_id})"
+                            )
+                            continue
+
+                        if current_last_message_id is None or msg.message_id > current_last_message_id:
+                            current_last_message_id = msg.message_id
+
                         msgs_dump = [msg.model_dump(mode="json")]
                         yield json.dumps({"messages": msgs_dump}) + "\n"
                     else:
                         logger.debug("Stream keep-alive timeout, sending keep-alive")
                         yield "\n"
             return
-
-        repo: MessageRepository = self.app.state.db.messages
 
         async with self._wait_context(identity, job_id) as event:
             while True:
