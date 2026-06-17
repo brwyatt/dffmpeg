@@ -34,7 +34,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
     - [x] **Transport Handshake Verification (Reachability Check)**: Ensure workers genuinely have a functional transport connection to receive messages rather than just trusting the API registration call.
 - [x] **Documentation Completion**: Full setup guides, API references, and architecture documentation in `docs/`.
 - [ ] **CLI Consolidation & Refactoring**: Move the vast majority of CLI parsing, formatting, and HTTP API interaction logic into `dffmpeg-common`. `dffmpeg-coordinator` (Admin CLI) and `dffmpeg-client` (Client CLI) packages will primarily provide lightweight entry points. The Admin CLI should eventually evolve to support *all* operations exclusively via the HTTP API, removing reliance on direct database access for operational tasks.
-- [ ] **HTTP Polling Transport Proxy**: Optionally leverage Transport as a backend for HTTP Polling, allowing for Clients/Workers to benefit from message bus notifications, without needing to directly connect to the message bus directly themselves. Useful for cases where the message bus is unreachable by the Workers or Clients directly.
+- [x] **HTTP Polling Transport Proxy**: Optionally leverage Transport as a backend for HTTP Polling, allowing for Clients/Workers to benefit from message bus notifications, without needing to directly connect to the message bus directly themselves. Useful for cases where the message bus is unreachable by the Workers or Clients directly.
 - [x] **IP Restrictions for Web Status**: Allow IP restrictions for the Web Status dashboard (optional, global default)
 - [ ] **Dynamic Configuration (DB-backed)**: Move configuration settings to the database with Admin CLI management (Config table).
 - [ ] **Automated End-to-End Testing**: Robust `pytest` suite covering the full job lifecycle.
@@ -44,6 +44,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
 *Goal: Expanded compatibility and features.*
 
 - [x] **RabbitMQ Transport**: Implement RabbitMQ transport.
+- [ ] **HTTP Polling Proxy Connection Multiplexing**: Implement connection multiplexing/pooling (e.g., AMQP channels or MQTT subscription demuxer) on the coordinator for the HTTP polling backend proxy to reuse connections under high-scale scenarios.
 - [ ] **Improved Transport Negotiation**: Better/fairer selection of transport. This should eventually include "pre-flight" health checks to maintain standby connections and prevent workers from registering as online if all their available transports are disconnected.
 
 ## Phase 4: Post-1.0
