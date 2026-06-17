@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 from logging import getLogger
 from typing import Optional
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 from uvicorn.server import Server
@@ -115,6 +115,23 @@ def create_app(config: Optional[CoordinatorConfig] = None) -> FastAPI:
         openapi_url="/openapi.json" if config.dev_mode else None,
     )
     app.state.config = config
+
+    @app.middleware("http")
+    async def add_custom_headers(request: Request, call_next):
+        response = await call_next(request)
+
+        # Prevent caching globally for ALL endpoints
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+
+        # Add real-time streaming optimizations based on Content-Type
+        content_type = response.headers.get("content-type", "")
+        if "application/x-ndjson" in content_type:
+            response.headers["Connection"] = "keep-alive"
+            response.headers["X-Accel-Buffering"] = "no"
+
+        return response
 
     if config.trusted_proxies:
         app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=config.trusted_proxies)

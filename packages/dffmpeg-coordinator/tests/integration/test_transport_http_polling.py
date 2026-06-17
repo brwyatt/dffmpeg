@@ -95,6 +95,11 @@ async def test_http_polling_streaming_worker_send_receive(
                 async with client.stream("GET", poll_path, headers=headers) as resp:
                     assert resp.status_code == 200
                     assert resp.headers.get("content-type") == "application/x-ndjson"
+
+                    # Verify streaming headers on chunked NDJSON response
+                    assert resp.headers.get("Connection") == "keep-alive"
+                    assert resp.headers.get("X-Accel-Buffering") == "no"
+
                     async for line in resp.aiter_lines():
                         if not line.strip():
                             continue
