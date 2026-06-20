@@ -1,7 +1,7 @@
 import ipaddress
 from typing import List
 
-from dffmpeg.common.models import CIDR
+from dffmpeg.common.models import CIDR, TransportMetadata
 
 
 def is_ip_allowed(client_host: str, allowed_cidrs: List[CIDR]) -> bool:
@@ -36,3 +36,13 @@ def get_negotiated_transport(client_transports: List[str], server_transports: Li
         if client_transport in server_transports:
             return client_transport
     raise ValueError("Cannot find mutually supported transport!")
+
+
+def sanitize_transport_metadata(metadata: TransportMetadata) -> TransportMetadata:
+    """
+    Strips out any private server-side keys (starting with '_') from the transport metadata
+    before sending it over the public API.
+    """
+    if not metadata or not hasattr(metadata, "items"):
+        return metadata
+    return {k: v for k, v in metadata.items() if not k.startswith("_")}

@@ -62,6 +62,28 @@ async def test_mqtt_server_send_message():
     assert result is True
     mock_client.publish.assert_called_once_with("/test/topic", message.model_dump_json(), qos=1)
 
+    # Verify update_message_sent_at called
+    app.state.db.messages.update_message_sent_at.assert_called_once_with(str(message.message_id))
+
+
+@pytest.mark.asyncio
+async def test_mqtt_server_send_message_no_mark_sent():
+    app = MagicMock()
+    app.state.db.messages.update_message_sent_at = AsyncMock()
+    transport = MQTTServerTransport(app=app)
+    mock_client = AsyncMock()
+    transport._client = mock_client
+
+    message = JobStatusMessage(recipient_id="client1", job_id=ULID(), payload=JobStatusPayload(status="running"))
+
+    # Successful send with mark_sent=False
+    result = await transport.send_message(message, transport_metadata={"topic": "/test/topic"}, mark_sent=False)
+    assert result is True
+    mock_client.publish.assert_called_once_with("/test/topic", message.model_dump_json(), qos=1)
+
+    # Verify update_message_sent_at was NOT called when mark_sent=False
+    app.state.db.messages.update_message_sent_at.assert_not_called()
+
 
 @pytest.mark.asyncio
 async def test_mqtt_server_send_message_no_client():

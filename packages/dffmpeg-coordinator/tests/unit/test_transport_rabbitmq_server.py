@@ -68,3 +68,27 @@ async def test_rabbitmq_server_send_message():
     assert call_args[1]["routing_key"] == "worker.1"
     # Verify body is bytes
     assert isinstance(call_args[0][0].body, bytes)
+
+    # Verify update_message_sent_at called
+    app.state.db.messages.update_message_sent_at.assert_called_once_with(str(message.message_id))
+
+
+@pytest.mark.asyncio
+async def test_rabbitmq_server_send_message_no_mark_sent():
+    app = MagicMock()
+    app.state.db.messages.update_message_sent_at = AsyncMock()
+    transport = RabbitMQServerTransport(app=app)
+
+    mock_exchange = AsyncMock()
+    transport._workers_exchange = mock_exchange
+    transport._manager.is_connected.set()
+    transport._channel = MagicMock()
+
+    message = JobStatusMessage(recipient_id="client1", job_id=ULID(), payload=JobStatusPayload(status="running"))
+
+    metadata = {"exchange": "dffmpeg.workers", "routing_key": "worker.1"}
+    result = await transport.send_message(message, transport_metadata=metadata, mark_sent=False)
+    assert result is True
+
+    # Verify update_message_sent_at was NOT called when mark_sent=False
+    app.state.db.messages.update_message_sent_at.assert_not_called()

@@ -47,7 +47,9 @@ class TransportManager:
         Get a list of currently healthy transport names by leveraging the existing health check.
         """
         health_results = await self.health_check()
-        return [name for name, health in health_results.items() if health.status == "online"]
+        # Only return transports that are explicitly enabled in public config and online
+        enabled = self.config.enabled_transports or ["http_polling"]
+        return [name for name, health in health_results.items() if name in enabled and health.status == "online"]
 
     async def health_check(self) -> Dict[str, ComponentHealth]:
         """
@@ -80,10 +82,10 @@ class TransportManager:
         transport = await db.workers.get_transport(message.recipient_id)
 
         # 2. If not a direct worker, and there's a job_id, try Job transport (client/requester)
-        if transport is None and message.job_id:
+        if (transport is None or transport.transport == "none") and message.job_id:
             transport = await db.jobs.get_transport(message.job_id)
 
-        if transport is None:
+        if transport is None or transport.transport == "none":
             logger.warning(f"No transport record found for recipient {message.recipient_id} (job: {message.job_id})")
             return False
 
@@ -96,11 +98,19 @@ class TransportManager:
 
     def load_transports(self) -> Dict[str, Type[BaseServerTransport]]:
         available_entrypoints = {x.name: x for x in entry_points(group="dffmpeg.transports.server")}
-        enabled_transports = self.config.enabled_transports
+        enabled_transports = list(self.config.enabled_transports)
 
         # If no transports are explicitly enabled, default to http_polling
         if not enabled_transports:
             enabled_transports = ["http_polling"]
+
+        # If http_polling is enabled, check if it requires a backend transport
+        if "http_polling" in enabled_transports:
+            http_config = self.config.get_transport_config("http_polling")
+            backend = http_config.get("backend_transport")
+            if backend and backend not in enabled_transports:
+                logger.info(f"http_polling configured to use backend transport '{backend}'. Adding to loaded list.")
+                enabled_transports.append(backend)
 
         logger.info(f"Requested transports: {', '.join(enabled_transports)}")
         logger.info(f"Available transports: {', '.join(available_entrypoints.keys())}")

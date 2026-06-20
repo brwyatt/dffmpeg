@@ -95,7 +95,12 @@ class RabbitMQServerTransport(BaseServerTransport):
             self._workers_exchange = None
             self._jobs_exchange = None
 
-    async def send_message(self, message: BaseMessage, transport_metadata: Optional[Dict[str, Any]] = None) -> bool:
+    async def send_message(
+        self,
+        message: BaseMessage,
+        transport_metadata: Optional[Dict[str, Any]] = None,
+        mark_sent: bool = True,
+    ) -> bool:
         """
         Publish a message to a RabbitMQ exchange.
         """
@@ -132,7 +137,8 @@ class RabbitMQServerTransport(BaseServerTransport):
             )
 
             logger.debug(f"Published message {message.message_id} to {exchange_name}::{routing_key}")
-            await self._messages.update_message_sent_at(str(message.message_id))
+            if mark_sent:
+                await self._messages.update_message_sent_at(str(message.message_id))
             return True
 
         except Exception as e:
@@ -172,3 +178,11 @@ class RabbitMQServerTransport(BaseServerTransport):
             return ComponentHealth(status="online")
         else:
             return ComponentHealth(status="unhealthy", detail="Not connected to RabbitMQ")
+
+    def get_client_transport_class(self):
+        """
+        Returns the RabbitMQClientTransport class.
+        """
+        from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
+
+        return RabbitMQClientTransport

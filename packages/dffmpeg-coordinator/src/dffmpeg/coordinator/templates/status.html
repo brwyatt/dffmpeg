@@ -225,6 +225,15 @@
             theme: 'auto'
         };
 
+        // Determine base path for requests dynamically
+        const BASE_PATH = (() => {
+            let path = window.location.pathname;
+            if (path.endsWith('/')) {
+                path = path.slice(0, -1);
+            }
+            return path;
+        })();
+
         function getParamsFromHash() {
             const hash = window.location.hash.substring(1);
             const params = new URLSearchParams(hash);
@@ -364,7 +373,7 @@
                 refreshTimeout = null;
             }
 
-            fetch(`/status/data?window=${state.window}`)
+            fetch(`${BASE_PATH}/data?window=${state.window}`)
             .then(response => {
                 if (!response.ok) throw new Error('Refresh failed');
                 return response.json();

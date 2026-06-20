@@ -80,7 +80,12 @@ class MQTTServerTransport(BaseServerTransport):
                 logger.error(f"Unexpected error in MQTT loop: {e}. Retrying in 5 seconds...")
                 await asyncio.sleep(5)
 
-    async def send_message(self, message: BaseMessage, transport_metadata: Optional[Dict[str, Any]] = None) -> bool:
+    async def send_message(
+        self,
+        message: BaseMessage,
+        transport_metadata: Optional[Dict[str, Any]] = None,
+        mark_sent: bool = True,
+    ) -> bool:
         """
         Publish a message to an MQTT topic.
         """
@@ -98,7 +103,8 @@ class MQTTServerTransport(BaseServerTransport):
             logger.info(f"Publishing message {message.message_id} to topic {topic}")
             await self._client.publish(topic, payload, qos=1)
             logger.debug(f"Published message {message.message_id} to topic {topic}")
-            await self._messages.update_message_sent_at(str(message.message_id))
+            if mark_sent:
+                await self._messages.update_message_sent_at(str(message.message_id))
             return True
         except aiomqtt.MqttError as e:
             logger.error(f"MQTT publish error for message {message.message_id}: {e}")
@@ -131,3 +137,11 @@ class MQTTServerTransport(BaseServerTransport):
             return ComponentHealth(status="online")
         else:
             return ComponentHealth(status="unhealthy", detail="Not connected to MQTT broker")
+
+    def get_client_transport_class(self):
+        """
+        Returns the MQTTClientTransport class.
+        """
+        from dffmpeg.common.transports.mqtt import MQTTClientTransport
+
+        return MQTTClientTransport

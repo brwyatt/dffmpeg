@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Upgrade Note
+- **HTTP Polling Backend Proxying**: The Coordinator can now proxy HTTP polling and streaming requests to an underlying RabbitMQ or MQTT broker. To utilize this, configure `backend_transport: "rabbitmq"` (or `"mqtt"`) under the coordinator's `http_polling` transport settings.
+
+### Added
+- **Message-Bus Backed HTTP Polling Proxy**: Workers and clients can now benefit from central message bus scalability while communicating strictly via HTTP.
+- **Durable Handshake Recovery**: Handshake and in-flight messages are automatically preserved in the DB if a streaming client unexpectedly disconnects mid-delivery, and are safely drained/deduplicated on reconnection.
+- **Global Cache-Control Middlewares**: Enforced cache-preventing headers globally across all Coordinator API and Web Dashboard endpoints.
+- **Self-Healing Proxy Streaming**: Automatically injects `X-Accel-Buffering: no` and `Connection: keep-alive` headers on NDJSON streams to natively bypass buffering in reverse-proxies like Nginx.
+
+### Fixed
+- **Hanging Coroutines Warning**: Resolved `Task was destroyed but it is pending!` warnings by ensuring all pending stream-receive tasks are cleanly canceled and gathered.
+- **Proxy-Friendly Web Status Resources**: Fixed dashboard resource paths to load correctly behind reverse proxies with custom path prefixes.
+- **Graceful Metadata Sanitization**: Fixed an edge-case crash in `sanitize_transport_metadata` when handling non-dict/null payloads.
+
+### Changed
+- Switched repository type checking configuration from Pylance to **Based Pyright**.
+
+## [0.4.0] - 2026-06-12
+
+### Added
+- **Graceful Shutdown of Workers**: Implemented a two-phase shutdown sequence (drain existing jobs on first SIGTERM/SIGINT, then fast-teardown on second signal or systemd timeout). (#28)
+- **Graceful Shutdown of Coordinator**: Added a configurable shutdown delay logic, instant Janitor teardown, and 503 health reporting to allow load-balancers to gracefully drain connections. (#28)
+
+### Changed
+- Updated cryptography requirement from `<48.0.0,>=46.0.0` to `>=46.0.0,<49.0.0` in `packages/dffmpeg-common`. (#27)
+
 ## [0.3.0] - 2026-05-09
 
 ### Upgrade Note

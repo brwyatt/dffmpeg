@@ -9,18 +9,28 @@
     ],
     "settings": {
         "python.defaultInterpreterPath": "${workspaceFolder:workspace}/.venv/bin/python",
-        "python.analysis.extraPaths": [
-            "${workspaceFolder:workspace}/packages/dffmpeg-client/src",
-            "${workspaceFolder:workspace}/packages/dffmpeg-common/src",
-            "${workspaceFolder:workspace}/packages/dffmpeg-coordinator/src",
-            "${workspaceFolder:workspace}/packages/dffmpeg-worker/src",
+        "basedpyright.analysis.extraPaths": [
+            "../dffmpeg-common/src"
         ],
-        "python.analysis.packageIndexDepths": [
-            { "name": "dffmpeg", "depth": 2, "includeAllSymbols": true}
-        ],
-        "python.analysis.indexing": true,
+        "basedpyright.analysis.diagnosticSeverityOverrides": {
+            "reportAny": "none",
+            "reportCallInDefaultInitializer": "none",
+            "reportDeprecated": "none",
+            "reportExplicitAny": "none",
+            "reportImplicitOverride": "none",
+            "reportImplicitStringConcatenation": "none",
+            "reportMissingParameterType": "none",
+            "reportMissingSuperCall": "none",
+            "reportOptionalMemberAccess": "none",
+            "reportUnannotatedClassAttribute": "none",
+            "reportUnknownArgumentType": "none",
+            "reportUnknownMemberType": "none",
+            "reportUnknownParameterType": "none",
+            "reportUnknownVariableType": "none",
+            "reportUnusedCallResult": "none",
+            "reportUnusedParameter": "none",
+        },
         "python.terminal.activateEnvInCurrentTerminal": true,
         "python.terminal.activateEnvironment": true,
-        "python.analysis.diagnosticMode": "workspace",
     }
 }

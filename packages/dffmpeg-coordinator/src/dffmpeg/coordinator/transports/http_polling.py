@@ -1,10 +1,13 @@
 import asyncio
+import contextlib
+import json
 from collections import defaultdict
 from itertools import chain
 from logging import getLogger
-from typing import Any, Dict, Optional, Set
+from typing import Any, AsyncIterator, Dict, Optional, Set
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Header
+from fastapi.responses import StreamingResponse
 from ulid import ULID
 
 from dffmpeg.common.models import (
@@ -26,11 +29,16 @@ class HTTPPollingTransport(BaseServerTransport):
     Clients poll specific endpoints to receive messages.
     """
 
-    def __init__(self, *args, app: FastAPI, base_path: str = "/poll", **kwargs):
+    def __init__(
+        self, *args, app: FastAPI, base_path: str = "/poll", backend_transport: Optional[str] = None, **kwargs
+    ):
         self.app = app
         self.base_path = base_path
         self.job_path = f"{base_path}/jobs/{{job_id}}"
         self.worker_path = f"{base_path}/worker"
+        self._draining = False
+        self.backend_transport = backend_transport
+        self._drain_event = asyncio.Event()
 
         # Registry for waiting poll connections
         self._job_waiters: Dict[str, Set[asyncio.Event]] = defaultdict(set)
@@ -40,8 +48,114 @@ class HTTPPollingTransport(BaseServerTransport):
         """
         Sets up the polling endpoints on the FastAPI application.
         """
+        if self.backend_transport:
+            loaded_transports = getattr(self.app.state, "transports", None)
+            if not loaded_transports or self.backend_transport not in loaded_transports.loaded_transports:
+                raise ValueError(
+                    f"http_polling configured to use backend transport '{self.backend_transport}', "
+                    f"but it is not loaded in TransportManager!"
+                )
         self.app.add_api_route(self.job_path, self.handle_job_poll, methods=["GET"])
         self.app.add_api_route(self.worker_path, self.handle_worker_poll, methods=["GET"])
+
+    @contextlib.asynccontextmanager
+    async def _wait_context(
+        self, identity: AuthenticatedIdentity, job_id: Optional[ULID] = None
+    ) -> AsyncIterator[asyncio.Event]:
+        """
+        Manages the registration of an asyncio.Event for a polling or streaming connection.
+        Yields the event and ensures it is properly unregistered when the context closes.
+        """
+        event = asyncio.Event()
+
+        if job_id:
+            self._job_waiters[str(job_id)].add(event)
+        else:
+            self._recipient_waiters[identity.client_id].add(event)
+
+        try:
+            yield event
+        except asyncio.CancelledError:
+            logger.info(f"Connection closed by {identity.client_id}")
+            raise
+        finally:
+            if job_id:
+                jid = str(job_id)
+                if jid in self._job_waiters:
+                    self._job_waiters[jid].discard(event)
+                    if not self._job_waiters[jid]:
+                        del self._job_waiters[jid]
+            else:
+                cid = identity.client_id
+                if cid in self._recipient_waiters:
+                    self._recipient_waiters[cid].discard(event)
+                    if not self._recipient_waiters[cid]:
+                        del self._recipient_waiters[cid]
+
+    @contextlib.asynccontextmanager
+    async def _backend_client(self, identity: AuthenticatedIdentity, job_id: Optional[ULID] = None):
+        """
+        Creates, connects, and yields a backend client transport.
+        Ensures clean disconnection on exit.
+        """
+        if not self.backend_transport:
+            yield None
+            return
+
+        backend = self.app.state.transports[self.backend_transport]
+        metadata = None
+
+        # Try to resolve stashed backend metadata from the DB first (requires looking up worker or job)
+        db = self.app.state.db
+        transport_metadata = None
+        if job_id:
+            job_rec = await db.jobs.get_job(job_id)
+            if job_rec:
+                transport_metadata = job_rec.transport_metadata
+        else:
+            worker_rec = await db.workers.get_worker(identity.client_id)
+            if worker_rec:
+                transport_metadata = worker_rec.transport_metadata
+
+        if transport_metadata:
+            metadata = transport_metadata.get("_backend_metadata")
+
+        # Fallback to computing on-the-fly
+        if not metadata:
+            metadata = backend.get_metadata(identity.client_id, job_id)
+
+        config = self.app.state.config.transports.get_transport_config(self.backend_transport)
+        client_cls = backend.get_client_transport_class()
+        client = client_cls(**config)
+
+        await client.connect(metadata)
+        try:
+            yield client
+        finally:
+            await client.disconnect()
+
+    async def _drain_db_history(
+        self,
+        repo: MessageRepository,
+        identity: AuthenticatedIdentity,
+        last_message_id: Optional[ULID] = None,
+        job_id: Optional[ULID] = None,
+    ) -> tuple[Optional[ULID], list[BaseMessage]]:
+        """
+        Drains historical messages from the database.
+        - If last_message_id is provided, fetches messages > last_message_id.
+        - If last_message_id is None, fetches unsent messages (sent_at IS NULL).
+        Returns a tuple of: (highest_message_id_seen, fetched_messages)
+        """
+        db_messages = await repo.retrieve_messages(
+            recipient_id=identity.client_id,
+            last_message_id=last_message_id,
+            job_id=job_id,
+        )
+        if db_messages:
+            max_id = max(msg.message_id for msg in db_messages)
+            return max_id, db_messages
+        return last_message_id, []
 
     async def _poll_loop(
         self,
@@ -65,21 +179,48 @@ class HTTPPollingTransport(BaseServerTransport):
         """
         if wait is None:
             wait = 0
+
         repo: MessageRepository = self.app.state.db.messages
-        end_time = asyncio.get_event_loop().time() + wait
 
-        # Create an event for this connection
-        event = asyncio.Event()
+        if self.backend_transport:
+            current_last_message_id, db_messages = await self._drain_db_history(repo, identity, last_message_id, job_id)
+            if db_messages:
+                return {"messages": db_messages}
 
-        # Register the event
-        if job_id:
-            self._job_waiters[str(job_id)].add(event)
-        else:
-            self._recipient_waiters[identity.client_id].add(event)
+            async with self._backend_client(identity, job_id) as client:
+                receive_task = asyncio.create_task(client.receive())
+                drain_task = asyncio.create_task(self._drain_event.wait())
 
-        try:
+                try:
+                    done, pending = await asyncio.wait(
+                        [receive_task, drain_task],
+                        timeout=wait if wait > 0 else 0.001,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                finally:
+                    receive_task.cancel()
+                    drain_task.cancel()
+                    await asyncio.gather(receive_task, drain_task, return_exceptions=True)
+
+                if drain_task in done:
+                    return {"messages": []}
+
+                if receive_task in done:
+                    msg = receive_task.result()
+                    if current_last_message_id is not None and msg.message_id <= current_last_message_id:
+                        logger.info(
+                            f"Discarding duplicate queue message {msg.message_id} (<= {current_last_message_id})"
+                        )
+                        return {"messages": []}
+                    return {"messages": [msg]}
+                else:
+                    return {"messages": []}
+
+        loop = asyncio.get_running_loop()
+        end_time = loop.time() + wait
+
+        async with self._wait_context(identity, job_id) as event:
             while True:
-                # Fetch logic: logic changes slightly if a job_id is provided
                 messages = await repo.retrieve_messages(
                     recipient_id=identity.client_id,
                     last_message_id=last_message_id,
@@ -89,56 +230,133 @@ class HTTPPollingTransport(BaseServerTransport):
                 if messages:
                     return {"messages": messages}
 
-                if self.app.state.shutting_down or asyncio.get_event_loop().time() >= end_time:
+                if self._draining or loop.time() >= end_time:
                     return {"messages": []}
 
-                # Wait for a "poke" from the send_message call or a system-wide Janitor event
-                wait_timeout = min(5, max(0, end_time - asyncio.get_event_loop().time()))
+                wait_timeout = min(5, max(0, end_time - loop.time()))
                 try:
                     await asyncio.wait_for(event.wait(), timeout=wait_timeout)
                     event.clear()  # Reset for next loop iteration
                 except asyncio.TimeoutError:
                     continue  # Regular interval check
-        except asyncio.CancelledError:
-            # Handle sudden disconnects
-            logger.info(f"Connection closed by {identity.client_id}")
-            raise
-        finally:
-            # Unregister the event
-            if job_id:
-                jid = str(job_id)
-                if jid in self._job_waiters:
-                    self._job_waiters[jid].discard(event)
-                    if not self._job_waiters[jid]:
-                        del self._job_waiters[jid]
-            else:
-                cid = identity.client_id
-                if cid in self._recipient_waiters:
-                    self._recipient_waiters[cid].discard(event)
-                    if not self._recipient_waiters[cid]:
-                        del self._recipient_waiters[cid]
+
+    async def _stream_loop(
+        self,
+        identity: AuthenticatedIdentity,
+        last_message_id: Optional[ULID] = None,
+        wait: Optional[int] = None,
+        job_id: Optional[ULID] = None,
+    ):
+        if wait is None or wait <= 0:
+            wait = 15  # Default keepalive interval
+
+        repo: MessageRepository = self.app.state.db.messages
+
+        if self.backend_transport:
+            current_last_message_id, db_messages = await self._drain_db_history(repo, identity, last_message_id, job_id)
+            if db_messages:
+                msgs_dump = [msg.model_dump(mode="json") for msg in db_messages]
+                yield json.dumps({"messages": msgs_dump}) + "\n"
+
+            async with self._backend_client(identity, job_id) as client:
+                while not self._draining:
+                    receive_task = asyncio.create_task(client.receive())
+                    drain_task = asyncio.create_task(self._drain_event.wait())
+
+                    try:
+                        done, pending = await asyncio.wait(
+                            [receive_task, drain_task], timeout=wait, return_when=asyncio.FIRST_COMPLETED
+                        )
+                    finally:
+                        receive_task.cancel()
+                        drain_task.cancel()
+                        await asyncio.gather(receive_task, drain_task, return_exceptions=True)
+
+                    if drain_task in done:
+                        return
+
+                    if receive_task in done:
+                        msg = receive_task.result()
+                        if current_last_message_id is not None and msg.message_id <= current_last_message_id:
+                            logger.info(
+                                f"Discarding duplicate queue message {msg.message_id} (<= {current_last_message_id})"
+                            )
+                            continue
+
+                        if current_last_message_id is None or msg.message_id > current_last_message_id:
+                            current_last_message_id = msg.message_id
+
+                        msgs_dump = [msg.model_dump(mode="json")]
+                        yield json.dumps({"messages": msgs_dump}) + "\n"
+                    else:
+                        logger.debug("Stream keep-alive timeout, sending keep-alive")
+                        yield "\n"
+            return
+
+        async with self._wait_context(identity, job_id) as event:
+            while True:
+                messages = await repo.retrieve_messages(
+                    recipient_id=identity.client_id,
+                    last_message_id=last_message_id,
+                    job_id=job_id,
+                )
+
+                if messages:
+                    last_message_id = messages[-1].message_id
+                    msgs_dump = [msg.model_dump(mode="json") for msg in messages]
+                    yield json.dumps({"messages": msgs_dump}) + "\n"
+
+                if self._draining:
+                    return
+
+                try:
+                    await asyncio.wait_for(event.wait(), timeout=wait)
+                    event.clear()
+                except asyncio.TimeoutError:
+                    logger.debug("Stream keep-alive timeout, sending keep-alive")
+                    yield "\n"
 
     async def handle_job_poll(
         self,
         job_id: ULID,
         last_message_id: Optional[ULID] = None,
         wait: Optional[int] = None,
+        accept: Optional[str] = Header(None),
         identity=Depends(required_hmac_auth),
     ):
         """
         Endpoint handler for job-specific polling.
         """
+        if accept and "application/x-ndjson" in accept:
+            return StreamingResponse(
+                self._stream_loop(identity, last_message_id=last_message_id, wait=wait, job_id=job_id),
+                media_type="application/x-ndjson",
+            )
         return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait, job_id=job_id)
 
     async def handle_worker_poll(
-        self, last_message_id: Optional[ULID] = None, wait: Optional[int] = None, identity=Depends(required_hmac_auth)
+        self,
+        last_message_id: Optional[ULID] = None,
+        wait: Optional[int] = None,
+        accept: Optional[str] = Header(None),
+        identity=Depends(required_hmac_auth),
     ):
         """
         Endpoint handler for worker polling (general messages).
         """
+        if accept and "application/x-ndjson" in accept:
+            return StreamingResponse(
+                self._stream_loop(identity, last_message_id=last_message_id, wait=wait),
+                media_type="application/x-ndjson",
+            )
         return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait)
 
-    async def send_message(self, message: BaseMessage, transport_metadata: Optional[TransportMetadata] = None) -> bool:
+    async def send_message(
+        self,
+        message: BaseMessage,
+        transport_metadata: Optional[TransportMetadata] = None,
+        mark_sent: bool = False,
+    ) -> bool:
         """
         Notifies polling clients that a new message might be available.
         Does not actually 'send' the message payload directly, but triggers a poll check.
@@ -146,11 +364,20 @@ class HTTPPollingTransport(BaseServerTransport):
         Args:
             message (Message): The message object (already saved to DB).
             transport_metadata (Optional[TransportMetadata]): Metadata for the transport.
+            mark_sent (bool): Whether to mark the message as sent in the DB.
 
         Returns:
             bool: Always True (notification sent).
         """
-        # HTTP polling doesn't actually "send", but we can at least tell connected clients to check
+        if self.backend_transport:
+            backend = self.app.state.transports[self.backend_transport]
+            metadata = transport_metadata.get("_backend_metadata") if transport_metadata else None
+            # Fallback to computing on-the-fly if missing or empty
+            if not metadata:
+                is_worker_msg = message.message_type in ("job_request", "verify_registration")
+                job_id = None if is_worker_msg else message.job_id
+                metadata = backend.get_metadata(message.recipient_id, job_id)
+            return await backend.send_message(message, transport_metadata=metadata, mark_sent=mark_sent)
 
         # Notify recipient-specific listeners (e.g. workers)
         if message.recipient_id in self._recipient_waiters:
@@ -177,21 +404,34 @@ class HTTPPollingTransport(BaseServerTransport):
         Returns:
             Dict[str, Any]: Metadata containing the path.
         """
-        return {
+        metadata = {
             "path": self.job_path.format(job_id=job_id) if job_id else self.worker_path,
         }
+        if self.backend_transport:
+            backend = self.app.state.transports[self.backend_transport]
+            metadata["_backend_metadata"] = backend.get_metadata(client_id, job_id)
+        return metadata
 
     async def health_check(self) -> ComponentHealth:
         """
         Check the health of the HTTP polling transport.
         For now, this just means the transport is initialized.
         """
-        return ComponentHealth(status="online")
+        if self.backend_transport:
+            backend = self.app.state.transports[self.backend_transport]
+            backend_health = await backend.health_check()
+            return ComponentHealth(
+                status=backend_health.status,
+                detail=f"Backed by {self.backend_transport}: {backend_health.detail or backend_health.status}",
+            )
+        return ComponentHealth(status="online", detail="HTTP Polling mode (standalone)")
 
     async def drain(self):
         """
         Wakes up all waiting pollers so they can return and cleanly disconnect.
         """
+        self._draining = True
+        self._drain_event.set()
         waiter_events = set(chain.from_iterable(self._recipient_waiters.values())).union(
             set(chain.from_iterable(self._job_waiters.values()))
         )

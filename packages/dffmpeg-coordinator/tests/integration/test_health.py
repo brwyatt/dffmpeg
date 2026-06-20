@@ -13,6 +13,12 @@ async def test_shallow_health_check(test_app):
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             resp = await client.get("/health")
             assert resp.status_code == 200
+
+            # Verify global caching prevention headers are present
+            assert resp.headers.get("Cache-Control") == "no-cache, no-store, must-revalidate"
+            assert resp.headers.get("Pragma") == "no-cache"
+            assert resp.headers.get("Expires") == "0"
+
             data = resp.json()
             assert data["status"] == "online"
             assert data.get("databases") is None

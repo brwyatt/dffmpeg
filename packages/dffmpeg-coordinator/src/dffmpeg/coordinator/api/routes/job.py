@@ -11,6 +11,7 @@ from dffmpeg.common.models import (
     JobLogsMessage,
     JobLogsPayload,
     JobLogsResponse,
+    JobRecord,
     JobRequest,
     JobStatusMessage,
     JobStatusPayload,
@@ -25,9 +26,9 @@ from dffmpeg.coordinator.api.dependencies import (
     get_transports,
     get_worker_repo,
 )
-from dffmpeg.coordinator.api.utils import get_negotiated_transport
+from dffmpeg.coordinator.api.utils import get_negotiated_transport, sanitize_transport_metadata
 from dffmpeg.coordinator.config import CoordinatorConfig
-from dffmpeg.coordinator.db.jobs import JobRecord, JobRepository
+from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
 from dffmpeg.coordinator.scheduler import process_job_assignment
@@ -103,6 +104,8 @@ async def job_submit(
         transports,
     )
 
+    # Sanitize the transport metadata in-place before returning over the public API
+    job_record.transport_metadata = sanitize_transport_metadata(job_record.transport_metadata)
     return job_record
 
 
