@@ -45,6 +45,7 @@ When HTTP polling is configured with a `backend_transport` (such as `rabbitmq` o
 For any production multi-node setup behind load balancers (such as HAProxy pairs):
 * **Prioritize Streaming**: Always configure workers and clients with `streaming: true` (default). This uses the `application/x-ndjson` content type and avoids exhausting message broker connection pools.
 * **Configure Keep-Alives**: Ensure the load balancer's client and server timeouts are slightly larger than the Coordinator's configured `poll_wait` keep-alive interval (e.g., if `poll_wait` is 5 seconds, set HAProxy's `timeout client` and `timeout server` to at least 10–15 seconds) to prevent the load balancer from prematurely cutting silent streams.
+* **Nginx/Reverse Proxy Buffering**: By default, Nginx buffers upstream responses (`proxy_buffering on;`), which can stall the real-time NDJSON stream. The Coordinator automatically sends `X-Accel-Buffering: no` in the response headers of the stream to instruct Nginx to bypass buffering. Ensure your reverse proxy configuration honors this header and does not override it.
 
 ## RabbitMQ
 
