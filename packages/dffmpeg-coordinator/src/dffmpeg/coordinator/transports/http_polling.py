@@ -157,6 +157,23 @@ class HTTPPollingTransport(BaseServerTransport):
             return max_id, db_messages
         return last_message_id, []
 
+    async def _process_and_mark_sent(
+        self,
+        repo: MessageRepository,
+        msg: BaseMessage,
+        current_last_message_id: Optional[ULID] = None,
+    ) -> Optional[BaseMessage]:
+        """
+        Deduplicates a message against the current checkpoint,
+        marks it as sent in the database, and returns the message if valid (non-duplicate).
+        """
+        if current_last_message_id is not None and msg.message_id <= current_last_message_id:
+            logger.info(f"Discarding duplicate queue message {msg.message_id} (<= {current_last_message_id})")
+            return None
+
+        await repo.update_message_sent_at(str(msg.message_id))
+        return msg
+
     async def _poll_loop(
         self,
         identity: AuthenticatedIdentity,
@@ -207,10 +224,8 @@ class HTTPPollingTransport(BaseServerTransport):
 
                 if receive_task in done:
                     msg = receive_task.result()
-                    if current_last_message_id is not None and msg.message_id <= current_last_message_id:
-                        logger.info(
-                            f"Discarding duplicate queue message {msg.message_id} (<= {current_last_message_id})"
-                        )
+                    msg = await self._process_and_mark_sent(repo, msg, current_last_message_id)
+                    if msg is None:
                         return {"messages": []}
                     return {"messages": [msg]}
                 else:
@@ -277,14 +292,11 @@ class HTTPPollingTransport(BaseServerTransport):
 
                     if receive_task in done:
                         msg = receive_task.result()
-                        if current_last_message_id is not None and msg.message_id <= current_last_message_id:
-                            logger.info(
-                                f"Discarding duplicate queue message {msg.message_id} (<= {current_last_message_id})"
-                            )
+                        msg = await self._process_and_mark_sent(repo, msg, current_last_message_id)
+                        if msg is None:
                             continue
 
-                        if current_last_message_id is None or msg.message_id > current_last_message_id:
-                            current_last_message_id = msg.message_id
+                        current_last_message_id = msg.message_id
 
                         msgs_dump = [msg.model_dump(mode="json")]
                         yield json.dumps({"messages": msgs_dump}) + "\n"

@@ -232,6 +232,9 @@ async def test_stream_loop_proxy_mqtt(identity, mock_app):
     assert len(data["messages"]) == 1
     assert data["messages"][0]["message_id"] == str(msg.message_id)
 
+    # Verify that the message is correctly marked as sent in the database upon live delivery
+    mock_app.state.db.messages.update_message_sent_at.assert_called_once_with(str(msg.message_id))
+
     # Drain should trigger exit
     await transport.drain()
 
