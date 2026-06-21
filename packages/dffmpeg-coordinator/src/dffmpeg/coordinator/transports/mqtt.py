@@ -6,6 +6,7 @@ import aiomqtt
 from ulid import ULID
 
 from dffmpeg.common.models import BaseMessage, ComponentHealth
+from dffmpeg.common.transports.base import BaseClientTransport
 from dffmpeg.coordinator.transports.base import BaseServerTransport
 
 logger = logging.getLogger(__name__)
@@ -138,10 +139,17 @@ class MQTTServerTransport(BaseServerTransport):
         else:
             return ComponentHealth(status="unhealthy", detail="Not connected to MQTT broker")
 
-    def get_client_transport_class(self):
+    def create_client_transport(self) -> BaseClientTransport:
         """
-        Returns the MQTTClientTransport class.
+        Creates an MQTT client transport instance using the server's own connection parameters.
         """
         from dffmpeg.common.transports.mqtt import MQTTClientTransport
 
-        return MQTTClientTransport
+        return MQTTClientTransport(
+            host=self.host,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+            use_tls=self.use_tls,
+            topic_prefix=self.topic_prefix,
+        )

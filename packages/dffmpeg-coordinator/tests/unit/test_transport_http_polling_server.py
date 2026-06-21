@@ -179,12 +179,11 @@ async def test_poll_loop_proxy_rabbitmq(identity, mock_app):
     transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
 
     mock_client = AsyncMock()
-    mock_client_cls = MagicMock(return_value=mock_client)
 
     # Mock backend server transport and client instance
     mock_backend = MagicMock()
     mock_backend.get_metadata.return_value = {"routing_key": "test_rk"}
-    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_backend.create_client_transport.return_value = mock_client
     mock_app.state.transports = {"rabbitmq": mock_backend}
 
     msg = JobRequestMessage(
@@ -197,7 +196,7 @@ async def test_poll_loop_proxy_rabbitmq(identity, mock_app):
     result = await transport._poll_loop(identity, wait=1)
 
     assert result == {"messages": [msg]}
-    mock_client_cls.assert_called_once()
+    mock_backend.create_client_transport.assert_called_once()
     mock_client.connect.assert_called_once_with({"routing_key": "test_rk"})
     mock_client.disconnect.assert_called_once()
 
@@ -210,11 +209,10 @@ async def test_stream_loop_proxy_mqtt(identity, mock_app):
     transport = HTTPPollingTransport(app=mock_app, backend_transport="mqtt")
 
     mock_client = AsyncMock()
-    mock_client_cls = MagicMock(return_value=mock_client)
 
     mock_backend = MagicMock()
     mock_backend.get_metadata.return_value = {"topic": "test_topic"}
-    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_backend.create_client_transport.return_value = mock_client
     mock_app.state.transports = {"mqtt": mock_backend}
 
     msg = JobRequestMessage(
@@ -241,7 +239,7 @@ async def test_stream_loop_proxy_mqtt(identity, mock_app):
     with pytest.raises(StopAsyncIteration):
         await generator.__anext__()
 
-    mock_client_cls.assert_called_once()
+    mock_backend.create_client_transport.assert_called_once()
     mock_client.connect.assert_called_once_with({"topic": "test_topic"})
     mock_client.disconnect.assert_called_once()
 
@@ -324,10 +322,9 @@ async def test_hybrid_poll_no_messages(identity, mock_app):
     """
     transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
     mock_client = AsyncMock()
-    mock_client_cls = MagicMock(return_value=mock_client)
     mock_backend = MagicMock()
     mock_backend.get_metadata.return_value = {}
-    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_backend.create_client_transport.return_value = mock_client
     mock_app.state.transports = {"rabbitmq": mock_backend}
 
     mock_app.state.db.messages.retrieve_messages.return_value = []
@@ -350,10 +347,9 @@ async def test_hybrid_poll_db_gaps_only(identity, mock_app):
     """
     transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
     mock_client = AsyncMock()
-    mock_client_cls = MagicMock(return_value=mock_client)
     mock_backend = MagicMock()
     mock_backend.get_metadata.return_value = {}
-    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_backend.create_client_transport.return_value = mock_client
     mock_app.state.transports = {"rabbitmq": mock_backend}
 
     last_id = ULID()
@@ -368,7 +364,7 @@ async def test_hybrid_poll_db_gaps_only(identity, mock_app):
     result = await transport._poll_loop(identity, last_message_id=last_id, wait=1)
     assert result == {"messages": [msg_y]}
     # _backend_client should not have been connected because we successfully drained DB history
-    mock_client_cls.assert_not_called()
+    mock_backend.create_client_transport.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -380,10 +376,9 @@ async def test_hybrid_stream_duplicate_overlap(identity, mock_app):
     """
     transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
     mock_client = AsyncMock()
-    mock_client_cls = MagicMock(return_value=mock_client)
     mock_backend = MagicMock()
     mock_backend.get_metadata.return_value = {}
-    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_backend.create_client_transport.return_value = mock_client
     mock_app.state.transports = {"rabbitmq": mock_backend}
 
     last_id = ULID()
@@ -435,10 +430,9 @@ async def test_hybrid_poll_interleaved(identity, mock_app):
     """
     transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
     mock_client = AsyncMock()
-    mock_client_cls = MagicMock(return_value=mock_client)
     mock_backend = MagicMock()
     mock_backend.get_metadata.return_value = {}
-    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_backend.create_client_transport.return_value = mock_client
     mock_app.state.transports = {"rabbitmq": mock_backend}
 
     last_id = ULID()
@@ -476,10 +470,9 @@ async def test_hybrid_poll_no_last_message_id(identity, mock_app):
     """
     transport = HTTPPollingTransport(app=mock_app, backend_transport="rabbitmq")
     mock_client = AsyncMock()
-    mock_client_cls = MagicMock(return_value=mock_client)
     mock_backend = MagicMock()
     mock_backend.get_metadata.return_value = {}
-    mock_backend.get_client_transport_class.return_value = mock_client_cls
+    mock_backend.create_client_transport.return_value = mock_client
     mock_app.state.transports = {"rabbitmq": mock_backend}
 
     msg_z = JobRequestMessage(

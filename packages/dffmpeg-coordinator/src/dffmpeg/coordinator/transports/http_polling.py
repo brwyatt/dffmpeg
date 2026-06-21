@@ -6,7 +6,7 @@ from itertools import chain
 from logging import getLogger
 from typing import Any, AsyncIterator, Dict, Optional, Set
 
-from fastapi import Depends, FastAPI, Header
+from fastapi import Depends, FastAPI, Header, Request
 from fastapi.responses import StreamingResponse
 from ulid import ULID
 
@@ -21,6 +21,21 @@ from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.transports.base import BaseServerTransport
 
 logger = getLogger(__name__)
+
+
+async def _monitor_disconnect(request: Request, task_to_cancel: asyncio.Task):
+    """
+    Monitors request disconnection and cancels the associated task if it occurs.
+    """
+    try:
+        while True:
+            if await request.is_disconnected():
+                logger.info("HTTP client/worker disconnected, preemptively cancelling polling task.")
+                task_to_cancel.cancel()
+                break
+            await asyncio.sleep(0.5)
+    except asyncio.CancelledError:
+        pass
 
 
 class HTTPPollingTransport(BaseServerTransport):
@@ -124,9 +139,7 @@ class HTTPPollingTransport(BaseServerTransport):
         if not metadata:
             metadata = backend.get_metadata(identity.client_id, job_id)
 
-        config = self.app.state.config.transports.get_transport_config(self.backend_transport)
-        client_cls = backend.get_client_transport_class()
-        client = client_cls(**config)
+        client = backend.create_client_transport()
 
         await client.connect(metadata)
         try:
@@ -331,6 +344,7 @@ class HTTPPollingTransport(BaseServerTransport):
     async def handle_job_poll(
         self,
         job_id: ULID,
+        request: Request,
         last_message_id: Optional[ULID] = None,
         wait: Optional[int] = None,
         accept: Optional[str] = Header(None),
@@ -339,15 +353,22 @@ class HTTPPollingTransport(BaseServerTransport):
         """
         Endpoint handler for job-specific polling.
         """
-        if accept and "application/x-ndjson" in accept:
-            return StreamingResponse(
-                self._stream_loop(identity, last_message_id=last_message_id, wait=wait, job_id=job_id),
-                media_type="application/x-ndjson",
-            )
-        return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait, job_id=job_id)
+        current_task = asyncio.current_task()
+        monitor_task = asyncio.create_task(_monitor_disconnect(request, current_task))
+        try:
+            if accept and "application/x-ndjson" in accept:
+                return StreamingResponse(
+                    self._stream_loop(identity, last_message_id=last_message_id, wait=wait, job_id=job_id),
+                    media_type="application/x-ndjson",
+                )
+            return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait, job_id=job_id)
+        finally:
+            monitor_task.cancel()
+            await asyncio.gather(monitor_task, return_exceptions=True)
 
     async def handle_worker_poll(
         self,
+        request: Request,
         last_message_id: Optional[ULID] = None,
         wait: Optional[int] = None,
         accept: Optional[str] = Header(None),
@@ -356,12 +377,18 @@ class HTTPPollingTransport(BaseServerTransport):
         """
         Endpoint handler for worker polling (general messages).
         """
-        if accept and "application/x-ndjson" in accept:
-            return StreamingResponse(
-                self._stream_loop(identity, last_message_id=last_message_id, wait=wait),
-                media_type="application/x-ndjson",
-            )
-        return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait)
+        current_task = asyncio.current_task()
+        monitor_task = asyncio.create_task(_monitor_disconnect(request, current_task))
+        try:
+            if accept and "application/x-ndjson" in accept:
+                return StreamingResponse(
+                    self._stream_loop(identity, last_message_id=last_message_id, wait=wait),
+                    media_type="application/x-ndjson",
+                )
+            return await self._poll_loop(identity, last_message_id=last_message_id, wait=wait)
+        finally:
+            monitor_task.cancel()
+            await asyncio.gather(monitor_task, return_exceptions=True)
 
     async def send_message(
         self,

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from ulid import ULID
 
 from dffmpeg.common.models import BaseMessage, ComponentHealth, TransportMetadata
+from dffmpeg.common.transports.base import BaseClientTransport
 from dffmpeg.coordinator.db.messages import MessageRepository
 
 
@@ -74,9 +75,12 @@ class BaseServerTransport:
         """
         pass
 
-    def get_client_transport_class(self):
+    def create_client_transport(self) -> BaseClientTransport:
         """
-        Returns the client transport class (from dffmpeg-common) corresponding
-        to this server transport.
+        Constructs and returns a configured client transport instance corresponding to this
+        server transport, utilizing the server's own connection parameters and state.
+
+        Returns:
+            BaseClientTransport: The configured client transport instance.
         """
         raise NotImplementedError("This transport does not support client proxying")

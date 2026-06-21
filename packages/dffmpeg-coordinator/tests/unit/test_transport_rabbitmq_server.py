@@ -92,3 +92,56 @@ async def test_rabbitmq_server_send_message_no_mark_sent():
 
     # Verify update_message_sent_at was NOT called when mark_sent=False
     app.state.db.messages.update_message_sent_at.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_rabbitmq_server_create_client_transport_active_connection():
+    app = MagicMock()
+    transport = RabbitMQServerTransport(app=app)
+
+    # Setup active connection
+    mock_conn = AsyncMock()
+    transport._manager.connection = mock_conn
+    transport._manager.is_connected.set()
+
+    client = transport.create_client_transport()
+
+    from dffmpeg.common.transports.rabbitmq import RabbitMQMultiplexedClientTransport
+
+    assert isinstance(client, RabbitMQMultiplexedClientTransport)
+    assert client._shared_connection == mock_conn
+
+
+@pytest.mark.asyncio
+async def test_rabbitmq_server_create_client_transport_active_connection_disabled_muxing():
+    app = MagicMock()
+    transport = RabbitMQServerTransport(app=app, enable_multiplexing=False)
+
+    # Setup active connection
+    mock_conn = AsyncMock()
+    transport._manager.connection = mock_conn
+    transport._manager.is_connected.set()
+
+    client = transport.create_client_transport()
+
+    from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport, RabbitMQMultiplexedClientTransport
+
+    assert isinstance(client, RabbitMQClientTransport)
+    assert not isinstance(client, RabbitMQMultiplexedClientTransport)
+
+
+@pytest.mark.asyncio
+async def test_rabbitmq_server_create_client_transport_inactive_connection():
+    app = MagicMock()
+    transport = RabbitMQServerTransport(app=app)
+
+    # Ensure connection is cleared
+    transport._manager.connection = None
+    transport._manager.is_connected.clear()
+
+    client = transport.create_client_transport()
+
+    from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport, RabbitMQMultiplexedClientTransport
+
+    assert isinstance(client, RabbitMQClientTransport)
+    assert not isinstance(client, RabbitMQMultiplexedClientTransport)

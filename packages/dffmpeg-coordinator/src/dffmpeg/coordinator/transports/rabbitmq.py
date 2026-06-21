@@ -6,6 +6,7 @@ import aio_pika
 from ulid import ULID
 
 from dffmpeg.common.models import BaseMessage, ComponentHealth
+from dffmpeg.common.transports.base import BaseClientTransport
 from dffmpeg.common.transports.utils.rabbitmq import RabbitMQConnectionManager
 from dffmpeg.coordinator.transports.base import BaseServerTransport
 
@@ -31,12 +32,14 @@ class RabbitMQServerTransport(BaseServerTransport):
         vhost: str = "/",
         workers_exchange: str = "dffmpeg.workers",
         jobs_exchange: str = "dffmpeg.jobs",
+        enable_multiplexing: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.vhost = vhost
         self.workers_exchange_name = workers_exchange
         self.jobs_exchange_name = jobs_exchange
+        self.enable_multiplexing = enable_multiplexing
 
         self._manager = RabbitMQConnectionManager(
             host=host,
@@ -179,10 +182,26 @@ class RabbitMQServerTransport(BaseServerTransport):
         else:
             return ComponentHealth(status="unhealthy", detail="Not connected to RabbitMQ")
 
-    def get_client_transport_class(self):
+    def create_client_transport(self) -> BaseClientTransport:
         """
-        Returns the RabbitMQClientTransport class.
+        Creates a RabbitMQ client transport instance.
+        If connection sharing is active and enabled, returns a multiplexed transport.
+        Otherwise, falls back to a standard connecting client transport.
         """
-        from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
+        if self.enable_multiplexing and self._manager.connection and self._manager.is_connected.is_set():
+            from dffmpeg.common.transports.rabbitmq import RabbitMQMultiplexedClientTransport
 
-        return RabbitMQClientTransport
+            return RabbitMQMultiplexedClientTransport(self._manager.connection)
+        else:
+            from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
+
+            return RabbitMQClientTransport(
+                host=self._manager.host,
+                port=self._manager.port,
+                username=self._manager.username,
+                password=self._manager.password,
+                use_tls=self._manager.use_tls,
+                use_srv=self._manager.use_srv,
+                verify_ssl=self._manager.verify_ssl,
+                vhost=self.vhost,
+            )

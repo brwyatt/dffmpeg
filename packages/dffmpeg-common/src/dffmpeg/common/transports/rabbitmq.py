@@ -148,3 +148,87 @@ class RabbitMQClientTransport(BaseClientTransport):
     def receive_nowait(self) -> BaseMessage:
         """Return the next message immediately if available, else raise asyncio.QueueEmpty."""
         return self._message_queue.get_nowait()
+
+
+class RabbitMQMultiplexedClientTransport(RabbitMQClientTransport):
+    """
+    A client-side transport wrapper designed specifically for connection multiplexing.
+    Uses an existing shared connection instead of establishing its own TCP connection.
+    """
+
+    def __init__(self, shared_connection: aio_pika.abc.AbstractConnection, **kwargs):
+        # We completely bypass RabbitMQConnectionManager initialization!
+        self.default_vhost = kwargs.get("vhost", "/")
+        self._shared_connection = shared_connection
+        self._channel: Optional[aio_pika.abc.AbstractChannel] = None
+        self._message_queue: asyncio.Queue[BaseMessage] = asyncio.Queue()
+        self._listen_task: Optional[asyncio.Task] = None
+
+    async def connect(self, metadata: Dict[str, Any]):
+        """
+        Connect to RabbitMQ using the shared connection.
+        Synchronously opens the channel, declares queue, binds and starts consuming
+        before returning, to guarantee that self._channel is assigned.
+        """
+        required = ["exchange", "routing_key", "queue_name"]
+        missing = [k for k in required if k not in metadata]
+        if missing:
+            raise ValueError(f"Missing required RabbitMQ metadata: {', '.join(missing)}")
+
+        exchange_name = metadata["exchange"]
+        routing_key = metadata["routing_key"]
+        queue_name = metadata["queue_name"]
+        durable = metadata.get("durable", False)
+        auto_delete = metadata.get("auto_delete", True)
+
+        # Open the logical channel and setup consumer synchronously
+        self._channel = await self._shared_connection.channel()
+        await self._channel.set_qos(prefetch_count=10)
+
+        queue = await self._channel.declare_queue(
+            queue_name,
+            durable=durable,
+            auto_delete=auto_delete,
+        )
+
+        await queue.bind(exchange_name, routing_key=routing_key)
+        logger.info(f"Multiplexed channel bound queue {queue_name} to {exchange_name}")
+
+        await queue.consume(self._on_message)
+
+        # Start background loop purely to keep consumer alive and wait infinitely
+        self._listen_task = asyncio.create_task(self._consume_loop())
+
+    async def _consume_loop(self):
+        """Keep the consumer alive infinitely."""
+        try:
+            await asyncio.Future()
+        except asyncio.CancelledError:
+            logger.info("RabbitMQ multiplexed client consumer loop cancelled.")
+        finally:
+            # Clean up only the channel, leaving the parent connection untouched
+            if self._channel and not self._channel.is_closed:
+                try:
+                    await asyncio.shield(self._channel.close())
+                except Exception as e:
+                    logger.error(f"Error closing multiplexed RabbitMQ channel in finally: {e}")
+            self._channel = None
+
+    async def disconnect(self):
+        """
+        Disconnect by closing the channel and cancelling the task.
+        """
+        if self._channel and not self._channel.is_closed:
+            try:
+                await self._channel.close()
+            except Exception as e:
+                logger.error(f"Error closing multiplexed channel in disconnect: {e}")
+            self._channel = None
+
+        if self._listen_task:
+            self._listen_task.cancel()
+            try:
+                await self._listen_task
+            except asyncio.CancelledError:
+                pass
+            self._listen_task = None
