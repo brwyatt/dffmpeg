@@ -44,12 +44,15 @@ This document outlines the development phases for DFFmpeg, leading up to version
 *Goal: Expanded compatibility and features.*
 
 - [x] **RabbitMQ Transport**: Implement RabbitMQ transport.
-- [ ] **HTTP Polling Proxy Connection Multiplexing**: Implement connection multiplexing/pooling (e.g., AMQP channels or MQTT subscription demuxer) on the coordinator for the HTTP polling backend proxy to reuse connections under high-scale scenarios.
+- [x] **HTTP Polling Proxy Connection Multiplexing**: Implement connection multiplexing/pooling (e.g., AMQP channels or MQTT subscription demuxer) on the coordinator for the HTTP polling backend proxy to reuse connections under high-scale scenarios.
 - [ ] **Improved Transport Negotiation**: Better/fairer selection of transport. This should eventually include "pre-flight" health checks to maintain standby connections and prevent workers from registering as online if all their available transports are disconnected.
 
 ## Phase 4: Post-1.0
 *Goal: Advanced features and management tools.*
 
+- [ ] **Shielded Teardown Audit (`asyncio.shield`)**: Audit and protect critical cleanup paths from cancellation.
+    - [ ] Audit Worker daemon lifecycle shutdowns (`WorkerTransportManager.disconnect`)
+    - [ ] Audit Job execution teardowns (`JobRunner` and `executor.py` process killing and mount unmounting)
 - [ ] **Advanced Scheduling**: Job priority and worker affinity logic.
 - [ ] **Exploration: Retry Codes**: Investigate "smart" retries based on exit codes (considering caller expectations).
 - [ ] **Worker Capabilities**: Dynamic detection of FFmpeg features (codecs, formats).
