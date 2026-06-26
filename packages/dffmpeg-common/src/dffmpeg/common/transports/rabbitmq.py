@@ -189,6 +189,13 @@ class RabbitMQMultiplexedClientTransport(RabbitMQClientTransport):
 
         # Open the logical channel and setup consumer synchronously
         self._channel = await self._shared_connection.channel()
+        # Immediately discard it from the connection's robust tracking list so it is ephemeral
+        # and will never be re-opened or restored on reconnects.
+        if hasattr(self._shared_connection, "_RobustConnection__channels"):
+            try:
+                self._shared_connection._RobustConnection__channels.discard(self._channel)
+            except Exception as e:
+                logger.debug(f"Failed to discard channel from RobustConnection in connect: {e}")
         await self._channel.set_qos(prefetch_count=10)
 
         queue = await self._channel.declare_queue(
@@ -233,9 +240,18 @@ class RabbitMQMultiplexedClientTransport(RabbitMQClientTransport):
             self._listen_task = None
 
         # Defensively clean up logical channel if the task wasn't started or already finished
-        if self._channel and not self._channel.is_closed:
-            try:
-                await asyncio.shield(self._channel.close())
-            except Exception as e:
-                logger.error(f"Error closing multiplexed channel in disconnect: {e}")
+        if self._channel:
+            # Active De-registration: discard the channel from RobustConnection's WeakSet
+            # so it is immediately forgotten and never re-opened upon reconnects.
+            if hasattr(self._shared_connection, "_RobustConnection__channels"):
+                try:
+                    self._shared_connection._RobustConnection__channels.discard(self._channel)
+                except Exception as e:
+                    logger.debug(f"Failed to discard channel from RobustConnection: {e}")
+
+            if not self._channel.is_closed:
+                try:
+                    await asyncio.shield(self._channel.close())
+                except Exception as e:
+                    logger.error(f"Error closing multiplexed channel in disconnect: {e}")
             self._channel = None

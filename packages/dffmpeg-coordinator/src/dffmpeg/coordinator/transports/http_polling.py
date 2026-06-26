@@ -141,8 +141,8 @@ class HTTPPollingTransport(BaseServerTransport):
 
         client = backend.create_client_transport()
 
-        await client.connect(metadata)
         try:
+            await client.connect(metadata)
             yield client
         finally:
             await asyncio.shield(client.disconnect())

@@ -13,6 +13,7 @@ async def test_rabbitmq_multiplexed_client_connect_and_disconnect():
     mock_connection = AsyncMock()
     mock_channel = AsyncMock()
     mock_connection.channel.return_value = mock_channel
+    mock_connection._RobustConnection__channels = set()
 
     transport = RabbitMQMultiplexedClientTransport(shared_connection=mock_connection)
 
