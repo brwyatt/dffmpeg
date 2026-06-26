@@ -145,7 +145,7 @@ class HTTPPollingTransport(BaseServerTransport):
         try:
             yield client
         finally:
-            await client.disconnect()
+            await asyncio.shield(client.disconnect())
 
     async def _drain_db_history(
         self,

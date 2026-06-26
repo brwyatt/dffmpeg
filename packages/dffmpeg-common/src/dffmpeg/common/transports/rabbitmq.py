@@ -124,7 +124,10 @@ class RabbitMQClientTransport(BaseClientTransport):
             logger.error(f"RabbitMQ client setup failed: {e}")
             raise
         finally:
-            await self._manager.close()
+            try:
+                await asyncio.shield(self._manager.close())
+            except Exception as e:
+                logger.error(f"Error closing RabbitMQ manager in finally: {e}")
             self._channel = None
 
     async def disconnect(self):
@@ -134,12 +137,15 @@ class RabbitMQClientTransport(BaseClientTransport):
         if self._listen_task:
             self._listen_task.cancel()
             try:
-                await self._listen_task
+                await asyncio.shield(self._listen_task)
             except asyncio.CancelledError:
                 pass
             self._listen_task = None
 
-        await self._manager.close()
+        try:
+            await asyncio.shield(self._manager.close())
+        except Exception as e:
+            logger.error(f"Error closing RabbitMQ manager in disconnect: {e}")
 
     async def receive(self) -> BaseMessage:
         """Wait for and return the next message."""
@@ -216,19 +222,20 @@ class RabbitMQMultiplexedClientTransport(RabbitMQClientTransport):
 
     async def disconnect(self):
         """
-        Disconnect by closing the channel and cancelling the task.
+        Disconnect cleanly by cancelling the background listener.
         """
-        if self._channel and not self._channel.is_closed:
-            try:
-                await self._channel.close()
-            except Exception as e:
-                logger.error(f"Error closing multiplexed channel in disconnect: {e}")
-            self._channel = None
-
         if self._listen_task:
             self._listen_task.cancel()
             try:
-                await self._listen_task
+                await asyncio.shield(self._listen_task)
             except asyncio.CancelledError:
                 pass
             self._listen_task = None
+
+        # Defensively clean up logical channel if the task wasn't started or already finished
+        if self._channel and not self._channel.is_closed:
+            try:
+                await asyncio.shield(self._channel.close())
+            except Exception as e:
+                logger.error(f"Error closing multiplexed channel in disconnect: {e}")
+            self._channel = None
