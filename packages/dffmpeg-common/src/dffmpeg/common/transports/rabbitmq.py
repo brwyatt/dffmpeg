@@ -156,102 +156,34 @@ class RabbitMQClientTransport(BaseClientTransport):
         return self._message_queue.get_nowait()
 
 
-class RabbitMQMultiplexedClientTransport(RabbitMQClientTransport):
+class RabbitMQMultiplexedClientTransport(BaseClientTransport):
     """
     A client-side transport wrapper designed specifically for connection multiplexing.
-    Uses an existing shared connection instead of establishing its own TCP connection.
+    Unlike standard client transports, this does not open any TCP connections or channels.
+    Instead, it registers with the Coordinator's persistent RabbitMQServerTransport and
+    receives messages directly via an in-memory queue, backed by dynamic queue binding.
     """
 
-    def __init__(self, shared_connection: aio_pika.abc.AbstractConnection, **kwargs):
-        # We completely bypass RabbitMQConnectionManager initialization!
-        self.default_vhost = kwargs.get("vhost", "/")
-        self._shared_connection = shared_connection
-        self._channel: Optional[aio_pika.abc.AbstractChannel] = None
+    def __init__(self, server_transport: Any, **kwargs):
+        self._server_transport = server_transport
         self._message_queue: asyncio.Queue[BaseMessage] = asyncio.Queue()
-        self._listen_task: Optional[asyncio.Task] = None
+        self._metadata: Optional[Dict[str, Any]] = None
 
     async def connect(self, metadata: Dict[str, Any]):
-        """
-        Connect to RabbitMQ using the shared connection.
-        Synchronously opens the channel, declares queue, binds and starts consuming
-        before returning, to guarantee that self._channel is assigned.
-        """
         required = ["exchange", "routing_key", "queue_name"]
         missing = [k for k in required if k not in metadata]
         if missing:
             raise ValueError(f"Missing required RabbitMQ metadata: {', '.join(missing)}")
 
-        exchange_name = metadata["exchange"]
-        routing_key = metadata["routing_key"]
-        queue_name = metadata["queue_name"]
-        durable = metadata.get("durable", False)
-        auto_delete = metadata.get("auto_delete", True)
-
-        # Open the logical channel and setup consumer synchronously
-        self._channel = await self._shared_connection.channel()
-        # Immediately discard it from the connection's robust tracking list so it is ephemeral
-        # and will never be re-opened or restored on reconnects.
-        if hasattr(self._shared_connection, "_RobustConnection__channels"):
-            try:
-                self._shared_connection._RobustConnection__channels.discard(self._channel)
-            except Exception as e:
-                logger.debug(f"Failed to discard channel from RobustConnection in connect: {e}")
-        await self._channel.set_qos(prefetch_count=10)
-
-        queue = await self._channel.declare_queue(
-            queue_name,
-            durable=durable,
-            auto_delete=auto_delete,
-        )
-
-        await queue.bind(exchange_name, routing_key=routing_key)
-        logger.info(f"Multiplexed channel bound queue {queue_name} to {exchange_name}")
-
-        await queue.consume(self._on_message)
-
-        # Start background loop purely to keep consumer alive and wait infinitely
-        self._listen_task = asyncio.create_task(self._consume_loop())
-
-    async def _consume_loop(self):
-        """Keep the consumer alive infinitely."""
-        try:
-            await asyncio.Future()
-        except asyncio.CancelledError:
-            logger.info("RabbitMQ multiplexed client consumer loop cancelled.")
-        finally:
-            # Clean up only the channel, leaving the parent connection untouched
-            if self._channel and not self._channel.is_closed:
-                try:
-                    await asyncio.shield(self._channel.close())
-                except Exception as e:
-                    logger.error(f"Error closing multiplexed RabbitMQ channel in finally: {e}")
-            self._channel = None
+        self._metadata = metadata
+        await self._server_transport.register_multiplex_client(self)
 
     async def disconnect(self):
-        """
-        Disconnect cleanly by cancelling the background listener.
-        """
-        if self._listen_task:
-            self._listen_task.cancel()
-            try:
-                await asyncio.shield(self._listen_task)
-            except asyncio.CancelledError:
-                pass
-            self._listen_task = None
+        if self._metadata:
+            await self._server_transport.unregister_multiplex_client(self)
 
-        # Defensively clean up logical channel if the task wasn't started or already finished
-        if self._channel:
-            # Active De-registration: discard the channel from RobustConnection's WeakSet
-            # so it is immediately forgotten and never re-opened upon reconnects.
-            if hasattr(self._shared_connection, "_RobustConnection__channels"):
-                try:
-                    self._shared_connection._RobustConnection__channels.discard(self._channel)
-                except Exception as e:
-                    logger.debug(f"Failed to discard channel from RobustConnection: {e}")
+    async def receive(self) -> BaseMessage:
+        return await self._message_queue.get()
 
-            if not self._channel.is_closed:
-                try:
-                    await asyncio.shield(self._channel.close())
-                except Exception as e:
-                    logger.error(f"Error closing multiplexed channel in disconnect: {e}")
-            self._channel = None
+    def receive_nowait(self) -> BaseMessage:
+        return self._message_queue.get_nowait()

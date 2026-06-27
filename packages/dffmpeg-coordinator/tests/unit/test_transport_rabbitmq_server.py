@@ -102,6 +102,7 @@ async def test_rabbitmq_server_create_client_transport_active_connection():
     # Setup active connection
     mock_conn = AsyncMock()
     transport._manager.connection = mock_conn
+    transport._channel = AsyncMock()
     transport._manager.is_connected.set()
 
     client = transport.create_client_transport()
@@ -109,7 +110,7 @@ async def test_rabbitmq_server_create_client_transport_active_connection():
     from dffmpeg.common.transports.rabbitmq import RabbitMQMultiplexedClientTransport
 
     assert isinstance(client, RabbitMQMultiplexedClientTransport)
-    assert client._shared_connection == mock_conn
+    assert client._server_transport == transport
 
 
 @pytest.mark.asyncio

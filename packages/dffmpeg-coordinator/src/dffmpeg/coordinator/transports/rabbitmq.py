@@ -1,12 +1,16 @@
 import asyncio
+import json
 import logging
+import uuid
 from typing import Any, Dict, Optional
 
 import aio_pika
+from pydantic import TypeAdapter
 from ulid import ULID
 
-from dffmpeg.common.models import BaseMessage, ComponentHealth
+from dffmpeg.common.models import BaseMessage, ComponentHealth, Message
 from dffmpeg.common.transports.base import BaseClientTransport
+from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport, RabbitMQMultiplexedClientTransport
 from dffmpeg.common.transports.utils.rabbitmq import RabbitMQConnectionManager
 from dffmpeg.coordinator.transports.base import BaseServerTransport
 
@@ -55,12 +59,72 @@ class RabbitMQServerTransport(BaseServerTransport):
         self._workers_exchange: Optional[aio_pika.abc.AbstractExchange] = None
         self._jobs_exchange: Optional[aio_pika.abc.AbstractExchange] = None
         self._loop_task: Optional[asyncio.Task] = None
+        self._coordinator_queue: Optional[aio_pika.abc.AbstractQueue] = None
+        self._coordinator_queue_name: Optional[str] = None
+        self._multiplex_clients: Dict[str, Any] = {}
 
     async def setup(self):
         """
         Connect to RabbitMQ and declare exchanges.
         """
         self._loop_task = asyncio.create_task(self._connection_task())
+
+    async def _on_coordinator_message(self, message: aio_pika.abc.AbstractIncomingMessage) -> None:
+        """
+        Receives messages from RabbitMQ, finds the target multiplexed client,
+        and places the message into its in-memory queue.
+        """
+        async with message.process():
+            try:
+                routing_key = message.routing_key
+                queue_name = None
+                if routing_key.startswith("worker."):
+                    client_id = routing_key.split(".", 1)[1]
+                    queue_name = f"dffmpeg.worker.{client_id}"
+                elif routing_key.startswith("job."):
+                    parts = routing_key.split(".", 2)
+                    if len(parts) >= 3:
+                        client_id = parts[1]
+                        job_id = parts[2]
+                        queue_name = f"dffmpeg.job.{client_id}.{job_id}"
+
+                if queue_name and queue_name in self._multiplex_clients:
+                    client = self._multiplex_clients[queue_name]
+                    adapter = TypeAdapter(Message)
+                    payload_str = message.body.decode()
+                    data = json.loads(payload_str)
+                    msg = adapter.validate_python(data)
+                    await client._message_queue.put(msg)
+                    logger.debug(f"Successfully routed message {msg.message_id} to multiplexed client {queue_name}")
+            except Exception as e:
+                logger.error(f"Error processing coordinator multiplex message: {e}")
+
+    async def register_multiplex_client(self, client: Any):
+        metadata = client._metadata
+        routing_key = metadata["routing_key"]
+        exchange_name = metadata["exchange"]
+        queue_name = metadata["queue_name"]
+
+        self._multiplex_clients[queue_name] = client
+
+        if self._coordinator_queue:
+            await self._coordinator_queue.bind(exchange_name, routing_key=routing_key)
+            logger.info(f"Registered multiplexed client and bound {routing_key} to coordinator queue")
+
+    async def unregister_multiplex_client(self, client: Any):
+        metadata = client._metadata
+        routing_key = metadata["routing_key"]
+        exchange_name = metadata["exchange"]
+        queue_name = metadata["queue_name"]
+
+        self._multiplex_clients.pop(queue_name, None)
+
+        if self._coordinator_queue and self._manager.is_connected.is_set():
+            try:
+                await self._coordinator_queue.unbind(exchange_name, routing_key=routing_key)
+                logger.info(f"Unregistered multiplexed client and unbound {routing_key} from coordinator queue")
+            except Exception as e:
+                logger.debug(f"Failed to unbind {routing_key} from coordinator queue (likely already cleaned up): {e}")
 
     async def _connection_task(self):
         """
@@ -84,6 +148,17 @@ class RabbitMQServerTransport(BaseServerTransport):
                 f"{self.workers_exchange_name}, {self.jobs_exchange_name}"
             )
 
+            # Declare Coordinator-wide queue
+            self._coordinator_queue_name = f"dffmpeg.coordinator.{uuid.uuid4().hex}"
+            self._coordinator_queue = await self._channel.declare_queue(
+                self._coordinator_queue_name,
+                durable=False,
+                exclusive=True,
+                auto_delete=True,
+            )
+            await self._coordinator_queue.consume(self._on_coordinator_message)
+            logger.info(f"Declared persistent coordinator queue: {self._coordinator_queue_name}")
+
             # Keep task alive infinitely while aio_pika manages background I/O
             await asyncio.Future()
 
@@ -97,6 +172,7 @@ class RabbitMQServerTransport(BaseServerTransport):
             self._channel = None
             self._workers_exchange = None
             self._jobs_exchange = None
+            self._coordinator_queue = None
 
     async def send_message(
         self,
@@ -188,13 +264,9 @@ class RabbitMQServerTransport(BaseServerTransport):
         If connection sharing is active and enabled, returns a multiplexed transport.
         Otherwise, falls back to a standard connecting client transport.
         """
-        if self.enable_multiplexing and self._manager.connection and self._manager.is_connected.is_set():
-            from dffmpeg.common.transports.rabbitmq import RabbitMQMultiplexedClientTransport
-
-            return RabbitMQMultiplexedClientTransport(self._manager.connection)
+        if self.enable_multiplexing and self._channel and self._manager.is_connected.is_set():
+            return RabbitMQMultiplexedClientTransport(self)
         else:
-            from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
-
             return RabbitMQClientTransport(
                 host=self._manager.host,
                 port=self._manager.port,

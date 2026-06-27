@@ -305,6 +305,8 @@ class HTTPPollingTransport(BaseServerTransport):
 
                     if receive_task in done:
                         msg = receive_task.result()
+                        if msg is None:
+                            return
                         msg = await self._process_and_mark_sent(repo, msg, current_last_message_id)
                         if msg is None:
                             continue

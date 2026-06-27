@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -10,12 +9,8 @@ from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport, RabbitMQ
 
 @pytest.mark.asyncio
 async def test_rabbitmq_multiplexed_client_connect_and_disconnect():
-    mock_connection = AsyncMock()
-    mock_channel = AsyncMock()
-    mock_connection.channel.return_value = mock_channel
-    mock_connection._RobustConnection__channels = set()
-
-    transport = RabbitMQMultiplexedClientTransport(shared_connection=mock_connection)
+    mock_server_transport = AsyncMock()
+    transport = RabbitMQMultiplexedClientTransport(server_transport=mock_server_transport)
 
     metadata = {
         "exchange": "dffmpeg.workers",
@@ -23,28 +18,13 @@ async def test_rabbitmq_multiplexed_client_connect_and_disconnect():
         "queue_name": "dffmpeg.worker.1",
     }
 
-    # Connect should open channel, declare queue, bind, and consume
+    # Connect should register multiplexed client
     await transport.connect(metadata)
-    assert transport._listen_task is not None
+    mock_server_transport.register_multiplex_client.assert_called_once_with(transport)
 
-    # Give the task a brief moment to run _connection_task
-    await asyncio.sleep(0.01)
-
-    mock_connection.channel.assert_called_once()
-    mock_channel.set_qos.assert_called_once_with(prefetch_count=10)
-    mock_channel.declare_queue.assert_called_once_with("dffmpeg.worker.1", durable=False, auto_delete=True)
-
-    queue = mock_channel.declare_queue.return_value
-    queue.bind.assert_called_once_with("dffmpeg.workers", routing_key="worker.1")
-    queue.consume.assert_called_once_with(transport._on_message)
-
-    # Disconnect should cancel listen task and close logical channel only
-    mock_channel.is_closed = False
+    # Disconnect should unregister multiplexed client
     await transport.disconnect()
-
-    assert transport._listen_task is None
-    mock_channel.close.assert_called_once()
-    mock_connection.close.assert_not_called()
+    mock_server_transport.unregister_multiplex_client.assert_called_once_with(transport)
 
 
 @pytest.mark.asyncio
