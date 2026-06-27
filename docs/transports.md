@@ -24,7 +24,10 @@ transports:
     http_polling:
       streaming: true  # (Client/Worker Only) Enable HTTP streaming. Defaults to true.
       poll_wait: 5     # (Client/Worker Only) Timeout for long-polling. In streaming mode, dictates the keep-alive ping interval.
+      backend_transport: "rabbitmq" # (Coordinator Only) Optional backing transport to enable HA stateless clustering. e.g. "rabbitmq" or "mqtt".
 ```
+
+> **Important Upgrade Note:** If you are migrating a cluster where workers or clients previously connected directly to RabbitMQ to use this HTTP-polling-backed proxy setup, RabbitMQ may still have old, worker-specific durable queues bound to the exchanges (e.g. `dffmpeg.worker.{worker_id}`). Since the Coordinator now uses a single, coordinator-wide temporary queue and dynamic bindings, these old durable queues are no longer used and should be manually deleted from the RabbitMQ Management UI to prevent them from accumulating duplicate messages.
 
 If `streaming` is enabled, the client sends an `Accept: application/x-ndjson` header. The Coordinator will respect this header and hold the connection open indefinitely, sending a keep-alive ping (a blank line) every `poll_wait` seconds to prevent load balancers from closing the idle connection. If `streaming` is false, it falls back to standard HTTP long-polling.
 
