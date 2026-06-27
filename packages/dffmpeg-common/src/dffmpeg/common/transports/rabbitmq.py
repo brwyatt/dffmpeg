@@ -154,36 +154,3 @@ class RabbitMQClientTransport(BaseClientTransport):
     def receive_nowait(self) -> BaseMessage:
         """Return the next message immediately if available, else raise asyncio.QueueEmpty."""
         return self._message_queue.get_nowait()
-
-
-class RabbitMQMultiplexedClientTransport(BaseClientTransport):
-    """
-    A client-side transport wrapper designed specifically for connection multiplexing.
-    Unlike standard client transports, this does not open any TCP connections or channels.
-    Instead, it registers with the Coordinator's persistent RabbitMQServerTransport and
-    receives messages directly via an in-memory queue, backed by dynamic queue binding.
-    """
-
-    def __init__(self, server_transport: Any, **kwargs):
-        self._server_transport = server_transport
-        self._message_queue: asyncio.Queue[BaseMessage] = asyncio.Queue()
-        self._metadata: Optional[Dict[str, Any]] = None
-
-    async def connect(self, metadata: Dict[str, Any]):
-        required = ["exchange", "routing_key", "queue_name"]
-        missing = [k for k in required if k not in metadata]
-        if missing:
-            raise ValueError(f"Missing required RabbitMQ metadata: {', '.join(missing)}")
-
-        self._metadata = metadata
-        await self._server_transport.register_multiplex_client(self)
-
-    async def disconnect(self):
-        if self._metadata:
-            await self._server_transport.unregister_multiplex_client(self)
-
-    async def receive(self) -> BaseMessage:
-        return await self._message_queue.get()
-
-    def receive_nowait(self) -> BaseMessage:
-        return self._message_queue.get_nowait()

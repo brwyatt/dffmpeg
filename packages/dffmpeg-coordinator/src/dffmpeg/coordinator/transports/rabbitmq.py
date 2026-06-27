@@ -10,7 +10,7 @@ from ulid import ULID
 
 from dffmpeg.common.models import BaseMessage, ComponentHealth, Message
 from dffmpeg.common.transports.base import BaseClientTransport
-from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport, RabbitMQMultiplexedClientTransport
+from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
 from dffmpeg.common.transports.utils.rabbitmq import RabbitMQConnectionManager
 from dffmpeg.coordinator.transports.base import BaseServerTransport
 
@@ -36,14 +36,12 @@ class RabbitMQServerTransport(BaseServerTransport):
         vhost: str = "/",
         workers_exchange: str = "dffmpeg.workers",
         jobs_exchange: str = "dffmpeg.jobs",
-        enable_multiplexing: bool = True,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.vhost = vhost
         self.workers_exchange_name = workers_exchange
         self.jobs_exchange_name = jobs_exchange
-        self.enable_multiplexing = enable_multiplexing
 
         self._manager = RabbitMQConnectionManager(
             host=host,
@@ -261,11 +259,11 @@ class RabbitMQServerTransport(BaseServerTransport):
     def create_client_transport(self) -> BaseClientTransport:
         """
         Creates a RabbitMQ client transport instance.
-        If connection sharing is active and enabled, returns a multiplexed transport.
+        Always returns a multiplexed proxy transport if connection is active.
         Otherwise, falls back to a standard connecting client transport.
         """
-        if self.enable_multiplexing and self._channel and self._manager.is_connected.is_set():
-            return RabbitMQMultiplexedClientTransport(self)
+        if self._channel and self._manager.is_connected.is_set():
+            return RabbitMQProxyClientTransport(self)
         else:
             return RabbitMQClientTransport(
                 host=self._manager.host,
@@ -277,3 +275,36 @@ class RabbitMQServerTransport(BaseServerTransport):
                 verify_ssl=self._manager.verify_ssl,
                 vhost=self.vhost,
             )
+
+
+class RabbitMQProxyClientTransport(BaseClientTransport):
+    """
+    A lightweight, in-memory proxy client transport.
+    Instead of establishing its own TCP connection, it registers with the
+    RabbitMQServerTransport and receives routed messages in-memory, backed
+    by dynamic queue binding on the persistent coordinator connection.
+    """
+
+    def __init__(self, server_transport: RabbitMQServerTransport):
+        self._server_transport = server_transport
+        self._message_queue: asyncio.Queue[BaseMessage] = asyncio.Queue()
+        self._metadata: Optional[Dict[str, Any]] = None
+
+    async def connect(self, metadata: Dict[str, Any]):
+        required = ["exchange", "routing_key", "queue_name"]
+        missing = [k for k in required if k not in metadata]
+        if missing:
+            raise ValueError(f"Missing required RabbitMQ metadata: {', '.join(missing)}")
+
+        self._metadata = metadata
+        await self._server_transport.register_multiplex_client(self)
+
+    async def disconnect(self):
+        if self._metadata:
+            await self._server_transport.unregister_multiplex_client(self)
+
+    async def receive(self) -> BaseMessage:
+        return await self._message_queue.get()
+
+    def receive_nowait(self) -> BaseMessage:
+        return self._message_queue.get_nowait()

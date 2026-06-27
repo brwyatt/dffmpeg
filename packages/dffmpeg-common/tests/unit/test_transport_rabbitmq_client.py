@@ -4,27 +4,7 @@ import pytest
 from ulid import ULID
 
 from dffmpeg.common.models import JobStatusMessage, JobStatusPayload
-from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport, RabbitMQMultiplexedClientTransport
-
-
-@pytest.mark.asyncio
-async def test_rabbitmq_multiplexed_client_connect_and_disconnect():
-    mock_server_transport = AsyncMock()
-    transport = RabbitMQMultiplexedClientTransport(server_transport=mock_server_transport)
-
-    metadata = {
-        "exchange": "dffmpeg.workers",
-        "routing_key": "worker.1",
-        "queue_name": "dffmpeg.worker.1",
-    }
-
-    # Connect should register multiplexed client
-    await transport.connect(metadata)
-    mock_server_transport.register_multiplex_client.assert_called_once_with(transport)
-
-    # Disconnect should unregister multiplexed client
-    await transport.disconnect()
-    mock_server_transport.unregister_multiplex_client.assert_called_once_with(transport)
+from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
 
 
 @pytest.mark.asyncio

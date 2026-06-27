@@ -107,9 +107,9 @@ async def test_rabbitmq_server_create_client_transport_active_connection():
 
     client = transport.create_client_transport()
 
-    from dffmpeg.common.transports.rabbitmq import RabbitMQMultiplexedClientTransport
+    from dffmpeg.coordinator.transports.rabbitmq import RabbitMQProxyClientTransport
 
-    assert isinstance(client, RabbitMQMultiplexedClientTransport)
+    assert isinstance(client, RabbitMQProxyClientTransport)
     assert client._server_transport == transport
 
 
@@ -125,10 +125,11 @@ async def test_rabbitmq_server_create_client_transport_active_connection_disable
 
     client = transport.create_client_transport()
 
-    from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport, RabbitMQMultiplexedClientTransport
+    from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
+    from dffmpeg.coordinator.transports.rabbitmq import RabbitMQProxyClientTransport
 
     assert isinstance(client, RabbitMQClientTransport)
-    assert not isinstance(client, RabbitMQMultiplexedClientTransport)
+    assert not isinstance(client, RabbitMQProxyClientTransport)
 
 
 @pytest.mark.asyncio
@@ -142,7 +143,30 @@ async def test_rabbitmq_server_create_client_transport_inactive_connection():
 
     client = transport.create_client_transport()
 
-    from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport, RabbitMQMultiplexedClientTransport
+    from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
+    from dffmpeg.coordinator.transports.rabbitmq import RabbitMQProxyClientTransport
 
     assert isinstance(client, RabbitMQClientTransport)
-    assert not isinstance(client, RabbitMQMultiplexedClientTransport)
+    assert not isinstance(client, RabbitMQProxyClientTransport)
+
+
+@pytest.mark.asyncio
+async def test_rabbitmq_proxy_client_connect_and_disconnect():
+    mock_server_transport = AsyncMock()
+    from dffmpeg.coordinator.transports.rabbitmq import RabbitMQProxyClientTransport
+
+    transport = RabbitMQProxyClientTransport(server_transport=mock_server_transport)
+
+    metadata = {
+        "exchange": "dffmpeg.workers",
+        "routing_key": "worker.1",
+        "queue_name": "dffmpeg.worker.1",
+    }
+
+    # Connect should register multiplexed client
+    await transport.connect(metadata)
+    mock_server_transport.register_multiplex_client.assert_called_once_with(transport)
+
+    # Disconnect should unregister multiplexed client
+    await transport.disconnect()
+    mock_server_transport.unregister_multiplex_client.assert_called_once_with(transport)

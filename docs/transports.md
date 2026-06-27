@@ -69,7 +69,6 @@ transports:
       username: "dffmpeg-user"
       password: "your-password"
       vhost: "/" # Virtual host, defaults to "/"
-      enable_multiplexing: true # Optional, defaults to true. Enables native AMQP channel multiplexing for proxying HTTP Polling connections on the coordinator.
 ```
 
 ### Permissions
