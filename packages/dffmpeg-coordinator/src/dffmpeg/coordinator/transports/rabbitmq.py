@@ -10,7 +10,6 @@ from ulid import ULID
 
 from dffmpeg.common.models import BaseMessage, ComponentHealth, Message
 from dffmpeg.common.transports.base import BaseClientTransport
-from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
 from dffmpeg.common.transports.utils.rabbitmq import RabbitMQConnectionManager
 from dffmpeg.coordinator.transports.base import BaseServerTransport
 
@@ -259,22 +258,9 @@ class RabbitMQServerTransport(BaseServerTransport):
     def create_client_transport(self) -> BaseClientTransport:
         """
         Creates a RabbitMQ client transport instance.
-        Always returns a multiplexed proxy transport if connection is active.
-        Otherwise, falls back to a standard connecting client transport.
+        Always returns a multiplexed proxy transport.
         """
-        if self._channel and self._manager.is_connected.is_set():
-            return RabbitMQProxyClientTransport(self)
-        else:
-            return RabbitMQClientTransport(
-                host=self._manager.host,
-                port=self._manager.port,
-                username=self._manager.username,
-                password=self._manager.password,
-                use_tls=self._manager.use_tls,
-                use_srv=self._manager.use_srv,
-                verify_ssl=self._manager.verify_ssl,
-                vhost=self.vhost,
-            )
+        return RabbitMQProxyClientTransport(self)
 
 
 class RabbitMQProxyClientTransport(BaseClientTransport):

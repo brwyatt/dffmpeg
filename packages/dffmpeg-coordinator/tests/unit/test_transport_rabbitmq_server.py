@@ -114,25 +114,6 @@ async def test_rabbitmq_server_create_client_transport_active_connection():
 
 
 @pytest.mark.asyncio
-async def test_rabbitmq_server_create_client_transport_active_connection_disabled_muxing():
-    app = MagicMock()
-    transport = RabbitMQServerTransport(app=app, enable_multiplexing=False)
-
-    # Setup active connection
-    mock_conn = AsyncMock()
-    transport._manager.connection = mock_conn
-    transport._manager.is_connected.set()
-
-    client = transport.create_client_transport()
-
-    from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
-    from dffmpeg.coordinator.transports.rabbitmq import RabbitMQProxyClientTransport
-
-    assert isinstance(client, RabbitMQClientTransport)
-    assert not isinstance(client, RabbitMQProxyClientTransport)
-
-
-@pytest.mark.asyncio
 async def test_rabbitmq_server_create_client_transport_inactive_connection():
     app = MagicMock()
     transport = RabbitMQServerTransport(app=app)
@@ -143,11 +124,10 @@ async def test_rabbitmq_server_create_client_transport_inactive_connection():
 
     client = transport.create_client_transport()
 
-    from dffmpeg.common.transports.rabbitmq import RabbitMQClientTransport
     from dffmpeg.coordinator.transports.rabbitmq import RabbitMQProxyClientTransport
 
-    assert isinstance(client, RabbitMQClientTransport)
-    assert not isinstance(client, RabbitMQProxyClientTransport)
+    # Since multiplexing is enabled constantly by default, it should still return the proxy client
+    assert isinstance(client, RabbitMQProxyClientTransport)
 
 
 @pytest.mark.asyncio
