@@ -4,8 +4,6 @@ import os
 import sys
 from typing import cast
 
-from ulid import ULID
-
 from dffmpeg.common.auth.request_signer import RequestSigner
 from dffmpeg.common.cli_utils import (
     add_client_id_arg,
@@ -24,7 +22,13 @@ from dffmpeg.common.formatting import (
     print_worker_list,
 )
 from dffmpeg.common.http_client import AuthenticatedAsyncClient
-from dffmpeg.common.models import AuthenticatedIdentity, IdentityRole, JobLogsMessage
+from dffmpeg.common.models import (
+    AuthenticatedIdentity,
+    IdentityRole,
+    JobLogsResponse,
+    JobRecord,
+    Worker,
+)
 from dffmpeg.common.version import get_package_version
 from dffmpeg.coordinator.config import CoordinatorConfig, load_config
 from dffmpeg.coordinator.db import DB
@@ -135,83 +139,87 @@ async def user_set_scope(db: DB, args: argparse.Namespace):
     print(f"New Scope: {', '.join(str(c) for c in identity.allowed_cidrs)}")
 
 
-async def worker_list(db: DB, args: argparse.Namespace):
+async def get_api_client(config: CoordinatorConfig, db: DB) -> AuthenticatedAsyncClient:
+    identity = await db.auth.get_identity("localadmin", include_hmac_key=True)
+    if not identity:
+        print(colorize("User 'localadmin' not found in database. Cannot authenticate with local API.", Colors.RED))
+        sys.exit(1)
+
+    base_url = f"http://127.0.0.1:{config.port}"
+    return AuthenticatedAsyncClient(base_url, "localadmin", identity.hmac_key)
+
+
+async def worker_list(config: CoordinatorConfig, db: DB, args: argparse.Namespace):
     window = args.window if hasattr(args, "window") else 3600 * 24
-    online = await db.workers.get_workers_by_status("online")
-    draining = await db.workers.get_workers_by_status("draining")
-    registering = await db.workers.get_workers_by_status("registering")
-    offline = await db.workers.get_workers_by_status("offline", since_seconds=window)
-    workers = online + draining + registering + offline
-    print_worker_list(workers)
+    client = await get_api_client(config, db)
+    try:
+        response = await client.get("/workers", params={"window": window})
+        response.raise_for_status()
+        workers = [Worker.model_validate(w) for w in response.json()]
+        print_worker_list(workers)
+    except Exception as e:
+        print(colorize(f"Failed to fetch worker list: {e}", Colors.RED))
+        sys.exit(1)
 
 
-async def worker_show(db: DB, args: argparse.Namespace):
+async def worker_show(config: CoordinatorConfig, db: DB, args: argparse.Namespace):
     worker_id = args.worker_id
-    worker = await db.workers.get_worker(worker_id)
-    if not worker:
-        print(colorize(f"Worker '{worker_id}' not found.", Colors.RED))
+    client = await get_api_client(config, db)
+    try:
+        response = await client.get(f"/workers/{worker_id}")
+        response.raise_for_status()
+        worker = Worker.model_validate(response.json())
+        print_worker_details(worker)
+    except Exception as e:
+        print(colorize(f"Failed to fetch worker details: {e}", Colors.RED))
         sys.exit(1)
 
-    print_worker_details(worker)
 
-
-async def job_list(db: DB, args: argparse.Namespace):
+async def job_list(config: CoordinatorConfig, db: DB, args: argparse.Namespace):
     window = args.window if hasattr(args, "window") else 3600
-    # Show requester for admin view
-    jobs = await db.jobs.get_dashboard_jobs(recent_window_seconds=window)
-    print_job_list(jobs, show_requester=True)
-
-
-async def job_show(db: DB, args: argparse.Namespace):
-    job_id_str = args.job_id
+    client = await get_api_client(config, db)
     try:
-        job_id = ULID.from_str(job_id_str)
-    except ValueError:
-        print(colorize(f"Invalid Job ID: {job_id_str}", Colors.RED))
+        response = await client.get("/jobs", params={"window": window})
+        response.raise_for_status()
+        jobs = [JobRecord.model_validate(j) for j in response.json()]
+        print_job_list(jobs, show_requester=True)
+    except Exception as e:
+        print(colorize(f"Failed to fetch job list: {e}", Colors.RED))
         sys.exit(1)
 
-    job = await db.jobs.get_job(job_id)
-    if not job:
-        print(colorize(f"Job '{job_id_str}' not found.", Colors.RED))
-        sys.exit(1)
 
-    print_job_details(job)
-
-
-async def job_logs(db: DB, args: argparse.Namespace):
+async def job_show(config: CoordinatorConfig, db: DB, args: argparse.Namespace):
     job_id_str = args.job_id
+    client = await get_api_client(config, db)
     try:
-        job_id = ULID.from_str(job_id_str)
-    except ValueError:
-        print(colorize(f"Invalid Job ID: {job_id_str}", Colors.RED))
+        response = await client.get(f"/jobs/{job_id_str}/status")
+        response.raise_for_status()
+        job = JobRecord.model_validate(response.json())
+        print_job_details(job)
+    except Exception as e:
+        print(colorize(f"Failed to fetch job details: {e}", Colors.RED))
         sys.exit(1)
 
-    job = await db.jobs.get_job(job_id)
-    if not job:
-        print(colorize(f"Job '{job_id_str}' not found.", Colors.RED))
+
+async def job_logs(config: CoordinatorConfig, db: DB, args: argparse.Namespace):
+    job_id_str = args.job_id
+    client = await get_api_client(config, db)
+    try:
+        response = await client.get(f"/jobs/{job_id_str}/logs")
+        response.raise_for_status()
+        logs_response = JobLogsResponse.model_validate(response.json())
+        for log in logs_response.logs:
+            stream = sys.stdout if log.stream == "stdout" else sys.stderr
+            print(log.content, file=stream)
+            stream.flush()
+    except Exception as e:
+        print(colorize(f"Failed to fetch job logs: {e}", Colors.RED))
         sys.exit(1)
-
-    messages = await db.messages.get_job_messages(job_id, message_type="job_logs")
-
-    for msg in messages:
-        if isinstance(msg, JobLogsMessage):
-            for log in msg.payload.logs:
-                stream = sys.stdout if log.stream == "stdout" else sys.stderr
-                print(log.content, file=stream)
-                stream.flush()
 
 
 async def janitor_cmd(config: CoordinatorConfig, db: DB, args: argparse.Namespace):
     action = args.action
-
-    # Need localadmin credentials
-    identity = await db.auth.get_identity("localadmin", include_hmac_key=True)
-    if not identity:
-        print(colorize("User 'localadmin' not found in database. Cannot run janitor command.", Colors.RED))
-        sys.exit(1)
-
-    base_url = f"http://127.0.0.1:{config.port}"
-    client = AuthenticatedAsyncClient(base_url, "localadmin", identity.hmac_key)
+    client = await get_api_client(config, db)
     try:
         response = await client.post("/admin/janitor", json={"action": action})
         response.raise_for_status()
@@ -222,15 +230,15 @@ async def janitor_cmd(config: CoordinatorConfig, db: DB, args: argparse.Namespac
         sys.exit(1)
 
 
-async def status_cmd(db: DB, args: argparse.Namespace):
+async def status_cmd(config: CoordinatorConfig, db: DB, args: argparse.Namespace):
     print(colorize("=== Workers ===", Colors.MAGENTA))
     # Default window for status view if not specified (handled by argparse defaults usually)
     if not hasattr(args, "window"):
         args.window = 3600
-    await worker_list(db, args)
+    await worker_list(config, db, args)
     print()
     print(colorize("=== Recent Jobs ===", Colors.MAGENTA))
-    await job_list(db, args)
+    await job_list(config, db, args)
 
 
 async def security_reencrypt(db: DB, args: argparse.Namespace):

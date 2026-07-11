@@ -136,8 +136,9 @@ async def job_list(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid since_id")
 
+    requester_id = identity.client_id if identity.role != "admin" else None
     jobs = await job_repo.get_dashboard_jobs(
-        requester_id=identity.client_id,
+        requester_id=requester_id,
         since_id=s_id,
         recent_window_seconds=window,
     )
