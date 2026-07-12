@@ -5,23 +5,20 @@ from typing import Any, AsyncIterator, Dict, List, Optional, Union
 from ulid import ULID
 
 from dffmpeg.client.config import ClientConfig
-from dffmpeg.common.http_client import AuthenticatedAsyncClient
+from dffmpeg.common.api_client import DFFmpegAPIClient
 from dffmpeg.common.loop_utils import heartbeat_loop
 from dffmpeg.common.models import (
-    CommandResponse,
     JobLogsMessage,
-    JobLogsResponse,
     JobRecord,
     JobRequest,
     JobStatusMessage,
-    Worker,
 )
 from dffmpeg.common.transports import TransportManager
 
 logger = logging.getLogger(__name__)
 
 
-class DFFmpegClient:
+class DFFmpegClient(DFFmpegAPIClient):
     def __init__(self, config: ClientConfig):
         self.config = config
 
@@ -31,7 +28,7 @@ class DFFmpegClient:
             f"{'' if coord.path_base.startswith('/') else '/'}{coord.path_base}"
         )
 
-        self.client = AuthenticatedAsyncClient(
+        super().__init__(
             base_url=base_url,
             client_id=config.client_id,
             hmac_key=str(config.hmac_key),
@@ -80,61 +77,6 @@ class DFFmpegClient:
         resp.raise_for_status()
 
         return JobRecord.model_validate(resp.json())
-
-    async def get_job_status(self, job_id: str) -> JobRecord:
-        """Retrieves the current status of a job."""
-        path = f"/jobs/{job_id}/status"
-        resp = await self.client.get(path)
-        resp.raise_for_status()
-        return JobRecord.model_validate(resp.json())
-
-    async def cancel_job(self, job_id: str) -> CommandResponse:
-        """Cancels a job."""
-        path = f"/jobs/{job_id}/cancel"
-        resp = await self.client.post(path)
-        resp.raise_for_status()
-        return CommandResponse.model_validate(resp.json())
-
-    async def list_jobs(self, window: int = 3600, since_id: str | None = None) -> List[JobRecord]:
-        """Lists active and recently finished jobs."""
-        params: Dict[str, Any] = {"window": window}
-        if since_id:
-            params["since_id"] = since_id
-
-        path = "/jobs"
-        resp = await self.client.get(path, params=params)
-        resp.raise_for_status()
-        return [JobRecord.model_validate(j) for j in resp.json()]
-
-    async def get_job_logs(
-        self, job_id: str, since_message_id: str | None = None, limit: int | None = None
-    ) -> JobLogsResponse:
-        """Retrieves logs for a job."""
-        params: Dict[str, Any] = {}
-        if since_message_id:
-            params["since_message_id"] = since_message_id
-        if limit:
-            params["limit"] = limit
-
-        path = f"/jobs/{job_id}/logs"
-        resp = await self.client.get(path, params=params)
-        resp.raise_for_status()
-        return JobLogsResponse.model_validate(resp.json())
-
-    async def list_workers(self, window: int = 3600 * 24) -> List[Worker]:
-        """Lists all known workers."""
-        path = "/workers"
-        params = {"window": window}
-        resp = await self.client.get(path, params=params)
-        resp.raise_for_status()
-        return [Worker.model_validate(w) for w in resp.json()]
-
-    async def get_worker(self, worker_id: str) -> Worker:
-        """Gets details for a specific worker."""
-        path = f"/workers/{worker_id}"
-        resp = await self.client.get(path)
-        resp.raise_for_status()
-        return Worker.model_validate(resp.json())
 
     async def start_monitoring(self, job_id: str, monitor: bool = True):
         """
@@ -230,10 +172,4 @@ class DFFmpegClient:
         await self._stop_heartbeat_loop()
         if self.active_transport:
             await self.active_transport.disconnect()
-        await self.client.aclose()
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.close()
+        await super().close()
