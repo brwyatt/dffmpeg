@@ -12,6 +12,7 @@ from dffmpeg.common.models import (
     JobStatusMessage,
     JobStatusUpdate,
     JobStatusUpdateStatus,
+    TransportMetadata,
     VerifyRegistrationMessage,
     WorkerDeregistration,
     WorkerRegistration,
@@ -61,11 +62,11 @@ class Worker:
 
         self._running = False
         self._draining: bool = False
-        self._registration_task: Optional[asyncio.Task] = None
-        self._transport_task: Optional[asyncio.Task] = None
+        self._registration_task: Optional[asyncio.Task[None]] = None
+        self._transport_task: Optional[asyncio.Task[None]] = None
 
         self._verified_event = asyncio.Event()
-        self._verification_timeout_task: Optional[asyncio.Task] = None
+        self._verification_timeout_task: Optional[asyncio.Task[None]] = None
 
         self.coordinator_paths = {
             "register": "/worker/register",
@@ -109,9 +110,10 @@ class Worker:
         await asyncio.sleep(self.config.min_drain_time_seconds)
 
         active_tasks = [
-            j._main_task
+            j._main_task  # pyright: ignore[reportPrivateUsage]
             for j in self._active_jobs.values()
-            if getattr(j, "_main_task", None) is not None and j._main_task is not None
+            if getattr(j, "_main_task", None) is not None
+            and j._main_task is not None  # pyright: ignore[reportPrivateUsage]
         ]
         if active_tasks:
             logger.info(f"[{self.client_id}] Draining: Waiting for {len(active_tasks)} active jobs to complete...")
@@ -221,7 +223,7 @@ class Worker:
         except asyncio.CancelledError:
             pass
 
-    async def _update_transport(self, transport_name: str, metadata: dict):
+    async def _update_transport(self, transport_name: str, metadata: TransportMetadata):
         """
         Switches the active transport.
 

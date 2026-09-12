@@ -41,7 +41,8 @@ class DFFmpegClient:
         # Transport settings are already injected by load_config helper
         self.transport_manager = TransportManager(config.transports)
         self.active_transport = None
-        self._heartbeat_task: Optional[asyncio.Task] = None
+        self._monitoring = False
+        self._heartbeat_task: Optional[asyncio.Task[None]] = None
 
     async def submit_job(
         self,

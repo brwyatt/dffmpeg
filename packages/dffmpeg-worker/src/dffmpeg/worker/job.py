@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from ulid import ULID
 
@@ -29,8 +29,8 @@ class JobRunner:
         config: WorkerConfig,
         client: AuthenticatedAsyncClient,
         job_id: ULID,
-        job_payload: Dict,
-        cleanup_callback: Callable,
+        job_payload: Dict[str, Any],
+        cleanup_callback: Callable[[ULID], Any],
         executor: JobExecutor,
     ):
         self.config = config
@@ -41,9 +41,9 @@ class JobRunner:
         self.executor = executor
         self.client_id = config.client_id
 
-        self._main_task: Optional[asyncio.Task] = None
-        self._heartbeat_task: Optional[asyncio.Task] = None
-        self._log_flusher_task: Optional[asyncio.Task] = None
+        self._main_task: Optional[asyncio.Task[None]] = None
+        self._heartbeat_task: Optional[asyncio.Task[None]] = None
+        self._log_flusher_task: Optional[asyncio.Task[None]] = None
         self._log_queue: asyncio.Queue[LogEntry] = asyncio.Queue()
         self._flush_lock = asyncio.Lock()
         self._new_log_event = asyncio.Event()
