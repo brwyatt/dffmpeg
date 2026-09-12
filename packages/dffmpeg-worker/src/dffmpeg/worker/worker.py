@@ -57,7 +57,7 @@ class Worker:
         self.transport_manager = WorkerTransportManager(config.transports)
         self.mount_manager = MountManager(config.mount_management)
 
-        logger.info(f"ClientID: {config.client_id} HMAC: {config.hmac_key}")
+        logger.info(f"ClientID: {config.client_id}")
 
         self._running = False
         self._draining: bool = False
