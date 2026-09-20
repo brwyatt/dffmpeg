@@ -22,6 +22,11 @@ This document outlines the development phases for DFFmpeg, leading up to version
 ## Phase 2: Version 1.0 (Production Ready)
 *Goal: A stable, well-tested, and documented release.*
 
+- [ ] **Standard-Stream Data Plane (Binary Stdout)** (Slated for `v0.6.0`): Add high-throughput, byte-transparent streaming for commands outputting binary streams on stdout (e.g. image pipes/muxed media streams).
+    - [x] **Phase 1 (Models)**: Create shared message models and heartbeat extensions (`dffmpeg-common`).
+    - [x] **Phase 2 (Coordinator Data Plane)**: Implement StreamStorageManager, chunk uploads, streaming responses, and ACK-driven immediate cleanup (`dffmpeg-coordinator`).
+    - [ ] **Phase 3 (Worker Adaptive Classifier)**: Implement adaptive classification and chunk uploader in `SubprocessJobExecutor`/`JobRunner` (`dffmpeg-worker`).
+    - [ ] **Phase 4 (Client Consumer)**: Implement terminal safety, continuous streaming client downloads, and E2E integration test (`dffmpeg-client`).
 - [x] **Observability / Metrics**: Implement structured metrics (e.g., Prometheus) for queue depth, worker status, etc.
 - [x] **Database Migrations**: Establish a formal strategy for schema evolution (custom dynamically compiled schema generation).
 - [x] **Graceful Shutdown Review**: Verify signal handling (SIGTERM/SIGINT) for Coordinator and Worker (should be good, but let's make sure and be extra defensive here).

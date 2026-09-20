@@ -10,6 +10,7 @@ from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
 from dffmpeg.coordinator.janitor import Janitor
+from dffmpeg.coordinator.streams import StreamStorageManager
 from dffmpeg.coordinator.transports import TransportManager
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,13 @@ def get_config(request: Request) -> CoordinatorConfig:
     Dependency to retrieve the CoordinatorConfig from the application state.
     """
     return request.app.state.config
+
+
+def get_streams(request: Request) -> StreamStorageManager:
+    """
+    Dependency to retrieve the StreamStorageManager from the application state.
+    """
+    return request.app.state.streams
 
 
 def verify_dashboard_enabled(config: CoordinatorConfig = Depends(get_config)):

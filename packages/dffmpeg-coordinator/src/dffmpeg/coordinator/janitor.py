@@ -2,12 +2,14 @@ import asyncio
 import random
 from datetime import datetime, timezone
 from logging import getLogger
+from typing import Optional
 
 from dffmpeg.common.models import JobStatusMessage, JobStatusPayload
 from dffmpeg.coordinator.config import JanitorConfig
 from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
 from dffmpeg.coordinator.scheduler import process_job_assignment
+from dffmpeg.coordinator.streams import StreamStorageManager
 from dffmpeg.coordinator.transports import TransportManager
 
 logger = getLogger(__name__)
@@ -20,11 +22,15 @@ class Janitor:
         job_repo: JobRepository,
         transports: TransportManager,
         config: JanitorConfig,
+        streams: Optional[StreamStorageManager] = None,
+        stream_retention_minutes: int = 60,
     ):
         self.worker_repo = worker_repo
         self.job_repo = job_repo
         self.transports = transports
         self.config = config
+        self.streams = streams
+        self.stream_retention_minutes = stream_retention_minutes
         self.running = False
         self._queue = None
         self._worker_task = None
@@ -148,6 +154,18 @@ class Janitor:
         await self.reap_assigned_jobs()
         await self.reap_pending_jobs()
         await self.reap_abandoned_monitored_jobs()
+        await self.reap_stale_streams()
+
+    async def reap_stale_streams(self):
+        """
+        Finds and deletes stale or orphaned stream storage folders.
+        """
+        if self.streams is not None:
+            try:
+                active_ids = await self.job_repo.get_active_job_ids()
+                await self.streams.clean_stale_streams(active_ids, self.stream_retention_minutes)
+            except Exception:
+                logger.exception("Error during janitor stale stream sweeping")
 
     async def reap_workers(self):
         """

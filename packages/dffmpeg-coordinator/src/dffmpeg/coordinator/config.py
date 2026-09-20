@@ -35,6 +35,8 @@ class CoordinatorConfig(BaseModel):
     handshake_delay_seconds: float = 1.0
     shutdown_delay_seconds: float = 0.0
     web_dashboard_enabled: bool = True
+    streams_storage_root: str = "/tmp/dffmpeg/streams"
+    stream_retention_minutes: int = 60
     allowed_dashboard_ips: List[CIDR] = Field(
         default_factory=lambda: [
             ipaddress.ip_network("0.0.0.0/0"),

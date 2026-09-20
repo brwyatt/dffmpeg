@@ -31,6 +31,8 @@ The Coordinator manages the cluster state, job queue, and worker registry.
 | `dev_mode` | boolean | `false` | Enable development mode (auto-reload, verbose logging). Can be set via `DFFMPEG_COORDINATOR_DEV=1`. |
 | `allowed_binaries` | list[string] | `["ffmpeg", "ffprobe"]` | List of supported binary names that workers can register and clients can request. |
 | `trusted_proxies` | list[string] | `["127.0.0.1"]` | List of trusted proxy IPs/CIDRs. If set, the Coordinator will respect `X-Forwarded-For` headers from these addresses. |
+| `streams_storage_root` | string | `"/tmp/dffmpeg/streams"` | Base directory on disk for storing binary stream chunks. (Must point to a shared filesystem like CephFS/NFS in HA clusters). |
+| `stream_retention_minutes` | integer | `60` | Grace period (minutes) that stream storage folders are kept for terminal/expired/orphaned jobs before being swept by the Janitor. |
 
 ### Database Configuration (`database`)
 

@@ -105,3 +105,6 @@ class JobRepository(BaseDB):
 
     async def get_recent_jobs(self, window_seconds: int = 300, timestamp: Optional[datetime] = None) -> list[JobRecord]:
         raise NotImplementedError()
+
+    async def get_active_job_ids(self) -> set[str]:
+        raise NotImplementedError()

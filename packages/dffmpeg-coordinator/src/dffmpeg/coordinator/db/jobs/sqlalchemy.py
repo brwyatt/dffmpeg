@@ -1,14 +1,14 @@
 import json
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from sqlalchemy import ColumnElement, TextClause, and_, func, or_, select, update
 from ulid import ULID
 
 from dffmpeg.common.formatting import ensure_utc
-from dffmpeg.common.models import JobStatus, TransportRecord
+from dffmpeg.common.models import JobRecord, JobStatus, TransportRecord
 from dffmpeg.coordinator.db.engines.sqlalchemy import SQLAlchemyDB
-from dffmpeg.coordinator.db.jobs import JobRecord, JobRepository
+from dffmpeg.coordinator.db.jobs import JobRepository
 
 
 class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
@@ -150,7 +150,7 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
         if timestamp is None:
             timestamp = datetime.now(timezone.utc)
 
-        values = {"status": status, "last_update": timestamp}
+        values: Dict[str, Any] = {"status": status, "last_update": timestamp}
         if exit_code is not None:
             values["exit_code"] = exit_code
         if worker_id:
@@ -301,3 +301,10 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
         sql, params = self.compile_query(query)
         rows = await self.get_rows(sql, params)
         return [self._row_to_job(row) for row in rows]
+
+    async def get_active_job_ids(self) -> set[str]:
+        active_statuses = ["pending", "assigned", "running", "canceling"]
+        query = select(self.table.c.job_id).where(self.table.c.status.in_(active_statuses))
+        sql, params = self.compile_query(query)
+        rows = await self.get_rows(sql, params)
+        return {row["job_id"] for row in rows}

@@ -154,6 +154,15 @@ class WorkerDeregistration(BaseModel):
     worker_id: str = ClientId
 
 
+class EOFPayload(BaseModel):
+    """
+    Payload for stream EOF signaling.
+    """
+
+    final_sequence: int = Field(ge=0)
+    total_bytes: int = Field(ge=0)
+
+
 class JobStatusPayload(BaseModel):
     """
     Payload for job status updates.

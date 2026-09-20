@@ -1,5 +1,6 @@
 import asyncio
 import gc
+import os
 import signal
 import threading
 from contextlib import asynccontextmanager
@@ -15,6 +16,7 @@ from dffmpeg.coordinator.api.routes import admin, dashboard, health, job, metric
 from dffmpeg.coordinator.config import CoordinatorConfig, load_config
 from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.janitor import Janitor
+from dffmpeg.coordinator.streams import StreamStorageManager
 from dffmpeg.coordinator.transports import TransportManager
 
 logger = getLogger(__name__)
@@ -79,6 +81,10 @@ async def lifespan(app: FastAPI):
     app.state.db = DB(config=config.database)
     await app.state.db.setup_all()
 
+    os.makedirs(config.streams_storage_root, exist_ok=True)
+
+    app.state.streams = StreamStorageManager(storage_root=config.streams_storage_root)
+
     app.state.transports = TransportManager(config=config.transports, app=app)
     await app.state.transports.setup_all()
 
@@ -87,6 +93,8 @@ async def lifespan(app: FastAPI):
         job_repo=app.state.db.jobs,
         transports=app.state.transports,
         config=config.janitor,
+        streams=app.state.streams,
+        stream_retention_minutes=config.stream_retention_minutes,
     )
     app.state.janitor = janitor
     await janitor.start()

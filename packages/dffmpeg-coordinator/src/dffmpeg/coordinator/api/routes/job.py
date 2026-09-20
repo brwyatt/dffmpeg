@@ -1,13 +1,17 @@
+import asyncio
 from datetime import datetime, timezone
 from logging import getLogger
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from ulid import ULID
 
 from dffmpeg.common.models import (
     AuthenticatedIdentity,
+    ClientHeartbeatPayload,
     CommandResponse,
+    EOFPayload,
     JobLogsMessage,
     JobLogsPayload,
     JobLogsResponse,
@@ -23,6 +27,7 @@ from dffmpeg.coordinator.api.dependencies import (
     get_config,
     get_job_repo,
     get_message_repo,
+    get_streams,
     get_transports,
     get_worker_repo,
 )
@@ -32,6 +37,7 @@ from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
 from dffmpeg.coordinator.scheduler import process_job_assignment
+from dffmpeg.coordinator.streams import StreamStorageManager
 from dffmpeg.coordinator.transports import TransportManager
 
 router = APIRouter()
@@ -487,9 +493,11 @@ async def job_worker_heartbeat(
 async def job_client_heartbeat(
     job_id: str,
     monitor: Optional[bool] = None,
+    payload: Optional[ClientHeartbeatPayload] = Body(default=None),
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     transports: TransportManager = Depends(get_transports),
     job_repo: JobRepository = Depends(get_job_repo),
+    streams: StreamStorageManager = Depends(get_streams),
 ) -> CommandResponse:
     """
     Updates the client_last_seen timestamp for a job to indicate the requester is still monitoring.
@@ -497,8 +505,10 @@ async def job_client_heartbeat(
     Args:
         job_id (str): The ID of the job.
         monitor (Optional[bool]): Optionally update the monitor flag (e.g., when attaching).
+        payload (Optional[ClientHeartbeatPayload]): Optional JSON payload for streams_progress.
         identity (AuthenticatedIdentity): The authenticated requester identity.
         job_repo (JobRepository): Job repository.
+        streams (StreamStorageManager): Stream storage manager.
 
     Returns:
         CommandResponse: Status OK if successful.
@@ -519,6 +529,11 @@ async def job_client_heartbeat(
         raise HTTPException(status_code=403, detail="No permission to heartbeat for this job")
 
     timestamp = datetime.now(timezone.utc)
+
+    # Prune streams if progress is reported
+    if payload is not None and payload.streams_progress is not None:
+        for stream_name, progress in payload.streams_progress.items():
+            await streams.prune_progress(str(j_id), stream_name, progress.bytes_read)
 
     await job_repo.update_client_heartbeat(j_id, timestamp=timestamp, monitor=monitor)
 
@@ -648,3 +663,129 @@ async def job_logs_get(
             all_entries.extend(msg.payload.logs)
 
     return JobLogsResponse(logs=all_entries, last_message_id=last_msg_id)
+
+
+@router.post("/jobs/{job_id}/streams/{stream_name}/chunks")
+async def job_stream_write_chunk(
+    job_id: str,
+    stream_name: str,
+    seq: int,
+    request: Request,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    job_repo: JobRepository = Depends(get_job_repo),
+    streams: StreamStorageManager = Depends(get_streams),
+) -> CommandResponse:
+    """
+    Worker uploads a raw binary chunk for an assigned job's stream.
+    """
+    try:
+        j_id = ULID.from_str(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    job = await job_repo.get_job(j_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.worker_id != identity.client_id:
+        raise HTTPException(status_code=403, detail="Not assigned to this job")
+
+    data = await request.body()
+    await streams.write_chunk(str(j_id), stream_name, seq, data)
+    return CommandResponse(status="ok")
+
+
+@router.post("/jobs/{job_id}/streams/{stream_name}/eof")
+async def job_stream_write_eof(
+    job_id: str,
+    stream_name: str,
+    payload: EOFPayload,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    job_repo: JobRepository = Depends(get_job_repo),
+    streams: StreamStorageManager = Depends(get_streams),
+) -> CommandResponse:
+    """
+    Worker notifies of stream completion (EOF).
+    """
+    try:
+        j_id = ULID.from_str(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    job = await job_repo.get_job(j_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.worker_id != identity.client_id:
+        raise HTTPException(status_code=403, detail="Not assigned to this job")
+
+    await streams.write_eof(str(j_id), stream_name, payload)
+    return CommandResponse(status="ok")
+
+
+@router.get("/jobs/{job_id}/streams/{stream_name}")
+async def job_stream_download(
+    job_id: str,
+    stream_name: str,
+    start_offset: int = 0,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    job_repo: JobRepository = Depends(get_job_repo),
+    streams: StreamStorageManager = Depends(get_streams),
+):
+    """
+    Client or admin downloads a continuous byte sequence of a specific job's stream.
+    """
+    try:
+        j_id = ULID.from_str(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    job = await job_repo.get_job(j_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.requester_id != identity.client_id and identity.role != "admin":
+        raise HTTPException(status_code=403, detail="No permission to view this job")
+
+    # Fast validation: Ensure requested offset has not already been pruned
+    pruned_bytes = await asyncio.to_thread(streams.get_pruned_bytes, str(j_id), stream_name)
+    if start_offset < pruned_bytes:
+        raise HTTPException(
+            status_code=416,
+            detail=f"Requested start_offset {start_offset} is less than pruned baseline of {pruned_bytes} bytes "
+            "(data no longer available on disk).",
+        )
+
+    return StreamingResponse(
+        streams.stream_chunks(str(j_id), stream_name, start_offset), media_type="application/octet-stream"
+    )
+
+
+@router.post("/jobs/{job_id}/streams/{stream_name}/ack")
+async def job_stream_ack(
+    job_id: str,
+    stream_name: str,
+    identity: AuthenticatedIdentity = Depends(required_hmac_auth),
+    job_repo: JobRepository = Depends(get_job_repo),
+    streams: StreamStorageManager = Depends(get_streams),
+) -> CommandResponse:
+    """
+    Client acknowledges completion or disconnect of download.
+    If the job is already in a terminal state, we can immediately delete the stream storage.
+    """
+    try:
+        j_id = ULID.from_str(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID")
+
+    job = await job_repo.get_job(j_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.requester_id != identity.client_id and identity.role != "admin":
+        raise HTTPException(status_code=403, detail="No permission to view this job")
+
+    if job.status in ["completed", "failed", "canceled"]:
+        await streams.delete_stream(str(j_id), stream_name)
+
+    return CommandResponse(status="ok")
