@@ -91,6 +91,7 @@ class SubprocessJobExecutor:
 
         async def read_stdout(stream):
             binary_mode = False
+            buffer = bytearray()
             chunk_limit = 64 * 1024  # 64KB line length limit before latching
 
             try:
@@ -103,20 +104,46 @@ class SubprocessJobExecutor:
                         if binary_callback:
                             await binary_callback(data)
                     else:
-                        # Text Phase: readline-based validation (perfect backward compatibility)
-                        line = await stream.readline()
-                        if not line:
+                        # Text Phase: 4KB chunk-based buffer (eliminates LimitOverrunError deadlocks)
+                        data = await stream.read(4096)
+                        if not data:
+                            # Process residual buffer
+                            if buffer:
+                                if b"\x00" in buffer:
+                                    if binary_callback:
+                                        await binary_callback(bytes(buffer))
+                                else:
+                                    try:
+                                        decoded = buffer.decode("utf-8")
+                                        await log_callback(
+                                            LogEntry(
+                                                stream="stdout",
+                                                content=decoded.rstrip("\r\n"),
+                                                timestamp=datetime.now(timezone.utc),
+                                            )
+                                        )
+                                    except Exception:
+                                        if binary_callback:
+                                            await binary_callback(bytes(buffer))
                             break
 
-                        # Trigger binary mode if:
-                        # 1. Null byte in line
-                        # 2. Line exceeds 64KB
-                        # 3. Invalid UTF-8 sequence
-                        if b"\x00" in line or len(line) > chunk_limit:
+                        if b"\x00" in data:
                             binary_mode = True
-                        else:
+
+                        buffer.extend(data)
+
+                        # Process complete lines
+                        while b"\n" in buffer:
+                            idx = buffer.index(b"\n")
+                            line_bytes = buffer[: idx + 1]
+
+                            # Trigger binary mode if null byte or line exceeds 64KB limit
+                            if b"\x00" in line_bytes or len(line_bytes) > chunk_limit:
+                                binary_mode = True
+                                break
+
                             try:
-                                decoded_line = line.decode("utf-8")
+                                decoded_line = line_bytes.decode("utf-8")
                                 await log_callback(
                                     LogEntry(
                                         stream="stdout",
@@ -126,10 +153,16 @@ class SubprocessJobExecutor:
                                 )
                             except UnicodeDecodeError:
                                 binary_mode = True
+                                break
 
-                        if binary_mode:
-                            if binary_callback:
-                                await binary_callback(line)
+                            del buffer[: idx + 1]
+
+                        # If binary mode was triggered or 64KB buffer limit exceeded
+                        if binary_mode or len(buffer) > chunk_limit:
+                            binary_mode = True
+                            if binary_callback and buffer:
+                                await binary_callback(bytes(buffer))
+                            buffer.clear()
             except asyncio.CancelledError:
                 raise
             except Exception as e:

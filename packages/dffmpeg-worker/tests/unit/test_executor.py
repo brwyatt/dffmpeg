@@ -13,12 +13,13 @@ async def test_executor_cancellation_terminates_process():
     mock_process.returncode = None
 
     # Mock streams that wait forever (simulating a running process)
-    async def infinite_read():
+    async def infinite_read(*args, **kwargs):
         await asyncio.sleep(10)
         return b""
 
     mock_process.stdout = AsyncMock()
     mock_process.stdout.readline.side_effect = infinite_read
+    mock_process.stdout.read.side_effect = infinite_read
     mock_process.stderr = AsyncMock()
     mock_process.stderr.readline.side_effect = infinite_read
 
@@ -50,10 +51,6 @@ async def test_executor_cancellation_terminates_process():
         # Cancel the task
         task.cancel()
 
-        # Helper to set return code when terminate is called (simulating OS behavior)
-        # We can't easily side-effect the Mock.terminate because it's synchronous and we're in asyncio loop flow
-        # But our mock_wait checks returncode.
-
         # Wait for task to finish (should raise CancelledError)
         try:
             await task
@@ -72,7 +69,8 @@ async def test_executor_pure_text_stdout():
     mock_process.returncode = 0
 
     mock_process.stdout = AsyncMock()
-    mock_process.stdout.readline.side_effect = [b"line 1\n", b"line 2\n", b""]
+    # Read will return our text and then empty
+    mock_process.stdout.read.side_effect = [b"line 1\n", b"line 2\n", b""]
 
     mock_process.stderr = AsyncMock()
     mock_process.stderr.readline.side_effect = [b""]
@@ -109,8 +107,7 @@ async def test_executor_pure_binary_stdout():
     # Mock binary stream data (contains non-UTF-8 bytes like 0x80)
     mock_process.stdout = AsyncMock()
     # readline/read mocks depending on implementation
-    mock_process.stdout.readline.side_effect = [b"\x80\x01\x02", b""]
-    mock_process.stdout.read = AsyncMock(side_effect=[b""])
+    mock_process.stdout.read.side_effect = [b"\x80\x01\x02", b""]
 
     mock_process.stderr = AsyncMock()
     mock_process.stderr.readline.side_effect = [b""]
@@ -145,8 +142,7 @@ async def test_executor_mixed_text_and_binary_stdout():
 
     # Mock mixed data: first line text, then raw binary bytes
     mock_process.stdout = AsyncMock()
-    mock_process.stdout.readline.side_effect = [b"text header\n", b"\x00\x01\x02", b""]
-    mock_process.stdout.read = AsyncMock(side_effect=[b""])
+    mock_process.stdout.read.side_effect = [b"text header\n", b"\x00\x01\x02", b""]
 
     mock_process.stderr = AsyncMock()
     mock_process.stderr.readline.side_effect = [b""]
@@ -172,3 +168,76 @@ async def test_executor_mixed_text_and_binary_stdout():
     assert logs_received[0].content == "text header"
     assert len(binary_received) > 0
     assert b"".join(binary_received) == b"\x00\x01\x02"
+
+
+@pytest.mark.asyncio
+async def test_executor_mixed_binary_header_corruption_prevention():
+    # Setup mock process
+    mock_process = Mock()
+    mock_process.returncode = 0
+
+    # Mock a stream that starts with a valid UTF-8 header line but is actually a binary format (e.g. GIF)
+    # under our 4KB chunk uploader, the entire block is correctly emitted as binary
+    mock_process.stdout = AsyncMock()
+    mock_process.stdout.read.side_effect = [b"GIF89a\x01\x02\n", b"\x00\x01\x02", b""]
+
+    mock_process.stderr = AsyncMock()
+    mock_process.stderr.readline.side_effect = [b""]
+    mock_process.wait = AsyncMock(return_value=0)
+
+    executor = SubprocessJobExecutor(job_id="test_job", binary_path="ffmpeg", arguments=[], path_map={})
+
+    logs_received = []
+
+    async def log_callback(entry):
+        logs_received.append(entry)
+
+    binary_received = []
+
+    async def binary_callback(data):
+        binary_received.append(data)
+
+    with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)):
+        exit_code = await executor.execute(log_callback, binary_callback)
+
+    assert exit_code == 0
+    # Under Option A, the text header "GIF89a..." is emitted as a text log and NOT included in the binary stream
+    assert len(logs_received) == 1
+    assert logs_received[0].content == "GIF89a\x01\x02"
+    combined_binary = b"".join(binary_received)
+    assert combined_binary == b"\x00\x01\x02"
+
+
+@pytest.mark.asyncio
+async def test_executor_large_unbroken_binary_no_overrun():
+    # Setup mock process
+    mock_process = Mock()
+    mock_process.returncode = 0
+
+    # Mock a stream that produces 100KB of binary bytes without any newline
+    large_data = b"\x80" * (100 * 1024)
+    mock_process.stdout = AsyncMock()
+    mock_process.stdout.read.side_effect = [large_data, b""]
+
+    mock_process.stderr = AsyncMock()
+    mock_process.stderr.readline.side_effect = [b""]
+    mock_process.wait = AsyncMock(return_value=0)
+
+    executor = SubprocessJobExecutor(job_id="test_job", binary_path="ffmpeg", arguments=[], path_map={})
+
+    logs_received = []
+
+    async def log_callback(entry):
+        logs_received.append(entry)
+
+    binary_received = []
+
+    async def binary_callback(data):
+        binary_received.append(data)
+
+    with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)):
+        exit_code = await executor.execute(log_callback, binary_callback)
+
+    assert exit_code == 0
+    assert len(logs_received) == 0
+    assert b"".join(binary_received) == large_data
