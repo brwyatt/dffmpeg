@@ -16,7 +16,11 @@ class StreamStorageManager:
         self.storage_root = Path(storage_root)
 
     def _get_stream_dir(self, job_id: str, stream_name: str) -> Path:
-        return self.storage_root / str(job_id) / stream_name
+        # Resolve target path and verify target containment to prevent path traversal
+        target = (self.storage_root / str(job_id) / stream_name).resolve()
+        if not target.is_relative_to(self.storage_root.resolve()):
+            raise ValueError(f"Invalid stream path resolution: {target}")
+        return target
 
     def _get_pruned_bytes_path(self, stream_dir: Path) -> Path:
         return stream_dir / ".pruned_bytes"
@@ -42,8 +46,10 @@ class StreamStorageManager:
 
     def _set_pruned_bytes(self, stream_dir: Path, bytes_count: int) -> None:
         path = self._get_pruned_bytes_path(stream_dir)
+        tmp_path = path.with_suffix(".tmp")
         try:
-            path.write_text(str(bytes_count))
+            tmp_path.write_text(str(bytes_count))
+            tmp_path.replace(path)
         except Exception as e:
             logger.error(f"Failed to write .pruned_bytes at {path}: {e}")
 
@@ -252,9 +258,22 @@ class StreamStorageManager:
                     # Stale check: last modified time of directory is older than retention window
                     is_active = job_id in active_job_ids
 
-                    # Get modification time of directory
+                    # Get modification time of directory, walking child files to find the latest update
                     try:
-                        mtime = job_dir.stat().st_mtime
+
+                        def _get_latest_mtime(p: Path) -> float:
+                            latest = p.stat().st_mtime
+                            try:
+                                for entry in p.rglob("*"):
+                                    try:
+                                        latest = max(latest, entry.stat().st_mtime)
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                            return latest
+
+                        mtime = _get_latest_mtime(job_dir)
                     except Exception:
                         mtime = now
 

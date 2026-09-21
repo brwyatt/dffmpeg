@@ -21,6 +21,7 @@ from dffmpeg.common.models import (
     JobStatusPayload,
     JobStatusUpdate,
     LogEntry,
+    StreamName,
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
 from dffmpeg.coordinator.api.dependencies import (
@@ -669,7 +670,7 @@ async def job_logs_get(
 @router.post("/jobs/{job_id}/streams/{stream_name}/chunks")
 async def job_stream_write_chunk(
     job_id: str,
-    stream_name: str,
+    stream_name: StreamName,
     seq: int,
     request: Request,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
@@ -727,7 +728,7 @@ async def job_stream_write_eof(
 @router.get("/jobs/{job_id}/streams/{stream_name}")
 async def job_stream_download(
     job_id: str,
-    stream_name: str,
+    stream_name: StreamName,
     start_offset: int = 0,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     job_repo: JobRepository = Depends(get_job_repo),
@@ -765,7 +766,7 @@ async def job_stream_download(
 @router.post("/jobs/{job_id}/streams/{stream_name}/ack")
 async def job_stream_ack(
     job_id: str,
-    stream_name: str,
+    stream_name: StreamName,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     job_repo: JobRepository = Depends(get_job_repo),
     streams: StreamStorageManager = Depends(get_streams),

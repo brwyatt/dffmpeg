@@ -1,11 +1,14 @@
 import asyncio
+import os
 import shutil
 import tempfile
+import time
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 from ulid import ULID
 
 from dffmpeg.common.models import (
@@ -15,12 +18,15 @@ from dffmpeg.common.models import (
     EOFPayload,
     StreamProgress,
 )
+from dffmpeg.coordinator.api.auth import required_hmac_auth
+from dffmpeg.coordinator.api.dependencies import get_job_repo, get_streams
 from dffmpeg.coordinator.api.routes.job import (
     job_client_heartbeat,
     job_stream_ack,
     job_stream_download,
     job_stream_write_chunk,
     job_stream_write_eof,
+    router,
 )
 from dffmpeg.coordinator.janitor import Janitor
 from dffmpeg.coordinator.streams import StreamStorageManager
@@ -468,3 +474,82 @@ async def test_stream_storage_manager_empty_stream(temp_storage):
         async for chunk in manager.stream_chunks(job_id, stream_name, start_offset=0):
             chunks.append(chunk)
     assert chunks == []
+
+
+def test_stream_storage_manager_path_traversal(temp_storage):
+    manager = StreamStorageManager(str(temp_storage))
+
+    # Path traversal should raise ValueError in _get_stream_dir
+    with pytest.raises(ValueError):
+        manager._get_stream_dir("some_job", "../../../etc")  # pyright: ignore[reportPrivateUsage]
+
+
+@pytest.mark.anyio
+async def test_stream_storage_manager_premature_cleanup_prevention(temp_storage):
+    """
+    Verifies that clean_stale_streams respects the latest modified time of child files
+    inside job_dir, rather than just the parent job_dir mtime which is older.
+    """
+    streams_manager = StreamStorageManager(str(temp_storage))
+
+    active_job_id = str(ULID())
+    # Create the dir, write a chunk
+    await streams_manager.write_chunk(active_job_id, "stdout", 0, b"data")
+
+    # Set parent directory mtime to 70 minutes ago
+    job_dir = temp_storage / active_job_id
+    past_mtime = time.time() - 70 * 60
+    os.utime(job_dir, (past_mtime, past_mtime))
+
+    # But leave child chunk file mtime as brand-new (current time)
+    # Under retention_minutes=60, this directory MUST NOT be reaped!
+    mock_worker_repo = AsyncMock()
+    mock_job_repo = AsyncMock()
+    mock_transports = AsyncMock()
+    mock_config = AsyncMock()
+
+    janitor = Janitor(
+        worker_repo=mock_worker_repo,
+        job_repo=mock_job_repo,
+        transports=mock_transports,
+        config=mock_config,
+        streams=streams_manager,
+        stream_retention_minutes=60,
+    )
+
+    # Job is inactive (no active_job_ids)
+    mock_job_repo.get_active_job_ids.return_value = set()
+
+    await janitor.reap_stale_streams()
+
+    # Active stream dir must NOT be cleaned up because the child file is still fresh (0 < 60 mins)!
+    assert (temp_storage / active_job_id).exists()
+
+
+def test_job_stream_endpoints_validation_with_client():
+    """
+    Verifies that FastAPI router parameter validation is configured correctly and rejects
+    invalid/unsupported stream names with HTTP 422 Unprocessable Entity.
+    """
+
+    app = FastAPI()
+    app.include_router(router)
+
+    # Override dependencies to bypass DB/Auth lookup during validation-only checks
+    app.dependency_overrides[required_hmac_auth] = lambda: None
+    app.dependency_overrides[get_job_repo] = lambda: None
+    app.dependency_overrides[get_streams] = lambda: None
+
+    client = TestClient(app)
+
+    # Attempt to call chunks endpoint with invalid stream_name
+    resp = client.post("/jobs/01M32GJMWNFTW5S931M5H1QGAE/streams/stderr/chunks?seq=5")
+    assert resp.status_code == 422
+
+    # Attempt to call eof endpoint with invalid stream_name
+    resp = client.post("/jobs/01M32GJMWNFTW5S931M5H1QGAE/streams/invalid/eof")
+    assert resp.status_code == 422
+
+    # Attempt to call download endpoint with invalid stream_name
+    resp = client.get("/jobs/01M32GJMWNFTW5S931M5H1QGAE/streams/stdin")
+    assert resp.status_code == 422
