@@ -47,6 +47,8 @@ class JobRunner:
         self._log_queue: asyncio.Queue[LogEntry] = asyncio.Queue()
         self._flush_lock = asyncio.Lock()
         self._new_log_event = asyncio.Event()
+        self._binary_queue: asyncio.Queue[bytes] = asyncio.Queue()
+        self._binary_uploader_task: Optional[asyncio.Task[None]] = None
 
         self.coordinator_paths = {
             "heartbeat": f"/jobs/{self.job_id}/worker_heartbeat",
@@ -60,6 +62,7 @@ class JobRunner:
         self._silent_cancellation: bool = False
         self._fast_shutdown: bool = False
         self._running: bool = False
+        self._executor_done: bool = False
 
     async def start(self):
         """Starts the job execution."""
@@ -187,11 +190,92 @@ class JobRunner:
                 logger.error(f"Log flusher error for job {self.job_id}: {e}", exc_info=True)
                 await asyncio.sleep(1)
 
+    async def _binary_uploader(self):
+        """
+        Drains raw bytes from the queue, clusters them into larger blocks for network efficiency,
+        and posts them sequentially to the Coordinator's chunk streaming endpoint.
+        """
+        seq = 0
+        total_bytes = 0
+
+        try:
+            while self._running and (not self._executor_done or not self._binary_queue.empty()):
+                try:
+                    # Non-blocking check or short wait for the next chunk
+                    chunk = await asyncio.wait_for(self._binary_queue.get(), timeout=0.2)
+                except asyncio.TimeoutError:
+                    continue
+
+                # Automatically cluster small micro-chunks into larger ones (up to 256KB) for I/O efficiency
+                chunk_data = bytearray(chunk)
+                while not self._binary_queue.empty() and len(chunk_data) < 256 * 1024:
+                    chunk_data.extend(self._binary_queue.get_nowait())
+                    self._binary_queue.task_done()
+
+                data_to_send = bytes(chunk_data)
+                self._binary_queue.task_done()
+
+                path = f"/jobs/{self.job_id}/streams/stdout/chunks?seq={seq}"
+
+                attempts = 5
+                success = False
+                for i in range(attempts):
+                    try:
+                        await self.client.post_binary(path, content=data_to_send)
+                        success = True
+                        break
+                    except Exception as e:
+                        if i == attempts - 1:
+                            logger.critical(f"Failed to upload binary chunk {seq} after {attempts} attempts: {e}")
+                            break
+                        wait_time = min(15, 2**i)
+                        await asyncio.sleep(wait_time)
+
+                if not success:
+                    raise RuntimeError("Persistent network failure while uploading stream chunks")
+
+                total_bytes += len(data_to_send)
+                seq += 1
+
+            # Send EOF when queue is fully drained and subprocess terminates
+            if seq > 0:
+                logger.info(f"Drained binary stream queue. Sending EOF with {seq} chunks, {total_bytes} bytes.")
+                path = f"/jobs/{self.job_id}/streams/stdout/eof"
+                payload = {"final_sequence": seq - 1, "total_bytes": total_bytes}
+                await self.client.post(path, json=payload)
+
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"Error in binary uploader for job {self.job_id}: {e}", exc_info=True)
+
     async def _do_work(self) -> int:
         """
         Executes the actual job work.
         """
-        return await self.executor.execute(self._send_log)
+        # Launch binary chunk uploader background task
+        self._binary_uploader_task = asyncio.create_task(self._binary_uploader())
+
+        async def _on_binary_data(data: bytes):
+            await self._binary_queue.put(data)
+
+        try:
+            # Call with binary_callback, falling back to log_callback only
+            # if the executor is a mock that doesn't accept a second parameter
+            try:
+                ret = await self.executor.execute(self._send_log, _on_binary_data)
+            except TypeError as te:
+                if "positional argument" in str(te) or "unexpected keyword" in str(te):
+                    ret = await self.executor.execute(self._send_log)
+                else:
+                    raise
+            self._executor_done = True
+            return ret
+        finally:
+            # Ensure uploader task drains and finishes sending EOF before returning
+            self._executor_done = True
+            if self._binary_uploader_task:
+                await self._binary_uploader_task
 
     async def _run(self):
         """Main execution flow for the job."""
@@ -255,6 +339,12 @@ class JobRunner:
             if self._log_flusher_task:
                 try:
                     await self._log_flusher_task
+                except asyncio.CancelledError:
+                    pass
+
+            if self._binary_uploader_task:
+                try:
+                    await self._binary_uploader_task
                 except asyncio.CancelledError:
                     pass
 

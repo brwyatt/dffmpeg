@@ -20,6 +20,8 @@ from dffmpeg.common.models import (
     JobStatusMessage,
     JobStatusPayload,
     JobStatusUpdate,
+    JobStreamModeSwitchMessage,
+    JobStreamModeSwitchPayload,
     LogEntry,
     StreamName,
 )
@@ -676,6 +678,7 @@ async def job_stream_write_chunk(
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     job_repo: JobRepository = Depends(get_job_repo),
     streams: StreamStorageManager = Depends(get_streams),
+    transports: TransportManager = Depends(get_transports),
 ) -> CommandResponse:
     """
     Worker uploads a raw binary chunk for an assigned job's stream.
@@ -698,6 +701,21 @@ async def job_stream_write_chunk(
 
     data = await request.body()
     await streams.write_chunk(str(j_id), stream_name, seq, data)
+
+    # Automatically notify client about transition to binary streaming on chunk 0
+    if seq == 0:
+        await transports.send_message(
+            JobStreamModeSwitchMessage(
+                recipient_id=job.requester_id,
+                job_id=j_id,
+                payload=JobStreamModeSwitchPayload(
+                    stream=stream_name,
+                    mode="binary",
+                    endpoint_path=f"/jobs/{j_id}/streams/{stream_name}",
+                ),
+            )
+        )
+
     return CommandResponse(status="ok")
 
 

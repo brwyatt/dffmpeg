@@ -19,7 +19,7 @@ from dffmpeg.common.models import (
     StreamProgress,
 )
 from dffmpeg.coordinator.api.auth import required_hmac_auth
-from dffmpeg.coordinator.api.dependencies import get_job_repo, get_streams
+from dffmpeg.coordinator.api.dependencies import get_job_repo, get_streams, get_transports
 from dffmpeg.coordinator.api.routes.job import (
     job_client_heartbeat,
     job_stream_ack,
@@ -539,6 +539,7 @@ def test_job_stream_endpoints_validation_with_client():
     app.dependency_overrides[required_hmac_auth] = lambda: None
     app.dependency_overrides[get_job_repo] = lambda: None
     app.dependency_overrides[get_streams] = lambda: None
+    app.dependency_overrides[get_transports] = lambda: None
 
     client = TestClient(app)
 

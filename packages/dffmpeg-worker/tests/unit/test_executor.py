@@ -63,3 +63,112 @@ async def test_executor_cancellation_terminates_process():
         # Verify terminate was called
         # The finally block calls process.terminate()
         mock_process.terminate.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_executor_pure_text_stdout():
+    # Setup mock process
+    mock_process = Mock()
+    mock_process.returncode = 0
+
+    mock_process.stdout = AsyncMock()
+    mock_process.stdout.readline.side_effect = [b"line 1\n", b"line 2\n", b""]
+
+    mock_process.stderr = AsyncMock()
+    mock_process.stderr.readline.side_effect = [b""]
+    mock_process.wait = AsyncMock(return_value=0)
+
+    executor = SubprocessJobExecutor(job_id="test_job", binary_path="ffmpeg", arguments=[], path_map={})
+
+    logs_received = []
+
+    async def log_callback(entry):
+        logs_received.append(entry)
+
+    binary_received = []
+
+    async def binary_callback(data):
+        binary_received.append(data)
+
+    with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)):
+        exit_code = await executor.execute(log_callback, binary_callback)
+
+    assert exit_code == 0
+    assert len(logs_received) == 2
+    assert logs_received[0].content == "line 1"
+    assert logs_received[1].content == "line 2"
+    assert len(binary_received) == 0
+
+
+@pytest.mark.asyncio
+async def test_executor_pure_binary_stdout():
+    # Setup mock process
+    mock_process = Mock()
+    mock_process.returncode = 0
+
+    # Mock binary stream data (contains non-UTF-8 bytes like 0x80)
+    mock_process.stdout = AsyncMock()
+    # readline/read mocks depending on implementation
+    mock_process.stdout.readline.side_effect = [b"\x80\x01\x02", b""]
+    mock_process.stdout.read = AsyncMock(side_effect=[b""])
+
+    mock_process.stderr = AsyncMock()
+    mock_process.stderr.readline.side_effect = [b""]
+    mock_process.wait = AsyncMock(return_value=0)
+
+    executor = SubprocessJobExecutor(job_id="test_job", binary_path="ffmpeg", arguments=[], path_map={})
+
+    logs_received = []
+
+    async def log_callback(entry):
+        logs_received.append(entry)
+
+    binary_received = []
+
+    async def binary_callback(data):
+        binary_received.append(data)
+
+    with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)):
+        exit_code = await executor.execute(log_callback, binary_callback)
+
+    assert exit_code == 0
+    assert len(logs_received) == 0
+    assert len(binary_received) > 0
+    assert b"".join(binary_received) == b"\x80\x01\x02"
+
+
+@pytest.mark.asyncio
+async def test_executor_mixed_text_and_binary_stdout():
+    # Setup mock process
+    mock_process = Mock()
+    mock_process.returncode = 0
+
+    # Mock mixed data: first line text, then raw binary bytes
+    mock_process.stdout = AsyncMock()
+    mock_process.stdout.readline.side_effect = [b"text header\n", b"\x00\x01\x02", b""]
+    mock_process.stdout.read = AsyncMock(side_effect=[b""])
+
+    mock_process.stderr = AsyncMock()
+    mock_process.stderr.readline.side_effect = [b""]
+    mock_process.wait = AsyncMock(return_value=0)
+
+    executor = SubprocessJobExecutor(job_id="test_job", binary_path="ffmpeg", arguments=[], path_map={})
+
+    logs_received = []
+
+    async def log_callback(entry):
+        logs_received.append(entry)
+
+    binary_received = []
+
+    async def binary_callback(data):
+        binary_received.append(data)
+
+    with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)):
+        exit_code = await executor.execute(log_callback, binary_callback)
+
+    assert exit_code == 0
+    assert len(logs_received) == 1
+    assert logs_received[0].content == "text header"
+    assert len(binary_received) > 0
+    assert b"".join(binary_received) == b"\x00\x01\x02"

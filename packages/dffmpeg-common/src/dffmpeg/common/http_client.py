@@ -57,6 +57,26 @@ class AuthenticatedAsyncClient:
         """Sends a POST request."""
         return await self.request("POST", url, json=json, **kwargs)
 
+    async def post_binary(self, url: str, content: bytes, **kwargs) -> httpx.Response:
+        """
+        Sends a signed POST request with raw binary content.
+        """
+        headers = kwargs.pop("headers", {})
+
+        # Strip query parameters (if any) to get the correct path for HMAC signing
+        signing_path = url.split("?")[0]
+
+        timestamp, signature = self.signer.sign("POST", signing_path, payload=content)
+        headers.update(
+            {
+                "x-dffmpeg-client-id": self.client_id,
+                "x-dffmpeg-timestamp": str(timestamp),
+                "x-dffmpeg-signature": signature,
+                "Content-Type": "application/octet-stream",
+            }
+        )
+        return await self._client.post(url, content=content, headers=headers, **kwargs)
+
     async def aclose(self):
         """Closes the underlying client."""
         await self._client.aclose()
