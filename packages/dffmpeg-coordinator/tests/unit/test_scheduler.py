@@ -3,12 +3,7 @@ from unittest.mock import ANY, AsyncMock
 import pytest
 from ulid import ULID
 
-from dffmpeg.common.models import (
-    JobRequestMessage,
-    JobStatusMessage,
-)
-from dffmpeg.coordinator.db.jobs import JobRecord
-from dffmpeg.coordinator.db.workers import WorkerRecord
+from dffmpeg.common.models import JobRecord, JobRequestMessage, JobStatusMessage, WorkerRecord
 from dffmpeg.coordinator.scheduler import process_job_assignment
 
 
@@ -163,3 +158,39 @@ async def test_process_job_assignment_no_exclusion_fallback(job_repo, worker_rep
     job_repo.update_status.assert_called_once_with(job_id, "assigned", worker_id="w1", timestamp=ANY)
     assert transports.send_message.call_count == 2
     assert transports.send_message.call_args_list[0][0][0].recipient_id == "w1"
+
+
+@pytest.mark.anyio
+async def test_process_job_assignment_supported_features_plumbed(job_repo, worker_repo, transports):
+    """Test that process_job_assignment forwards supported_features to JobRequestPayload."""
+    job_id = ULID()
+    job = JobRecord(
+        job_id=job_id,
+        requester_id="client1",
+        binary_name="ffmpeg",
+        status="pending",
+        paths=["/data"],
+        arguments=["-i", "input.mp4", "output.mkv"],
+        transport="http_polling",
+        transport_metadata={},
+        supported_features=["binary_stream"],
+    )
+    job_repo.get_job.return_value = job
+
+    worker = WorkerRecord(
+        worker_id="w1",
+        status="online",
+        binaries=["ffmpeg"],
+        paths=["/data"],
+        transport="http_polling",
+        transport_metadata={},
+        registration_interval=60,
+    )
+    worker_repo.get_workers_by_status.return_value = [worker]
+    job_repo.get_worker_load.return_value = {}
+
+    await process_job_assignment(job_id, job_repo, worker_repo, transports)
+
+    assert transports.send_message.call_count == 2
+    request_msg = transports.send_message.call_args_list[0][0][0]
+    assert request_msg.payload.supported_features == ["binary_stream"]

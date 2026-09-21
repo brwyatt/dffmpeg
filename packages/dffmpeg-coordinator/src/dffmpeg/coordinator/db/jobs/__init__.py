@@ -35,6 +35,7 @@ class JobRepository(BaseDB):
         Column("callback_transport_metadata", JSON, nullable=False),
         Column("heartbeat_interval", Integer, nullable=False),
         Column("monitor", Boolean, nullable=False, default=False, index=True),
+        Column("supported_features", JSON, nullable=False, server_default="[]"),
     )
 
     def __new__(cls, *args, engine: str, **kwargs):

@@ -159,7 +159,7 @@ class EOFPayload(BaseModel):
     Payload for stream EOF signaling.
     """
 
-    final_sequence: int = Field(ge=0)
+    final_sequence: Optional[int] = Field(default=None, ge=-1)
     total_bytes: int = Field(ge=0)
 
 

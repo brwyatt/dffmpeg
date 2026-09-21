@@ -97,6 +97,7 @@ async def job_submit(
         heartbeat_interval=payload.heartbeat_interval or config.default_job_heartbeat_interval,
         monitor=payload.monitor,
         client_last_seen=now if payload.monitor else None,
+        supported_features=payload.supported_features,
     )
 
     await job_repo.create_job(job_record)

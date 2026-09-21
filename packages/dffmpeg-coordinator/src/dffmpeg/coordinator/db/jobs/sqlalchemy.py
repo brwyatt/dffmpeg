@@ -39,6 +39,7 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             heartbeat_interval=job.heartbeat_interval,
             monitor=job.monitor,
             client_last_seen=job.client_last_seen,
+            supported_features=safe_job.get("supported_features", []),
         )
         sql, params = self.compile_query(query)
         await self.execute(sql, params)
@@ -70,6 +71,7 @@ class SQLAlchemyJobRepository(JobRepository, SQLAlchemyDB):
             heartbeat_interval=row["heartbeat_interval"],
             monitor=bool(row["monitor"]),
             client_last_seen=ensure_utc(row["client_last_seen"]),
+            supported_features=parse_json(row.get("supported_features", "[]")),
         )
 
     async def get_job(self, job_id: ULID) -> Optional[JobRecord]:

@@ -450,3 +450,21 @@ async def test_job_stream_ack_immediate_cleanup_api(temp_storage):
     assert response == CommandResponse(status="ok")
     # File must be deleted immediately
     assert not (temp_storage / str(job_id)).exists()
+
+
+@pytest.mark.anyio
+async def test_stream_storage_manager_empty_stream(temp_storage):
+    manager = StreamStorageManager(str(temp_storage))
+    job_id = str(ULID())
+    stream_name = "stdout"
+
+    # Now we can safely write EOF via write_eof using an EOFPayload with None/0
+    await manager.write_eof(job_id, stream_name, EOFPayload(final_sequence=None, total_bytes=0))
+
+    # The stream_chunks generator should now detect 0-bytes empty stream EOF immediately
+    # and complete without hanging/timeout.
+    chunks = []
+    async with asyncio.timeout(0.2):
+        async for chunk in manager.stream_chunks(job_id, stream_name, start_offset=0):
+            chunks.append(chunk)
+    assert chunks == []

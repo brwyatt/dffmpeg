@@ -217,7 +217,13 @@ class StreamStorageManager:
                 eof_meta = await asyncio.to_thread(_read_eof_meta)
                 if eof_meta:
                     final_seq = eof_meta.final_sequence
-                    if current_seq > final_seq:
+                    if (
+                        eof_meta.total_bytes == 0
+                        or final_seq is None
+                        or final_seq == -1
+                        or current_seq > final_seq
+                        or cumulative_bytes >= eof_meta.total_bytes
+                    ):
                         logger.debug(f"Stream {job_id}/{stream_name} completed EOF at seq {final_seq}")
                         break
 
