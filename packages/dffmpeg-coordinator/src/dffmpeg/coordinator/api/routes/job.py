@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from logging import getLogger
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from ulid import ULID
 
@@ -671,8 +671,8 @@ async def job_logs_get(
 async def job_stream_write_chunk(
     job_id: str,
     stream_name: StreamName,
-    seq: int,
     request: Request,
+    seq: int = Query(ge=0),
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     job_repo: JobRepository = Depends(get_job_repo),
     streams: StreamStorageManager = Depends(get_streams),
@@ -692,6 +692,10 @@ async def job_stream_write_chunk(
     if job.worker_id != identity.client_id:
         raise HTTPException(status_code=403, detail="Not assigned to this job")
 
+    # Reject chunk writes on terminal/inactive jobs
+    if job.status not in ["assigned", "running"]:
+        raise HTTPException(status_code=409, detail=f"Job is in '{job.status}' state")
+
     data = await request.body()
     await streams.write_chunk(str(j_id), stream_name, seq, data)
     return CommandResponse(status="ok")
@@ -700,7 +704,7 @@ async def job_stream_write_chunk(
 @router.post("/jobs/{job_id}/streams/{stream_name}/eof")
 async def job_stream_write_eof(
     job_id: str,
-    stream_name: str,
+    stream_name: StreamName,
     payload: EOFPayload,
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     job_repo: JobRepository = Depends(get_job_repo),
@@ -729,7 +733,7 @@ async def job_stream_write_eof(
 async def job_stream_download(
     job_id: str,
     stream_name: StreamName,
-    start_offset: int = 0,
+    start_offset: int = Query(default=0, ge=0),
     identity: AuthenticatedIdentity = Depends(required_hmac_auth),
     job_repo: JobRepository = Depends(get_job_repo),
     streams: StreamStorageManager = Depends(get_streams),
@@ -749,6 +753,11 @@ async def job_stream_download(
     if job.requester_id != identity.client_id and identity.role != "admin":
         raise HTTPException(status_code=403, detail="No permission to view this job")
 
+    # Fast validation: Avoid infinite polling if a job finished/aborted with no stream data on disk
+    stream_dir = streams._get_stream_dir(str(j_id), stream_name)  # pyright: ignore[reportPrivateUsage]
+    if job.status in ["completed", "failed", "canceled"] and not stream_dir.exists():
+        raise HTTPException(status_code=404, detail="No stream data available for this job")
+
     # Fast validation: Ensure requested offset has not already been pruned
     pruned_bytes = await asyncio.to_thread(streams.get_pruned_bytes, str(j_id), stream_name)
     if start_offset < pruned_bytes:
@@ -759,7 +768,12 @@ async def job_stream_download(
         )
 
     return StreamingResponse(
-        streams.stream_chunks(str(j_id), stream_name, start_offset), media_type="application/octet-stream"
+        streams.stream_chunks(str(j_id), stream_name, start_offset),
+        media_type="application/octet-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 
@@ -787,7 +801,10 @@ async def job_stream_ack(
     if job.requester_id != identity.client_id and identity.role != "admin":
         raise HTTPException(status_code=403, detail="No permission to view this job")
 
-    if job.status in ["completed", "failed", "canceled"]:
+    if (
+        job.status in ["completed", "failed", "canceled"]
+        or (streams._get_stream_dir(str(j_id), stream_name) / "EOF").exists()  # pyright: ignore[reportPrivateUsage]
+    ):
         await streams.delete_stream(str(j_id), stream_name)
 
     return CommandResponse(status="ok")

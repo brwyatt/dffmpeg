@@ -297,7 +297,7 @@ async def test_job_stream_write_chunk_api():
     mock_request.body.return_value = b"test payload data"
 
     mock_job_repo = AsyncMock()
-    mock_job_repo.get_job.return_value = Mock(worker_id=worker_id)
+    mock_job_repo.get_job.return_value = Mock(worker_id=worker_id, status="running")
 
     mock_streams = AsyncMock()
 
@@ -347,7 +347,7 @@ async def test_job_stream_write_eof_api():
     worker_id = "worker01"
 
     mock_job_repo = AsyncMock()
-    mock_job_repo.get_job.return_value = Mock(worker_id=worker_id)
+    mock_job_repo.get_job.return_value = Mock(worker_id=worker_id, status="running")
     mock_streams = AsyncMock()
 
     identity = AuthenticatedIdentity(client_id=worker_id, role="worker", authenticated=True, hmac_key="a" * 44)
@@ -552,4 +552,79 @@ def test_job_stream_endpoints_validation_with_client():
 
     # Attempt to call download endpoint with invalid stream_name
     resp = client.get("/jobs/01M32GJMWNFTW5S931M5H1QGAE/streams/stdin")
+    assert resp.status_code == 422
+
+
+@pytest.mark.anyio
+async def test_job_stream_write_chunk_inactive_job_conflict():
+    """Test that writing chunks to terminal/inactive jobs raises HTTP 409 Conflict."""
+    job_id = ULID()
+    worker_id = "worker01"
+    mock_request = AsyncMock()
+
+    mock_job_repo = AsyncMock()
+    # Job status is completed (inactive)
+    mock_job_repo.get_job.return_value = Mock(worker_id=worker_id, status="completed")
+    mock_streams = AsyncMock()
+
+    identity = AuthenticatedIdentity(client_id=worker_id, role="worker", authenticated=True, hmac_key="a" * 44)
+
+    with pytest.raises(HTTPException) as exc:
+        await job_stream_write_chunk(
+            job_id=str(job_id),
+            stream_name="stdout",
+            seq=5,
+            request=mock_request,
+            identity=identity,
+            job_repo=mock_job_repo,
+            streams=mock_streams,
+        )
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.anyio
+async def test_job_stream_download_non_existent_folder_api():
+    """
+    Test that downloading a non-existent stream on a completed job raises HTTP 404 Not Found instantly instead of
+    hanging.
+    """
+    job_id = ULID()
+    client_id = "client01"
+
+    mock_job_repo = AsyncMock()
+    # Job is completed (terminal) but no stream data dir exists
+    mock_job_repo.get_job.return_value = Mock(requester_id=client_id, status="completed")
+
+    mock_streams = AsyncMock()
+    mock_streams.get_pruned_bytes = Mock(return_value=0)
+    # Define _get_stream_dir as a regular Mock (synchronous) returning Path
+    mock_streams._get_stream_dir = Mock(return_value=Path("/nonexistent/job/stdout"))
+
+    identity = AuthenticatedIdentity(client_id=client_id, role="client", authenticated=True, hmac_key="a" * 44)
+
+    with pytest.raises(HTTPException) as exc:
+        await job_stream_download(
+            job_id=str(job_id),
+            stream_name="stdout",
+            start_offset=0,
+            identity=identity,
+            job_repo=mock_job_repo,
+            streams=mock_streams,
+        )
+    assert exc.value.status_code == 404
+
+
+def test_job_stream_download_validation_constraints_api():
+    """Test that start_offset query parameter validation rejects negative integers with HTTP 422."""
+    app = FastAPI()
+    app.include_router(router)
+
+    app.dependency_overrides[required_hmac_auth] = lambda: None
+    app.dependency_overrides[get_job_repo] = lambda: None
+    app.dependency_overrides[get_streams] = lambda: None
+
+    client = TestClient(app)
+
+    # Attempt to call download endpoint with negative start_offset
+    resp = client.get("/jobs/01M32GJMWNFTW5S931M5H1QGAE/streams/stdout?start_offset=-100")
     assert resp.status_code == 422
