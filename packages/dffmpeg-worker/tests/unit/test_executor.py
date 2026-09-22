@@ -430,3 +430,43 @@ async def test_executor_universal_endings_64kb_chunking_none():
     assert logs_received[0].ending == LogEnding.NONE
     assert len(logs_received[1].content) == 6 * 1024
     assert logs_received[1].ending == LogEnding.NONE
+
+
+@pytest.mark.asyncio
+async def test_executor_split_multibyte_utf8_does_not_trigger_binary_mode():
+    """Verify that split multi-byte UTF-8 boundaries across chunks do not trigger binary mode."""
+    # Setup mock process
+    mock_process = Mock()
+    mock_process.returncode = 0
+
+    # Feed split multi-byte CJK character: 'Hello 日\n'
+    # '日' in UTF-8 is b'\xe6\x97\xa5'.
+    # Chunk 1 ends with b'\xe6' (first byte of '日').
+    # Chunk 2 begins with b'\x97\xa5\n' (remaining bytes of '日' plus newline).
+    mock_process.stdout = AsyncMock()
+    mock_process.stdout.read.side_effect = [b"Hello \xe6", b"\x97\xa5\n", b""]
+
+    mock_process.stderr = AsyncMock()
+    mock_process.stderr.read.side_effect = [b""]
+    mock_process.wait = AsyncMock(return_value=0)
+
+    executor = SubprocessJobExecutor(job_id="test_job", binary_path="ffmpeg", arguments=[], path_map={})
+
+    logs_received = []
+
+    async def log_callback(entry):
+        logs_received.append(entry)
+
+    binary_received = []
+
+    async def binary_callback(data):
+        binary_received.append(data)
+
+    with patch("asyncio.create_subprocess_exec", new=AsyncMock(return_value=mock_process)):
+        exit_code = await executor.execute(log_callback, binary_callback)
+
+    assert exit_code == 0
+    assert len(binary_received) == 0
+    assert len(logs_received) == 1
+    assert logs_received[0].content == "Hello 日"
+    assert logs_received[0].ending == LogEnding.LF

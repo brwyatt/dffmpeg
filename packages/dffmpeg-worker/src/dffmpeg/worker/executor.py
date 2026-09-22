@@ -1,4 +1,5 @@
 import asyncio
+import codecs
 import logging
 import re
 from datetime import datetime, timezone
@@ -152,6 +153,7 @@ class SubprocessJobExecutor:
             binary_mode = False
             buffer = bytearray()
             chunk_limit = 64 * 1024  # 64KB line length limit before latching
+            utf8_decoder = codecs.getincrementaldecoder("utf-8")()
 
             try:
                 while True:
@@ -179,7 +181,7 @@ class SubprocessJobExecutor:
                             binary_mode = True
                         else:
                             try:
-                                data.decode("utf-8")
+                                utf8_decoder.decode(data, final=False)
                             except UnicodeDecodeError:
                                 binary_mode = True
 
