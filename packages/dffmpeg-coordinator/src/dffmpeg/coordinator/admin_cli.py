@@ -197,7 +197,7 @@ async def job_logs(db: DB, args: argparse.Namespace):
         if isinstance(msg, JobLogsMessage):
             for log in msg.payload.logs:
                 stream = sys.stdout if log.stream == "stdout" else sys.stderr
-                print(log.content, file=stream)
+                stream.write(log.content + log.ending.as_str())
                 stream.flush()
 
 

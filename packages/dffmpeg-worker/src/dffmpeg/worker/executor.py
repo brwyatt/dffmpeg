@@ -1,9 +1,10 @@
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
-from typing import Awaitable, Callable, Dict, List, Optional, Protocol
+from typing import Awaitable, Callable, Dict, List, Literal, Optional, Protocol
 
-from dffmpeg.common.models import LogEntry
+from dffmpeg.common.models import LogEnding, LogEntry
 from dffmpeg.common.paths import resolve_arguments, resolve_path
 
 logger = logging.getLogger(__name__)
@@ -70,20 +71,78 @@ class SubprocessJobExecutor:
             stderr=asyncio.subprocess.PIPE,
         )
 
-        async def read_stderr(stream):
-            try:
-                while True:
-                    line = await stream.readline()
-                    if not line:
+        DELIMITER_RE = re.compile(rb"\r\n|\r|\n")
+
+        async def parse_buffer_and_emit(buffer: bytearray, is_eof: bool, stream_name: Literal["stdout", "stderr"]):
+            chunk_limit = 64 * 1024
+            while True:
+                match = DELIMITER_RE.search(buffer)
+                if match:
+                    # Check Split-Packet \r Boundary: Standalone \r at the very end of the packet,
+                    # wait for more packets in case it is \r\n (CRLF).
+                    if not is_eof and match.group() == b"\r" and match.end() == len(buffer):
                         break
-                    decoded_line = line.decode("utf-8", errors="replace")
+
+                    line_bytes = buffer[: match.start()]
+                    delim = match.group()
+
+                    if delim == b"\r\n":
+                        ending = LogEnding.CRLF
+                    elif delim == b"\n":
+                        ending = LogEnding.LF
+                    else:
+                        ending = LogEnding.CR
+
+                    content_str = line_bytes.decode("utf-8", errors="replace")
                     await log_callback(
                         LogEntry(
-                            stream="stderr",
-                            content=decoded_line.rstrip("\r\n"),
+                            stream=stream_name,
+                            content=content_str,
+                            ending=ending,
                             timestamp=datetime.now(timezone.utc),
                         )
                     )
+                    del buffer[: match.end()]
+                else:
+                    # No delimiter matches found. Handle lines exceeding 64KB limit
+                    if len(buffer) >= chunk_limit:
+                        chunk_bytes = buffer[:chunk_limit]
+                        chunk_str = chunk_bytes.decode("utf-8", errors="replace")
+                        await log_callback(
+                            LogEntry(
+                                stream=stream_name,
+                                content=chunk_str,
+                                ending=LogEnding.NONE,
+                                timestamp=datetime.now(timezone.utc),
+                            )
+                        )
+                        del buffer[:chunk_limit]
+                        continue
+
+                    # Handle EOF residual buffer
+                    if is_eof and buffer:
+                        chunk_str = buffer.decode("utf-8", errors="replace")
+                        await log_callback(
+                            LogEntry(
+                                stream=stream_name,
+                                content=chunk_str,
+                                ending=LogEnding.NONE,
+                                timestamp=datetime.now(timezone.utc),
+                            )
+                        )
+                        buffer.clear()
+                    break
+
+        async def read_stderr(stream):
+            buffer = bytearray()
+            try:
+                while True:
+                    data = await stream.read(4096)
+                    if not data:
+                        await parse_buffer_and_emit(buffer, is_eof=True, stream_name="stderr")
+                        break
+                    buffer.extend(data)
+                    await parse_buffer_and_emit(buffer, is_eof=False, stream_name="stderr")
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -113,49 +172,22 @@ class SubprocessJobExecutor:
                                     if binary_callback:
                                         await binary_callback(bytes(buffer))
                                 else:
-                                    try:
-                                        decoded = buffer.decode("utf-8")
-                                        await log_callback(
-                                            LogEntry(
-                                                stream="stdout",
-                                                content=decoded.rstrip("\r\n"),
-                                                timestamp=datetime.now(timezone.utc),
-                                            )
-                                        )
-                                    except Exception:
-                                        if binary_callback:
-                                            await binary_callback(bytes(buffer))
+                                    await parse_buffer_and_emit(buffer, is_eof=True, stream_name="stdout")
                             break
 
                         if b"\x00" in data:
                             binary_mode = True
+                        else:
+                            try:
+                                data.decode("utf-8")
+                            except UnicodeDecodeError:
+                                binary_mode = True
 
                         buffer.extend(data)
 
-                        # Process complete lines
-                        while b"\n" in buffer:
-                            idx = buffer.index(b"\n")
-                            line_bytes = buffer[: idx + 1]
-
-                            # Trigger binary mode if null byte or line exceeds 64KB limit
-                            if b"\x00" in line_bytes or len(line_bytes) > chunk_limit:
-                                binary_mode = True
-                                break
-
-                            try:
-                                decoded_line = line_bytes.decode("utf-8")
-                                await log_callback(
-                                    LogEntry(
-                                        stream="stdout",
-                                        content=decoded_line.rstrip("\r\n"),
-                                        timestamp=datetime.now(timezone.utc),
-                                    )
-                                )
-                            except UnicodeDecodeError:
-                                binary_mode = True
-                                break
-
-                            del buffer[: idx + 1]
+                        if not binary_mode:
+                            # Process complete lines via universal regex parser
+                            await parse_buffer_and_emit(buffer, is_eof=False, stream_name="stdout")
 
                         # If binary mode was triggered or 64KB buffer limit exceeded
                         if binary_mode or len(buffer) > chunk_limit:

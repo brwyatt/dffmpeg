@@ -204,10 +204,6 @@ class JobRunner:
 
         try:
             while self._running and (not self._executor_done or not self._binary_queue.empty()):
-                logger.debug(
-                    f"DEBUG LOOP: running={self._running}, done={self._executor_done}, "
-                    f"empty={self._binary_queue.empty()}"
-                )
                 try:
                     # Non-blocking check or short wait for the next chunk
                     chunk = await asyncio.wait_for(self._binary_queue.get(), timeout=0.2)

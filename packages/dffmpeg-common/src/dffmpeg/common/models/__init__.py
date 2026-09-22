@@ -1,6 +1,7 @@
 import ipaddress
 import time
 from datetime import datetime, timezone
+from enum import StrEnum
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Discriminator, Field, Tag
@@ -199,6 +200,23 @@ class JobStatusUpdate(BaseModel):
     exit_code: Optional[int] = None
 
 
+class LogEnding(StrEnum):
+    LF = "lf"
+    CRLF = "crlf"
+    CR = "cr"
+    NONE = "none"
+
+    def as_str(self) -> str:
+        """Returns the raw string representation for rendering."""
+        mapping = {
+            LogEnding.LF: "\n",
+            LogEnding.CRLF: "\r\n",
+            LogEnding.CR: "\r",
+            LogEnding.NONE: "",
+        }
+        return mapping[self]
+
+
 class LogEntry(BaseModel):
     """
     Represents a single log line from a job.
@@ -207,6 +225,7 @@ class LogEntry(BaseModel):
     id: ULID = Field(default_factory=ULID)
     stream: Literal["stdout", "stderr"]
     content: str
+    ending: LogEnding = LogEnding.LF
     timestamp: datetime | None = None
 
 

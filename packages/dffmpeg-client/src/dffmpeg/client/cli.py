@@ -3,6 +3,7 @@ import asyncio
 import logging
 import os
 import sys
+from typing import Any, Dict
 
 from dffmpeg.client.api import DFFmpegClient
 from dffmpeg.client.config import load_config
@@ -30,7 +31,7 @@ logging.basicConfig(level=logging.WARNING, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 
-async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, metadata: dict) -> int:
+async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, metadata: Dict[str, Any]) -> int:
     """
     Streams logs and status for a job, waiting for completion.
     Returns exit code (0 for success, 1 for failure/cancellation).
@@ -42,10 +43,10 @@ async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, me
             if isinstance(message, JobLogsMessage):
                 for log in message.payload.logs:
                     stream = sys.stdout if log.stream == "stdout" else sys.stderr
-                    print(log.content, file=stream)
+                    stream.write(log.content + log.ending.as_str())
                     stream.flush()
 
-            elif isinstance(message, JobStatusMessage):
+            elif isinstance(message, JobStatusMessage):  # pyright: ignore[reportUnnecessaryIsInstance]
                 status = message.payload.status
                 if status == "completed":
                     exit_code = message.payload.exit_code if message.payload.exit_code is not None else 0
@@ -196,7 +197,7 @@ async def job_logs(client: DFFmpegClient, args: argparse.Namespace) -> int:
 
             for log in logs:
                 stream = sys.stdout if log.stream == "stdout" else sys.stderr
-                print(log.content, file=stream)
+                stream.write(log.content + log.ending.as_str())
                 stream.flush()
 
             if resp.last_message_id:
@@ -219,7 +220,7 @@ async def job_logs(client: DFFmpegClient, args: argparse.Namespace) -> int:
         logs = sorted(resp.logs, key=lambda log: (log.timestamp if log.timestamp else 0))
         for log in logs:
             stream = sys.stdout if log.stream == "stdout" else sys.stderr
-            print(log.content, file=stream)
+            stream.write(log.content + log.ending.as_str())
             stream.flush()
 
         return 0

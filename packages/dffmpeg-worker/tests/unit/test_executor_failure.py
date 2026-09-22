@@ -23,6 +23,7 @@ async def test_executor_stream_read_failure_returns_exit_code():
     # stderr will return a line and then EOF
     mock_process.stderr = AsyncMock()
     mock_process.stderr.readline.side_effect = [b"Error log line\n", b""]
+    mock_process.stderr.read.side_effect = [b"Error log line\n", b""]
 
     # wait() just returns the exit code
     async def mock_wait():

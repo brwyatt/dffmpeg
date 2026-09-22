@@ -11,6 +11,8 @@ from dffmpeg.common.models import (
     JobRequestPayload,
     JobStreamModeSwitchMessage,
     JobStreamModeSwitchPayload,
+    LogEnding,
+    LogEntry,
     Message,
 )
 
@@ -143,3 +145,29 @@ def test_job_request_payload_supported_features_backward_compatibility():
     payload_dict["supported_features"] = ["binary_stream"]
     payload = JobRequestPayload.model_validate(payload_dict)
     assert payload.supported_features == ["binary_stream"]
+
+
+def test_log_ending_enum():
+    assert LogEnding.LF == "lf"
+    assert LogEnding.CRLF == "crlf"
+    assert LogEnding.CR == "cr"
+    assert LogEnding.NONE == "none"
+
+    assert LogEnding.LF.as_str() == "\n"
+    assert LogEnding.CRLF.as_str() == "\r\n"
+    assert LogEnding.CR.as_str() == "\r"
+    assert LogEnding.NONE.as_str() == ""
+
+
+def test_log_entry_ending_default_backward_compatibility():
+    entry_dict = {
+        "stream": "stdout",
+        "content": "some log content",
+    }
+    entry = LogEntry.model_validate(entry_dict)
+    assert entry.ending == LogEnding.LF
+
+    # Validate JSON deserialization when ending is present
+    entry_dict["ending"] = "cr"
+    entry = LogEntry.model_validate(entry_dict)
+    assert entry.ending == LogEnding.CR
