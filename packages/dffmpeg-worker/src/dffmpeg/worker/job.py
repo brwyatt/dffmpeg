@@ -268,7 +268,11 @@ class JobRunner:
         self._binary_uploader_task = asyncio.create_task(self._binary_uploader())
 
         async def _on_binary_data(data: bytes):
-            self._binary_mode_active = True
+            if not self._binary_mode_active:
+                self._binary_mode_active = True
+                # Instantly flush any pending text logs to the Coordinator
+                # so they are guaranteed to be published before the stream switch!
+                await self._flush_logs()
             await self._binary_queue.put(data)
 
         async def run_executor():

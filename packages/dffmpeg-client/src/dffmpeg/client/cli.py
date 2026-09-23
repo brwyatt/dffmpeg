@@ -48,6 +48,11 @@ async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, me
                     stream.flush()
 
             elif isinstance(message, JobStreamModeSwitchMessage):
+                # Flush both stdout and stderr text streams to ensure perfect chronological order
+                # before we start streaming binary bytes over the binary_stream_task!
+                sys.stdout.flush()
+                sys.stderr.flush()
+
                 # Bind variables to local scope to prevent loop race conditions
                 stream_name = message.payload.stream
 
