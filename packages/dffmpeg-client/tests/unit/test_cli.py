@@ -190,6 +190,7 @@ async def test_stream_and_wait_mode_switch_success():
     # Setup mocks
     mock_client = MagicMock()
     mock_client.total_bytes_read = 0
+    mock_client.ack_stream = AsyncMock()
     job_id = ULID()
 
     switch_msg = JobStreamModeSwitchMessage(
@@ -234,3 +235,5 @@ async def test_stream_and_wait_mode_switch_success():
     mock_buffer.write.assert_any_call(b"chunk 2 data")
     # Verify that total_bytes_read was updated on the client
     assert mock_client.total_bytes_read == 24  # len(chunk 1) + len(chunk 2)
+    # Verify that client stream completion ACK was successfully sent to the coordinator
+    mock_client.ack_stream.assert_awaited_once_with(str(job_id), "stdout")
