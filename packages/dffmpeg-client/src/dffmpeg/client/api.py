@@ -244,6 +244,15 @@ class DFFmpegClient:
             async for chunk in response.aiter_bytes():
                 yield chunk
 
+    async def ack_stream(self, job_id: str, stream_name: str, final_seq_read: Optional[int] = None):
+        """
+        Sends a completion ACK to the coordinator to trigger immediate disk cleanup of stream chunks.
+        """
+        path = f"/jobs/{job_id}/streams/{stream_name}/ack"
+        payload = {"completed": True, "final_seq_read": final_seq_read}
+        resp = await self.client.post(path, json=payload)
+        resp.raise_for_status()
+
     async def close(self):
         """Closes the client and any active transports."""
         await self._stop_heartbeat_loop()

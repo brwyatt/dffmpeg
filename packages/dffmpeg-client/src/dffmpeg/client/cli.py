@@ -67,6 +67,13 @@ async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, me
                                 sys.stdout.buffer.write(chunk)
                                 sys.stdout.buffer.flush()
                                 client.total_bytes_read += len(chunk)
+
+                            # Send completion ACK to trigger immediate disk cleanup on Coordinator
+                            try:
+                                await client.ack_stream(job_id, stream_name)
+                            except Exception as e:
+                                logger.warning(f"Failed to send stream completion ACK: {e}")
+
                             break  # Completed successfully!
                         except asyncio.CancelledError:
                             raise
