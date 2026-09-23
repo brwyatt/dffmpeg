@@ -8,12 +8,15 @@ from dffmpeg.client.config import ClientConfig
 from dffmpeg.common.http_client import AuthenticatedAsyncClient
 from dffmpeg.common.loop_utils import heartbeat_loop
 from dffmpeg.common.models import (
+    ClientHeartbeatPayload,
     CommandResponse,
     JobLogsMessage,
     JobLogsResponse,
     JobRecord,
     JobRequest,
     JobStatusMessage,
+    JobStreamModeSwitchMessage,
+    StreamProgress,
     Worker,
 )
 from dffmpeg.common.transports import TransportManager
@@ -43,6 +46,7 @@ class DFFmpegClient:
         self.active_transport = None
         self._monitoring = False
         self._heartbeat_task: Optional[asyncio.Task[None]] = None
+        self.total_bytes_read = 0
 
     async def submit_job(
         self,
@@ -175,7 +179,11 @@ class DFFmpegClient:
         path = f"/jobs/{job_id}/client_heartbeat"
 
         async def _action():
-            resp = await self.client.post(path)
+            payload = ClientHeartbeatPayload(
+                streams_progress={"stdout": StreamProgress(bytes_read=getattr(self, "total_bytes_read", 0))}
+            )
+            body = payload.model_dump(mode="json", exclude_none=True)
+            resp = await self.client.post(path, json=body)
             logger.debug(f"[{self.config.client_id}] Sent heartbeat for {job_id}")
             if resp.status_code != 200:
                 logger.warning(f"Client heartbeat failed: {resp.status_code} - {resp.text}")
@@ -195,7 +203,7 @@ class DFFmpegClient:
 
     async def stream_job(
         self, job_id: str, transport_name: str, transport_metadata: Dict[str, Any]
-    ) -> AsyncIterator[Union[JobStatusMessage, JobLogsMessage]]:
+    ) -> AsyncIterator[Union[JobStatusMessage, JobLogsMessage, JobStreamModeSwitchMessage]]:
         """
         Connects to the specified transport and yields status and log messages for the job.
         """
@@ -213,18 +221,28 @@ class DFFmpegClient:
                 if message.job_id != ULID.from_str(job_id):
                     continue
 
-                if isinstance(message, (JobStatusMessage, JobLogsMessage)):
+                if isinstance(message, (JobStatusMessage, JobLogsMessage, JobStreamModeSwitchMessage)):
                     yield message
-
-                    # If job is terminal, we can stop listening
-                    if isinstance(message, JobStatusMessage):
-                        status = message.payload.status
-                        if status in ["completed", "failed", "canceled"]:
-                            break
 
         finally:
             await transport.disconnect()
             self.active_transport = None
+
+    async def stream_binary(self, job_id: str, stream_name: str, start_offset: int = 0) -> AsyncIterator[bytes]:
+        """
+        Streams raw binary chunks of a specific job stream from the coordinator.
+        """
+        path = f"/jobs/{job_id}/streams/{stream_name}?start_offset={start_offset}"
+
+        # Sign and stream via our public http client helper!
+        async with self.client.stream("GET", path) as response:
+            if response.status_code == 416:
+                raise ValueError("Requested range not satisfied (data has been pruned on Coordinator)")
+            elif response.status_code != 200:
+                response.raise_for_status()
+
+            async for chunk in response.aiter_bytes():
+                yield chunk
 
     async def close(self):
         """Closes the client and any active transports."""

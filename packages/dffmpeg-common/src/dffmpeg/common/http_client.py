@@ -1,5 +1,6 @@
 import logging
-from typing import Any, Callable, Dict, Optional
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Callable, Dict, Optional
 
 import httpx
 
@@ -56,6 +57,28 @@ class AuthenticatedAsyncClient:
     async def post(self, url: str, json: Optional[Dict[str, Any]] = None, **kwargs) -> httpx.Response:
         """Sends a POST request."""
         return await self.request("POST", url, json=json, **kwargs)
+
+    @asynccontextmanager
+    async def stream(self, method: str, url: str, **kwargs) -> AsyncIterator[httpx.Response]:
+        """
+        An async context manager that makes a signed, streaming HTTP request.
+        """
+        headers = kwargs.pop("headers", {})
+
+        # Strip query parameters (if any) to get the correct path for HMAC signing
+        signing_path = url.split("?")[0]
+
+        timestamp, signature = self.signer.sign(method.upper(), signing_path)
+        headers.update(
+            {
+                "x-dffmpeg-client-id": self.client_id,
+                "x-dffmpeg-timestamp": str(timestamp),
+                "x-dffmpeg-signature": signature,
+            }
+        )
+
+        async with self._client.stream(method.upper(), url, headers=headers, **kwargs) as response:
+            yield response
 
     async def post_binary(self, url: str, content: bytes, **kwargs) -> httpx.Response:
         """
