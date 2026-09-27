@@ -16,7 +16,7 @@ from dffmpeg.coordinator.api.routes import admin, dashboard, health, job, metric
 from dffmpeg.coordinator.config import CoordinatorConfig, load_config
 from dffmpeg.coordinator.db import DB
 from dffmpeg.coordinator.janitor import Janitor
-from dffmpeg.coordinator.streams import StreamStorageManager
+from dffmpeg.coordinator.stream_storage import StreamStorageManager
 from dffmpeg.coordinator.transports import TransportManager
 
 logger = getLogger(__name__)

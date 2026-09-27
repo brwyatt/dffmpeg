@@ -295,8 +295,9 @@ To support high-throughput, byte-transparent streaming for commands that output 
 ```
 
 #### A. Worker-Side Adaptive Latching & Sync Flushes
-*   The Worker subprocess executor reads stdout using small chunk buffers (e.g. 4KB). It decodes them as text and yields them as standard `JobLogsMessage` payloads until a null byte (`\x00`) or non-UTF-8 sequence is encountered.
-*   Once triggered, it latches permanently to **Binary Mode**.
+*   The Worker subprocess utilizes the unified, shared **`StdioHandler`** class (located in `dffmpeg-common`'s `stdio_stream_handler.py`) to manage both standard output and standard error streams.
+*   This grants **both stdout and stderr** native, high-resolution line ending extraction (extracting CRLF, LF, and CR delimiters cleanly) with split-packet trail boundary buffering and >64KB line segment chunking.
+*   For `stdout`, `StdioHandler` is initialized with a binary callback. It decodes bytes as text in 4KB chunks until a null byte (`\x00`) or non-UTF-8 boundary is encountered, at which point it instantly latches permanently to **Binary Mode**.
 *   **Log Flush Synchronization**: To guarantee byte-perfect sequence and prevent initial text headers (like y4m or mpegts headers) from showing up out of order at the end of the client's file, the Worker instantly and synchronously flushes its entire log queue (`_flush_logs()`) to the Coordinator's database *before* starting the binary uploader task.
 *   The Worker then streams subsequent chunks directly to the Coordinator via HTTP POST.
 

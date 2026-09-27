@@ -29,7 +29,7 @@ from dffmpeg.coordinator.api.routes.job import (
     router,
 )
 from dffmpeg.coordinator.janitor import Janitor
-from dffmpeg.coordinator.streams import StreamStorageManager
+from dffmpeg.coordinator.stream_storage import StreamStorageManager
 
 
 @pytest.fixture

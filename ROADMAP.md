@@ -29,7 +29,7 @@ This document outlines the development phases for DFFmpeg, leading up to version
     - [x] **Phase 4 (Client Consumer)**: Implement continuous streaming client downloads, sequential log flushing, and E2E integration verification (`dffmpeg-client`).
 - [ ] **Stream Performance & Stderrs (Next Steps)**:
     - [ ] **Configurable Stream Chunk Size**: Allow users/configs to tune stream block chunk sizes to trade speed/bandwidth efficiency vs. real-time latency.
-    - [ ] **Line-Ending Tracking for Stderr**: Port the universal multi-delimiter `LogEnding` tracking parser to `stderr` stream logs (matching stdout).
+    - [x] **Line-Ending Tracking for Stderr**: Port the universal multi-delimiter `LogEnding` tracking parser to `stderr` stream logs (matching stdout).
 - [x] **Observability / Metrics**: Implement structured metrics (e.g., Prometheus) for queue depth, worker status, etc.
 - [x] **Database Migrations**: Establish a formal strategy for schema evolution (custom dynamically compiled schema generation).
 - [x] **Graceful Shutdown Review**: Verify signal handling (SIGTERM/SIGINT) for Coordinator and Worker (should be good, but let's make sure and be extra defensive here).

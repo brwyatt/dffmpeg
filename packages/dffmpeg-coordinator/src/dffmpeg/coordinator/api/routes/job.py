@@ -40,7 +40,7 @@ from dffmpeg.coordinator.db.jobs import JobRepository
 from dffmpeg.coordinator.db.messages import MessageRepository
 from dffmpeg.coordinator.db.workers import WorkerRepository
 from dffmpeg.coordinator.scheduler import process_job_assignment
-from dffmpeg.coordinator.streams import StreamStorageManager
+from dffmpeg.coordinator.stream_storage import StreamStorageManager
 from dffmpeg.coordinator.transports import TransportManager
 
 router = APIRouter()
