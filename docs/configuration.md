@@ -34,6 +34,13 @@ The Coordinator manages the cluster state, job queue, and worker registry.
 | `streams_storage_root` | string | `"/tmp/dffmpeg/streams"` | Base directory on disk for storing binary stream chunks. (Must point to a shared filesystem like CephFS/NFS in HA clusters). |
 | `stream_retention_minutes` | integer | `60` | Grace period (minutes) that stream storage folders are kept for terminal/expired/orphaned jobs before being swept by the Janitor. |
 
+> [!IMPORTANT]
+> In active/active clustered multi-coordinator HA deployments, the `streams_storage_root` **MUST** point to a shared network filesystem (such as CephFS, NFS, GlusterFS, or other POSIX-compliant distributed mount points). 
+> 
+> Because clients can download continuous binary stdout chunks from any Coordinator node in the load balancer pool, any Coordinator node must be capable of concurrently statting, reading, and serving chunk files uploaded by active workers. 
+> 
+> The Coordinator utilizes fast metadata `os.stat` calls for sliding-window chunk pruning and performs atomic file renames (`.part` -> `.chunk`) to guarantee chunk read-integrity.
+
 ### Database Configuration (`database`)
 
 Configure the database backend. Supports SQLite and MySQL/MariaDB.
