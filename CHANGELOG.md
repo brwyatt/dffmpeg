@@ -13,6 +13,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+## [0.6.0] - 2026-10-04
+
+### Upgrade Note
+- **Byte-Transparent Standard-Stream Data Plane**: This release introduces high-throughput, byte-transparent stdout binary streaming. This separates control plane and data plane concerns to support direct binary stream outputs (like `-f image2pipe pipe:1` or output piping) without control plane or database bloat.
+- **Backward Compatibility**: Fully backward-compatible capability negotiation is included. Legacy clients are supported transparently without breaking.
+
+### Added
+- **Standard-Stream Data Plane (Binary Stdout)**: Realized a high-throughput, byte-transparent streaming architecture that separates signaling/control from binary payloads. (#48)
+- **Coordinator Stream Storage Engine**: Integrated atomic chunk writing, resumption support, and automatic sliding-window chunk pruning to limit disk usage. (#48)
+- **Worker Adaptive Line Buffer with One-Way Latch**: Worker dynamically switches from text logging to high-performance binary chunks on detection of non-text bytes or 64KB line overflow. (#48)
+- **Client Binary Stream Piping with Terminal Safety**: Client streams binary chunks directly to `sys.stdout.buffer` and halts/warns if raw binary is directed to an interactive terminal. (#48)
+
+### Fixed
+- **Prevent Path Traversal**: Tightened security on stream storage manager download endpoints.
+- **Dangling Coroutines & Warning Suppression**: Resolved potential pending tasks on stream disconnects.
+- **Avoid Logging Secrets**: Cleaned up loggers to prevent exposing credentials.
+
+### Changed
+- **Extended Dependency Ranges**: Relaxed cryptography dependency range limit and bumped minor dev dependencies.
+
 ## [0.5.0] - 2026-07-02
 
 ### Upgrade Note

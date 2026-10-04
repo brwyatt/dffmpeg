@@ -4,8 +4,9 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.5.x (beta) | :white_check_mark: |
-| 0.4.x (beta) | :hammer_and_wrench: (Critical fixes by request only if unable to upgrade to 0.5.x+) |
+| 0.6.x (beta) | :white_check_mark: |
+| 0.5.x (beta) | :hammer_and_wrench: (Critical fixes by request only if unable to upgrade to 0.6.x+) |
+| 0.4.x (beta) | :x: |
 | 0.3.x (beta) | :x: |
 | 0.2.x (beta) | :x: |
 | 0.1.x (beta) | :x: |
