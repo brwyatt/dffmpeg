@@ -94,6 +94,7 @@ async def process_job_assignment(
                     paths=job.paths,
                     working_directory=safe_cwd,
                     heartbeat_interval=job.heartbeat_interval,
+                    supported_features=job.supported_features,
                 ),
             )
         )

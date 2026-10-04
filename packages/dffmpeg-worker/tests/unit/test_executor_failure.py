@@ -18,10 +18,12 @@ async def test_executor_stream_read_failure_returns_exit_code():
     # stdout will raise an exception on the first read
     mock_process.stdout = AsyncMock()
     mock_process.stdout.readline.side_effect = Exception("Stream error (stdout)")
+    mock_process.stdout.read.side_effect = Exception("Stream error (stdout)")
 
     # stderr will return a line and then EOF
     mock_process.stderr = AsyncMock()
     mock_process.stderr.readline.side_effect = [b"Error log line\n", b""]
+    mock_process.stderr.read.side_effect = [b"Error log line\n", b""]
 
     # wait() just returns the exit code
     async def mock_wait():

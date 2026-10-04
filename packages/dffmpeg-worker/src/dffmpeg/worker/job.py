@@ -17,6 +17,9 @@ from dffmpeg.worker.executor import JobExecutor
 
 logger = logging.getLogger(__name__)
 
+# Custom sleep helper to allow surgical unit test mocking without global side-effects
+_sleep = asyncio.sleep
+
 
 class JobRunner:
     """
@@ -47,6 +50,9 @@ class JobRunner:
         self._log_queue: asyncio.Queue[LogEntry] = asyncio.Queue()
         self._flush_lock = asyncio.Lock()
         self._new_log_event = asyncio.Event()
+        self._binary_queue: asyncio.Queue[bytes] = asyncio.Queue(maxsize=16)
+        self._binary_uploader_task: Optional[asyncio.Task[None]] = None
+        self._binary_mode_active: bool = False
 
         self.coordinator_paths = {
             "heartbeat": f"/jobs/{self.job_id}/worker_heartbeat",
@@ -60,6 +66,7 @@ class JobRunner:
         self._silent_cancellation: bool = False
         self._fast_shutdown: bool = False
         self._running: bool = False
+        self._executor_done: bool = False
 
     async def start(self):
         """Starts the job execution."""
@@ -187,11 +194,129 @@ class JobRunner:
                 logger.error(f"Log flusher error for job {self.job_id}: {e}", exc_info=True)
                 await asyncio.sleep(1)
 
+    async def _binary_uploader(self):
+        """
+        Drains raw bytes from the queue, clusters them into larger blocks for network efficiency,
+        and posts them sequentially to the Coordinator's chunk streaming endpoint.
+        """
+        seq = 0
+        total_bytes = 0
+
+        try:
+            while self._running and (not self._executor_done or not self._binary_queue.empty()):
+                try:
+                    # Non-blocking check or short wait for the next chunk
+                    chunk = await asyncio.wait_for(self._binary_queue.get(), timeout=0.2)
+                except asyncio.TimeoutError:
+                    continue
+
+                # Automatically cluster small micro-chunks into larger ones (up to 256KB) for I/O efficiency
+                chunk_data = bytearray(chunk)
+                while not self._binary_queue.empty() and len(chunk_data) < 256 * 1024:
+                    chunk_data.extend(self._binary_queue.get_nowait())
+                    self._binary_queue.task_done()
+
+                data_to_send = bytes(chunk_data)
+                self._binary_queue.task_done()
+
+                path = f"/jobs/{self.job_id}/streams/stdout/chunks?seq={seq}"
+
+                attempts = 5
+                success = False
+                for i in range(attempts):
+                    try:
+                        await self.client.post_binary(path, content=data_to_send)
+                        success = True
+                        break
+                    except Exception as e:
+                        if i == attempts - 1:
+                            logger.critical(f"Failed to upload binary chunk {seq} after {attempts} attempts: {e}")
+                            break
+                        wait_time = min(15, 2**i)
+                        await _sleep(wait_time)
+
+                if not success:
+                    raise RuntimeError("Persistent network failure while uploading stream chunks")
+
+                total_bytes += len(data_to_send)
+                seq += 1
+
+            # Send EOF when queue is fully drained and subprocess terminates
+            if seq > 0:
+                logger.info(f"Drained binary stream queue. Sending EOF with {seq} chunks, {total_bytes} bytes.")
+                path = f"/jobs/{self.job_id}/streams/stdout/eof"
+                payload = {"final_sequence": seq - 1, "total_bytes": total_bytes}
+                await self.client.post(path, json=payload)
+            elif self._binary_mode_active:
+                logger.info("Binary stream was active but produced 0 bytes. Sending empty EOF.")
+                path = f"/jobs/{self.job_id}/streams/stdout/eof"
+                payload = {"final_sequence": None, "total_bytes": 0}
+                await self.client.post(path, json=payload)
+
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            logger.error(f"Error in binary uploader for job {self.job_id}: {e}", exc_info=True)
+            # Re-raise so that the parent task can detect uploader crash and terminate executor/subprocess
+            raise e
+
     async def _do_work(self) -> int:
         """
         Executes the actual job work.
         """
-        return await self.executor.execute(self._send_log)
+        # Launch binary chunk uploader background task
+        self._binary_uploader_task = asyncio.create_task(self._binary_uploader())
+
+        async def _on_binary_data(data: bytes):
+            if not self._binary_mode_active:
+                self._binary_mode_active = True
+                # Instantly flush any pending text logs to the Coordinator
+                # so they are guaranteed to be published before the stream switch!
+                await self._flush_logs()
+            await self._binary_queue.put(data)
+
+        async def run_executor():
+            try:
+                return await self.executor.execute(self._send_log, _on_binary_data)
+            except TypeError as te:
+                if "positional argument" in str(te) or "unexpected keyword" in str(te):
+                    return await self.executor.execute(self._send_log)
+                raise
+
+        executor_task = asyncio.create_task(run_executor())
+
+        try:
+            done, _pending = await asyncio.wait(
+                [executor_task, self._binary_uploader_task], return_when=asyncio.FIRST_COMPLETED
+            )
+
+            # If the binary uploader crashed first, fail fast and raise its exception
+            if self._binary_uploader_task in done:
+                exc = self._binary_uploader_task.exception()
+                if exc:
+                    logger.error(f"Uploader task failed with exception: {exc}")
+                    executor_task.cancel()
+                    raise exc
+
+            # Otherwise, wait for the executor task to complete
+            ret = await executor_task
+            self._executor_done = True
+
+            # Wait for uploader to cleanly finish draining any leftover chunks and send EOF
+            if self._binary_uploader_task and not self._binary_uploader_task.done():
+                await self._binary_uploader_task
+
+            return ret
+        except Exception as e:
+            logger.error(f"Job execution failed or uploader crashed: {e}")
+            self._executor_done = True
+            # Cancel uploader if still running
+            if self._binary_uploader_task and not self._binary_uploader_task.done():
+                self._binary_uploader_task.cancel()
+            # Cancel executor if still running to cleanly terminate child subprocess
+            if not executor_task.done():
+                executor_task.cancel()
+            raise
 
     async def _run(self):
         """Main execution flow for the job."""
@@ -255,6 +380,12 @@ class JobRunner:
             if self._log_flusher_task:
                 try:
                     await self._log_flusher_task
+                except asyncio.CancelledError:
+                    pass
+
+            if self._binary_uploader_task:
+                try:
+                    await self._binary_uploader_task
                 except asyncio.CancelledError:
                     pass
 

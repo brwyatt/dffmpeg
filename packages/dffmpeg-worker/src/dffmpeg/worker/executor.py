@@ -1,10 +1,10 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
-from typing import Awaitable, Callable, Dict, List, Protocol
+from typing import Awaitable, Callable, Dict, List, Optional, Protocol
 
 from dffmpeg.common.models import LogEntry
 from dffmpeg.common.paths import resolve_arguments, resolve_path
+from dffmpeg.common.stdio_stream_handler import StdioHandler
 
 logger = logging.getLogger(__name__)
 
@@ -17,12 +17,14 @@ class JobExecutor(Protocol):
     async def execute(
         self,
         log_callback: Callable[[LogEntry], Awaitable[None]],
+        binary_callback: Optional[Callable[[bytes], Awaitable[None]]] = None,
     ) -> int:
         """
         Executes a job.
 
         Args:
             log_callback (Callable): A callback to handle log entries.
+            binary_callback (Optional[Callable]): A callback to handle raw binary data.
         """
         ...
 
@@ -53,9 +55,10 @@ class SubprocessJobExecutor:
     async def execute(
         self,
         log_callback: Callable[[LogEntry], Awaitable[None]],
+        binary_callback: Optional[Callable[[bytes], Awaitable[None]]] = None,
     ) -> int:
         """
-        Executes the subprocess.
+        Executes the subprocess, using an adaptive classifier on stdout.
         """
         logger.info(f"Executing command: {self.binary_path} {' '.join(self.resolved_arguments)}")
 
@@ -67,30 +70,26 @@ class SubprocessJobExecutor:
             stderr=asyncio.subprocess.PIPE,
         )
 
-        async def read_stream(stream, stream_name):
-            try:
-                while True:
-                    line = await stream.readline()
-                    if not line:
-                        break
-                    decoded_line = line.decode()
-                    if decoded_line:
-                        await log_callback(
-                            LogEntry(
-                                stream=stream_name,
-                                content=decoded_line.rstrip("\r\n"),
-                                timestamp=datetime.now(timezone.utc),
-                            )
-                        )
-            except asyncio.CancelledError:
-                raise
-            except Exception as e:
-                logger.warning(f"Error reading from {stream_name} stream, but process continues: {e}")
+        assert process.stdout is not None, "process.stdout must be piped"
+        assert process.stderr is not None, "process.stderr must be piped"
+
+        stdout_reader = StdioHandler(
+            stream_name="stdout",
+            stream=process.stdout,
+            log_callback=log_callback,
+            binary_callback=binary_callback,
+        )
+        stderr_reader = StdioHandler(
+            stream_name="stderr",
+            stream=process.stderr,
+            log_callback=log_callback,
+            binary_callback=None,
+        )
 
         try:
             await asyncio.gather(
-                read_stream(process.stdout, "stdout"),
-                read_stream(process.stderr, "stderr"),
+                stdout_reader.read_loop(),
+                stderr_reader.read_loop(),
             )
 
             return_code = await process.wait()

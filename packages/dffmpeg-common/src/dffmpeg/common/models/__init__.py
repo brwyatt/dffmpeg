@@ -1,6 +1,7 @@
 import ipaddress
 import time
 from datetime import datetime, timezone
+from enum import StrEnum
 from typing import Annotated, Any, Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Discriminator, Field, Tag
@@ -80,6 +81,7 @@ class Job(BaseModel):
         client_last_seen (Optional[datetime]): Timestamp of last client heartbeat.
         heartbeat_interval (int): Number of seconds between heartbeats (worker and client).
         monitor (bool): Whether the job is actively monitored by the client.
+        supported_features (List[str]): List of optional advanced features supported by the client.
     """
 
     job_id: ULID = Field(default_factory=ULID)
@@ -97,6 +99,7 @@ class Job(BaseModel):
     client_last_seen: Optional[datetime] = None
     heartbeat_interval: int = default_job_heartbeat_interval
     monitor: bool = False
+    supported_features: List[str] = Field(default_factory=list)
 
 
 class JobRequest(BaseModel):
@@ -111,6 +114,7 @@ class JobRequest(BaseModel):
         supported_transports (List[str]): List of transports supported by the client for updates.
         monitor (bool): Whether to enable active client monitoring.
         heartbeat_interval (Optional[int]): Requested heartbeat interval.
+        supported_features (List[str]): List of optional advanced features supported by the client.
     """
 
     binary_name: str = Field(min_length=1)
@@ -120,6 +124,7 @@ class JobRequest(BaseModel):
     supported_transports: List[str] = Field(min_length=1)
     monitor: bool = False
     heartbeat_interval: Optional[int] = None
+    supported_features: List[str] = Field(default_factory=list)
 
 
 class JobRecord(Job, TransportRecord):
@@ -150,6 +155,15 @@ class WorkerDeregistration(BaseModel):
     worker_id: str = ClientId
 
 
+class EOFPayload(BaseModel):
+    """
+    Payload for stream EOF signaling.
+    """
+
+    final_sequence: Optional[int] = Field(default=None, ge=-1)
+    total_bytes: int = Field(ge=0)
+
+
 class JobStatusPayload(BaseModel):
     """
     Payload for job status updates.
@@ -171,6 +185,7 @@ class JobRequestPayload(BaseModel):
     paths: List[str]
     working_directory: Optional[str] = None
     heartbeat_interval: int = default_job_heartbeat_interval
+    supported_features: List[str] = Field(default_factory=list)
 
 
 type JobStatusUpdateStatus = Literal["completed", "failed", "canceled"]
@@ -185,6 +200,23 @@ class JobStatusUpdate(BaseModel):
     exit_code: Optional[int] = None
 
 
+class LogEnding(StrEnum):
+    LF = "lf"
+    CRLF = "crlf"
+    CR = "cr"
+    NONE = "none"
+
+    def as_str(self) -> str:
+        """Returns the raw string representation for rendering."""
+        mapping = {
+            LogEnding.LF: "\n",
+            LogEnding.CRLF: "\r\n",
+            LogEnding.CR: "\r",
+            LogEnding.NONE: "",
+        }
+        return mapping[self]
+
+
 class LogEntry(BaseModel):
     """
     Represents a single log line from a job.
@@ -193,6 +225,7 @@ class LogEntry(BaseModel):
     id: ULID = Field(default_factory=ULID)
     stream: Literal["stdout", "stderr"]
     content: str
+    ending: LogEnding = LogEnding.LF
     timestamp: datetime | None = None
 
 
@@ -221,7 +254,7 @@ class VerifyRegistrationPayload(BaseModel):
     registration_token: str = Field(min_length=1)
 
 
-type MessageType = Literal["job_status", "job_request", "job_logs", "verify_registration"]
+type MessageType = Literal["job_status", "job_request", "job_logs", "verify_registration", "job_stream_mode_switch"]
 
 
 class BaseMessage(BaseModel):
@@ -259,12 +292,49 @@ class VerifyRegistrationMessage(BaseMessage):
     payload: VerifyRegistrationPayload
 
 
+# StreamName Literal supporting 'stdout' initially
+# "stdin" and "stderr" can be added here when supported in the future
+StreamName = Literal["stdout"]
+
+
+class JobStreamModeSwitchPayload(BaseModel):
+    """
+    Payload for notifying about a transition in the job's streaming mode (e.g., to binary).
+    """
+
+    stream: StreamName
+    mode: Literal["binary"]
+    endpoint_path: str = Field(min_length=1)
+
+
+class JobStreamModeSwitchMessage(BaseMessage):
+    message_type: Literal["job_stream_mode_switch"] = "job_stream_mode_switch"
+    payload: JobStreamModeSwitchPayload
+
+
+class StreamProgress(BaseModel):
+    """
+    Represents the client's current consumption progress in bytes for a specific job stream.
+    """
+
+    bytes_read: int = Field(ge=0)
+
+
+class ClientHeartbeatPayload(BaseModel):
+    """
+    Payload for client heartbeat requests, allowing tracking of stream consumption progress.
+    """
+
+    streams_progress: Optional[Dict[StreamName, StreamProgress]] = None
+
+
 type Message = Annotated[
     Union[
         Annotated[JobStatusMessage, Tag("job_status")],
         Annotated[JobRequestMessage, Tag("job_request")],
         Annotated[JobLogsMessage, Tag("job_logs")],
         Annotated[VerifyRegistrationMessage, Tag("verify_registration")],
+        Annotated[JobStreamModeSwitchMessage, Tag("job_stream_mode_switch")],
     ],
     Discriminator("message_type"),
 ]

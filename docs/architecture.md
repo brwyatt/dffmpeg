@@ -246,6 +246,70 @@ stateDiagram-v2
     Draining --> Draining: Transport Handshake Success
 ```
 
+## Standard-Stream Data Plane (Binary Stdout Streaming)
+
+To support high-throughput, byte-transparent streaming for commands that output binary streams (such as raw video frames or muxed transport streams via stdout), DFFmpeg separates concerns into two distinct communication paths:
+
+1.  **Control Plane (REST & Transports)**: Carries all job metadata, status updates, heartbeats, and control signaling (including the `JobStreamModeSwitchMessage` notification).
+2.  **Data Plane (Fast Filesystem & Stream Storage Engine)**: Handles the high-speed transfer of raw binary byte segments from the Worker to the Coordinator, and then from the Coordinator down to the Client.
+
+### Stream Lifecycle & Heuristics
+
+```
++---------------------------------------------------------------------------------+
+|                                    WORKER                                       |
+|                                                                                 |
+|  [stdout] ──> Chunk Line Buffer ──> (Text Mode: utf-8) ──> JobLogsMessage (DB)  |
+|                      │                                                          |
+|                      ├── [Null or Non-UTF-8 Byte Detected]                      |
+|                      ▼                                                          |
+|             (One-Way Binary Latch) ──> Flush Pending Text Logs                  |
+|                      │                                                          |
+|                      └── [Stream Chunk Uploads] ───────────────────────────┐    |
+|                                                                            │    |
++----------------------------------------------------------------------------│----+
+                                                                             │
+                                                                             ▼
++---------------------------------------------------------------------------------+
+|                         COORDINATOR CLUSTER (Active/Active)                     |
+|                                                                                 |
+|  Upload: POST /jobs/{id}/streams/stdout/chunks?seq=N <─────────────────────┘    |
+|  Download: GET /jobs/{id}/streams/stdout                                        |
+|                                                                                 |
+|  Streams Shared Storage Base Directory: {streams_storage_root}/                 |
+|  - Write atomic rename buffers (.part -> .chunk) to prevent partial reads       |
+|  - Sliding-Window Pruning (unlinks processed chunk files based on bytes_read)    |
+|  - Explicit Stream ACK: POST /ack (instantly purges stream chunk folders)       |
++---------------------------------------------------------------------------------+
+                                                                             │
+                                                                             ▼
++---------------------------------------------------------------------------------+
+|                                    CLIENT                                       |
+|                                                                                 |
+|  1. Receives standard text logs until JobStreamModeSwitchMessage arrives.       |
+|  2. Synchronously flushes sys.stdout and connects to GET /streams/stdout.      |
+|  3. Pipes raw binary chunks unconditionally to sys.stdout.buffer (and flushes). |
+|  4. Heartbeats cumulative total_bytes_read to trigger server-side pruning.      |
+|  5. Sends final completion ACK stream command upon successful EOF.              |
++---------------------------------------------------------------------------------+
+```
+
+#### A. Worker-Side Adaptive Latching & Sync Flushes
+*   The Worker subprocess utilizes the unified, shared **`StdioHandler`** class (located in `dffmpeg-common`'s `stdio_stream_handler.py`) to manage both standard output and standard error streams.
+*   This grants **both stdout and stderr** native, high-resolution line ending extraction (extracting CRLF, LF, and CR delimiters cleanly) with split-packet trail boundary buffering and >64KB line segment chunking.
+*   For `stdout`, `StdioHandler` is initialized with a binary callback. It decodes bytes as text in 4KB chunks until a null byte (`\x00`) or non-UTF-8 boundary is encountered, at which point it instantly latches permanently to **Binary Mode**.
+*   **Log Flush Synchronization**: To guarantee byte-perfect sequence and prevent initial text headers (like y4m or mpegts headers) from showing up out of order at the end of the client's file, the Worker instantly and synchronously flushes its entire log queue (`_flush_logs()`) to the Coordinator's database *before* starting the binary uploader task.
+*   The Worker then streams subsequent chunks directly to the Coordinator via HTTP POST.
+
+#### B. Clustered High Availability (HA) Filesystem Requirements
+*   The Coordinator Stream Storage Engine stores uploaded chunks on disk under `{streams_storage_root}/{job_id}/{stream_name}/`.
+*   To prevent reading incomplete chunks in Active/Active Coordinator setups, the Coordinator writes uploads to `.part` files and atomically renames them to `.chunk` upon completion.
+*   **Important HA Requirement**: In multi-node, Active/Active deployments behind load balancers (such as HAProxy VIP pools), **the `streams_storage_root` must point to a shared network filesystem (such as CephFS, NFS, or GlusterFS)**. This ensures that any Coordinator instance can seamlessly receive worker chunks and concurrently serve tail-streaming downloads to clients without connection affinity.
+
+#### C. Real-Time Heartbeat Pruning & Immediate ACK Deletion
+*   **Sliding-Window Pruning**: During active downloads, the Client reports its cumulative stream consumption progress (`total_bytes_read`) inside its periodic heartbeats. The Coordinator fast-stats and unlinks (deletes) processed chunk files on the fly, keeping disk footprint near zero during multi-gigabyte video encodes.
+*   **Explicit Stream ACK**: Upon successfully reading the EOF marker, the Client issues a final `POST /jobs/{job_id}/streams/{stream_name}/ack` command to the Coordinator, which instantly purges the entire job's stream directory on disk. This avoids relying on the 60-minute Janitor grace sweep delay and keeps filesystems pristine.
+
 ### Job Lifecycle
 
 ```mermaid

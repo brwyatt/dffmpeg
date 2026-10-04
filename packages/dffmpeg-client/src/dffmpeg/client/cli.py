@@ -3,6 +3,7 @@ import asyncio
 import logging
 import os
 import sys
+from typing import Any, Dict, Optional
 
 from dffmpeg.client.api import DFFmpegClient
 from dffmpeg.client.config import load_config
@@ -21,7 +22,7 @@ from dffmpeg.common.formatting import (
     print_worker_details,
     print_worker_list,
 )
-from dffmpeg.common.models import JobLogsMessage, JobStatusMessage
+from dffmpeg.common.models import JobLogsMessage, JobStatusMessage, JobStreamModeSwitchMessage
 from dffmpeg.common.paths import map_arguments, map_path
 from dffmpeg.common.version import get_package_version
 
@@ -30,22 +31,62 @@ logging.basicConfig(level=logging.WARNING, format="%(message)s")
 logger = logging.getLogger(__name__)
 
 
-async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, metadata: dict) -> int:
+async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, metadata: Dict[str, Any]) -> int:
     """
     Streams logs and status for a job, waiting for completion.
     Returns exit code (0 for success, 1 for failure/cancellation).
     """
     exit_code = 1
+    binary_stream_task: Optional[asyncio.Task[None]] = None
 
     try:
         async for message in client.stream_job(job_id, transport, metadata):
             if isinstance(message, JobLogsMessage):
                 for log in message.payload.logs:
                     stream = sys.stdout if log.stream == "stdout" else sys.stderr
-                    print(log.content, file=stream)
+                    stream.write(log.content + log.ending.as_str())
                     stream.flush()
 
-            elif isinstance(message, JobStatusMessage):
+            elif isinstance(message, JobStreamModeSwitchMessage):
+                # Flush both stdout and stderr text streams to ensure perfect chronological order
+                # before we start streaming binary bytes over the binary_stream_task!
+                sys.stdout.flush()
+                sys.stderr.flush()
+
+                # Bind variables to local scope to prevent loop race conditions
+                stream_name = message.payload.stream
+
+                # Consume binary chunks concurrently in a background task
+                async def consume_binary_stream():
+                    attempts = 10
+                    for attempt in range(attempts):
+                        try:
+                            async for chunk in client.stream_binary(
+                                job_id, stream_name, start_offset=client.total_bytes_read
+                            ):
+                                sys.stdout.buffer.write(chunk)
+                                sys.stdout.buffer.flush()
+                                client.total_bytes_read += len(chunk)
+
+                            # Send completion ACK to trigger immediate disk cleanup on Coordinator
+                            try:
+                                await client.ack_stream(job_id, stream_name)
+                            except Exception as e:
+                                logger.warning(f"Failed to send stream completion ACK: {e}")
+
+                            break  # Completed successfully!
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception as e:
+                            if attempt == attempts - 1:
+                                sys.stderr.write(f"Error: Binary stream download failed fatally: {e}\n")
+                                sys.stderr.flush()
+                                break
+                            await asyncio.sleep(1)
+
+                binary_stream_task = asyncio.create_task(consume_binary_stream())
+
+            elif isinstance(message, JobStatusMessage):  # pyright: ignore[reportUnnecessaryIsInstance]
                 status = message.payload.status
                 if status == "completed":
                     exit_code = message.payload.exit_code if message.payload.exit_code is not None else 0
@@ -65,6 +106,15 @@ async def stream_and_wait(client: DFFmpegClient, job_id: str, transport: str, me
             print(colorize(f"Failed to cancel job: {e}", Colors.RED), file=sys.stderr)
         exit_code = 130
         raise
+    finally:
+        # Await any active binary stream task to finish completely
+        if binary_stream_task:
+            try:
+                await binary_stream_task
+            except asyncio.CancelledError:
+                pass
+            except Exception as e:
+                logger.error(f"Error awaiting binary stream task: {e}")
 
     return exit_code
 
@@ -196,7 +246,7 @@ async def job_logs(client: DFFmpegClient, args: argparse.Namespace) -> int:
 
             for log in logs:
                 stream = sys.stdout if log.stream == "stdout" else sys.stderr
-                print(log.content, file=stream)
+                stream.write(log.content + log.ending.as_str())
                 stream.flush()
 
             if resp.last_message_id:
@@ -219,7 +269,7 @@ async def job_logs(client: DFFmpegClient, args: argparse.Namespace) -> int:
         logs = sorted(resp.logs, key=lambda log: (log.timestamp if log.timestamp else 0))
         for log in logs:
             stream = sys.stdout if log.stream == "stdout" else sys.stderr
-            print(log.content, file=stream)
+            stream.write(log.content + log.ending.as_str())
             stream.flush()
 
         return 0
